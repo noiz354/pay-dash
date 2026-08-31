@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Subscriptions - Imanino Corps</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "tertiary-fixed": "#e1e0ff",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "secondary-container": "#dae2fd",
+                      "on-primary-fixed": "#00174d",
+                      "outline": "#737686",
+                      "on-secondary": "#ffffff",
+                      "primary-container": "#1a56db",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "on-error-container": "#93000a",
+                      "on-tertiary": "#ffffff",
+                      "on-secondary-container": "#5c647a",
+                      "surface-dim": "#d8dadc",
+                      "tertiary-container": "#4c4ed9",
+                      "surface-container": "#eceef0",
+                      "on-surface": "#191c1e",
+                      "on-error": "#ffffff",
+                      "on-primary-fixed-variant": "#003dab",
+                      "surface": "#f7f9fb",
+                      "inverse-primary": "#b5c4ff",
+                      "outline-variant": "#c3c5d7",
+                      "on-surface-variant": "#434654",
+                      "surface-container-high": "#e6e8ea",
+                      "inverse-on-surface": "#eff1f3",
+                      "surface-bright": "#f7f9fb",
+                      "primary-fixed": "#dbe1ff",
+                      "on-secondary-fixed": "#131b2e",
+                      "error": "#ba1a1a",
+                      "surface-variant": "#e0e3e5",
+                      "on-primary": "#ffffff",
+                      "inverse-surface": "#2d3133",
+                      "on-background": "#191c1e",
+                      "surface-tint": "#1353d8",
+                      "error-container": "#ffdad6",
+                      "primary-fixed-dim": "#b5c4ff",
+                      "surface-container-lowest": "#ffffff",
+                      "secondary-fixed": "#dae2fd",
+                      "tertiary": "#3231c1",
+                      "tertiary-fixed-dim": "#c0c1ff",
+                      "surface-container-highest": "#e0e3e5",
+                      "background": "#f7f9fb",
+                      "on-tertiary-container": "#dbdaff",
+                      "primary": "#003fb1",
+                      "surface-container-low": "#f2f4f6",
+                      "on-primary-container": "#d4dcff",
+                      "on-tertiary-fixed-variant": "#2f2ebe",
+                      "on-tertiary-fixed": "#07006c",
+                      "secondary": "#565e74"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "table-cell-padding": "12px 16px",
+                      "stack-sm": "0.5rem",
+                      "stack-md": "1rem",
+                      "stack-xs": "0.25rem",
+                      "stack-lg": "1.5rem",
+                      "sidebar-width": "260px",
+                      "gutter": "1.5rem",
+                      "container-max": "1440px"
+              },
+              "fontFamily": {
+                      "body-md": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "headline-xl": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "data-mono": ["JetBrains Mono"]
+              },
+              "fontSize": {
+                      "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                      "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "headline-xl": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "headline-md": ["18px", {"lineHeight": "26px", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "data-mono": ["13px", {"lineHeight": "18px", "fontWeight": "500"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        /* Base styling for semantic HTML */
+        body { @apply bg-background text-on-background font-body-md text-body-md antialiased; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+<!-- Desktop Sidebar -->
+<aside class="hidden md:flex flex-col w-sidebar-width bg-on-secondary-fixed text-on-secondary border-r border-outline-variant/20 z-40">
+<div class="p-6">
+<h1 class="font-headline-lg text-headline-lg font-extrabold tracking-tight">Imanino Corps</h1>
+</div>
+<nav class="flex-1 px-4 space-y-2 mt-4">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container-highest/10 transition-colors" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-body-md text-body-md font-medium">Home</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container-highest/10 transition-colors" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="font-body-md text-body-md font-medium">Balance</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary-container text-on-primary-container relative" href="#">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"></div>
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+<span class="font-body-md text-body-md font-medium">Transactions</span>
+</a>
+<div class="pl-10 space-y-1 mt-1">
+<a class="block px-3 py-1.5 rounded-lg text-primary bg-primary-container/20 font-body-sm text-body-sm" href="#">Subscriptions</a>
+<a class="block px-3 py-1.5 rounded-lg text-on-secondary-fixed-variant hover:text-on-secondary font-body-sm text-body-sm transition-colors" href="#">Invoices</a>
+</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container-highest/10 transition-colors mt-2" href="#">
+<span class="material-symbols-outlined">link</span>
+<span class="font-body-md text-body-md font-medium">Links</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-secondary-fixed-variant hover:bg-surface-container-highest/10 transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md font-medium">Settings</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+<!-- TopAppBar (from JSON) - visible on mobile, distinct on desktop -->
+<header class="bg-surface text-primary font-headline-md text-headline-md-mobile docked full-width top-0 sticky z-50 border-b border-outline-variant flex justify-between items-center px-4 h-14 w-full md:px-8">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">account_balance</span>
+<span class="font-headline-md text-headline-md-mobile font-bold text-on-surface md:hidden">Imanino Corps</span>
+<span class="font-headline-md text-headline-md font-bold text-on-surface hidden md:block">Subscriptions</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:bg-surface-container-low transition-colors duration-200 ease-in-out p-2 rounded-full">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</div>
+</header>
+<!-- Scrollable Canvas -->
+<main class="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
+<div class="max-w-[1440px] mx-auto space-y-gutter">
+<!-- Page Header & Actions -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h2 class="font-headline-xl text-headline-xl text-on-surface">Manage Subscriptions</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Monitor and configure recurring billing plans.</p>
+</div>
+<button class="bg-primary text-on-primary hover:bg-on-primary-fixed-variant transition-colors px-4 py-2 rounded-lg flex items-center gap-2 font-body-md text-body-md font-medium shadow-sm w-full md:w-auto justify-center">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                        Create Subscription
+                    </button>
+</div>
+<!-- Metric Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 relative overflow-hidden group hover:bg-surface-container-low transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="font-body-md text-body-md text-on-surface-variant font-medium">Active Plans</span>
+<span class="flex items-center gap-1 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-caps text-label-caps px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-[12px]">trending_up</span> 12%
+                            </span>
+</div>
+<div class="font-headline-xl text-headline-xl text-on-surface font-data-mono">1,248</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 relative overflow-hidden group hover:bg-surface-container-low transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="font-body-md text-body-md text-on-surface-variant font-medium">Pending Setup</span>
+<span class="flex items-center gap-1 bg-secondary-container text-on-secondary-container font-label-caps text-label-caps px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-[12px]">trending_flat</span> 0%
+                            </span>
+</div>
+<div class="font-headline-xl text-headline-xl text-on-surface font-data-mono">34</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 relative overflow-hidden group hover:bg-surface-container-low transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="font-body-md text-body-md text-on-surface-variant font-medium">Inactive/Failed</span>
+<span class="flex items-center gap-1 bg-error-container text-on-error-container font-label-caps text-label-caps px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-[12px]">trending_down</span> 3%
+                            </span>
+</div>
+<div class="font-headline-xl text-headline-xl text-on-surface font-data-mono">12</div>
+</div>
+</div>
+<!-- Filters & Search -->
+<div class="flex flex-col sm:flex-row gap-3">
+<div class="relative flex-1 max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-body-md font-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all h-[36px]" placeholder="Search by customer or ID..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="bg-surface-container-lowest border border-outline-variant px-4 py-2 rounded-lg flex items-center gap-2 text-on-surface-variant hover:bg-surface-container-low transition-colors font-body-sm text-body-sm h-[36px]">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                            Filter
+                        </button>
+<button class="bg-surface-container-lowest border border-outline-variant px-4 py-2 rounded-lg flex items-center gap-2 text-on-surface-variant hover:bg-surface-container-low transition-colors font-body-sm text-body-sm h-[36px]">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                            Export
+                        </button>
+</div>
+</div>
+<!-- Data Table -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant whitespace-nowrap">Customer</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant whitespace-nowrap">Plan ID</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant whitespace-nowrap text-right">Amount (IDR)</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant whitespace-nowrap">Interval</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant whitespace-nowrap">Status</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant whitespace-nowrap text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm">
+<tr class="border-b border-outline-variant/50 hover:bg-surface-container-lowest transition-colors">
+<td class="p-table-cell-padding font-medium text-on-surface">Acme Corporation</td>
+<td class="p-table-cell-padding text-on-surface-variant">SUB-88291</td>
+<td class="p-table-cell-padding font-data-mono text-data-mono text-right text-on-surface">4,500,000</td>
+<td class="p-table-cell-padding text-on-surface-variant">Monthly</td>
+<td class="p-table-cell-padding">
+<span class="bg-primary-container text-on-primary-container font-label-caps text-label-caps px-2 py-1 rounded-full inline-flex items-center">Active</span>
+</td>
+<td class="p-table-cell-padding text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">more_vert</span></button>
+</td>
+</tr>
+<tr class="border-b border-outline-variant/50 hover:bg-surface-container-lowest transition-colors">
+<td class="p-table-cell-padding font-medium text-on-surface">Globex Inc</td>
+<td class="p-table-cell-padding text-on-surface-variant">SUB-88292</td>
+<td class="p-table-cell-padding font-data-mono text-data-mono text-right text-on-surface">12,000,000</td>
+<td class="p-table-cell-padding text-on-surface-variant">Annually</td>
+<td class="p-table-cell-padding">
+<span class="bg-secondary-container text-on-secondary-container font-label-caps text-label-caps px-2 py-1 rounded-full inline-flex items-center">Pending</span>
+</td>
+<td class="p-table-cell-padding text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">more_vert</span></button>
+</td>
+</tr>
+<tr class="border-b border-outline-variant/50 hover:bg-surface-container-lowest transition-colors">
+<td class="p-table-cell-padding font-medium text-on-surface">Soylent Corp</td>
+<td class="p-table-cell-padding text-on-surface-variant">SUB-88293</td>
+<td class="p-table-cell-padding font-data-mono text-data-mono text-right text-on-surface">750,000</td>
+<td class="p-table-cell-padding text-on-surface-variant">Weekly</td>
+<td class="p-table-cell-padding">
+<span class="bg-error-container text-on-error-container font-label-caps text-label-caps px-2 py-1 rounded-full inline-flex items-center">Inactive</span>
+</td>
+<td class="p-table-cell-padding text-right">
+<button class="text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">more_vert</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</main>
+</div>
+<!-- Mobile Bottom Navigation Shell (from JSON) -->
+<nav class="md:hidden bg-surface text-primary font-label-caps text-label-caps fixed bottom-0 left-0 w-full flex justify-around items-center h-16 px-2 pb-safe border-t border-outline-variant z-50">
+<a class="flex flex-col items-center justify-center text-on-secondary-fixed-variant active:scale-95 transition-transform duration-150 hover:bg-surface-container-highest w-full h-full rounded-lg" href="#">
+<span class="material-symbols-outlined mb-1">home</span>
+<span>Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-fixed-variant active:scale-95 transition-transform duration-150 hover:bg-surface-container-highest w-full h-full rounded-lg" href="#">
+<span class="material-symbols-outlined mb-1">account_balance_wallet</span>
+<span>Balance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary bg-primary-container rounded-full px-4 py-1 active:scale-95 transition-transform duration-150 hover:bg-surface-container-highest" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">receipt_long</span>
+<span>Transactions</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-fixed-variant active:scale-95 transition-transform duration-150 hover:bg-surface-container-highest w-full h-full rounded-lg" href="#">
+<span class="material-symbols-outlined mb-1">link</span>
+<span>Links</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-fixed-variant active:scale-95 transition-transform duration-150 hover:bg-surface-container-highest w-full h-full rounded-lg" href="#">
+<span class="material-symbols-outlined mb-1">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</body></html>

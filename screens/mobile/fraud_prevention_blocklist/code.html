@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fraud Prevention Blocklist - Imanino Corps</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-tint": "#1353d8",
+                      "outline-variant": "#c3c5d7",
+                      "primary": "#003fb1",
+                      "on-primary-container": "#d4dcff",
+                      "surface-container-highest": "#e0e3e5",
+                      "on-secondary-container": "#5c647a",
+                      "on-background": "#191c1e",
+                      "error": "#ba1a1a",
+                      "tertiary-fixed": "#e1e0ff",
+                      "tertiary-fixed-dim": "#c0c1ff",
+                      "on-error": "#ffffff",
+                      "on-surface": "#191c1e",
+                      "on-tertiary-fixed": "#07006c",
+                      "tertiary": "#3231c1",
+                      "inverse-primary": "#b5c4ff",
+                      "on-primary": "#ffffff",
+                      "surface-container-high": "#e6e8ea",
+                      "tertiary-container": "#4c4ed9",
+                      "primary-fixed": "#dbe1ff",
+                      "on-tertiary-container": "#dbdaff",
+                      "surface-container": "#eceef0",
+                      "inverse-on-surface": "#eff1f3",
+                      "on-secondary": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "on-secondary-fixed": "#131b2e",
+                      "on-primary-fixed": "#00174d",
+                      "surface-container-lowest": "#ffffff",
+                      "on-surface-variant": "#434654",
+                      "surface-bright": "#f7f9fb",
+                      "on-tertiary": "#ffffff",
+                      "background": "#f7f9fb",
+                      "on-primary-fixed-variant": "#003dab",
+                      "inverse-surface": "#2d3133",
+                      "secondary-container": "#dae2fd",
+                      "surface-variant": "#e0e3e5",
+                      "primary-container": "#1a56db",
+                      "outline": "#737686",
+                      "surface": "#f7f9fb",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "on-tertiary-fixed-variant": "#2f2ebe",
+                      "surface-dim": "#d8dadc",
+                      "secondary-fixed": "#dae2fd",
+                      "on-error-container": "#93000a",
+                      "secondary": "#565e74",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "primary-fixed-dim": "#b5c4ff",
+                      "surface-container-low": "#f2f4f6"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "table-cell-padding": "12px 16px",
+                      "stack-md": "1rem",
+                      "gutter": "1.5rem",
+                      "stack-lg": "1.5rem",
+                      "stack-xs": "0.25rem",
+                      "sidebar-width": "260px",
+                      "container-max": "1440px",
+                      "stack-sm": "0.5rem"
+              },
+              "fontFamily": {
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "data-mono": [
+                              "JetBrains Mono"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "headline-xl": [
+                              "Inter"
+                      ],
+                      "label-caps": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "data-mono": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "18px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-xl": [
+                              "30px",
+                              {
+                                      "lineHeight": "38px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-caps": [
+                              "11px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body { background-color: #F8FAFC; }
+        .table-row-hover:hover { background-color: #F1F5F9; }
+    </style>
+</head>
+<body class="font-body-md text-on-surface bg-background antialiased min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="bg-surface-bright dark:bg-surface-dim text-primary dark:text-inverse-primary border-b border-outline-variant dark:border-outline fixed top-0 w-full z-50 flex justify-between items-center px-gutter h-12 w-full transition-colors duration-200">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">account_balance</span>
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-inverse-primary tracking-tight">Imanino Corps</span>
+</div>
+<!-- Web Navigation Nav Cluster (Hidden on mobile) -->
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-high px-3 py-1 rounded transition-colors duration-200 font-label-caps text-label-caps flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]">home</span>
+                Home
+            </a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-high px-3 py-1 rounded transition-colors duration-200 font-label-caps text-label-caps flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]">account_balance_wallet</span>
+                Balance
+            </a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-high px-3 py-1 rounded transition-colors duration-200 font-label-caps text-label-caps flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]">receipt_long</span>
+                Transactions
+            </a>
+<a class="text-on-surface-variant dark:text-on-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-high px-3 py-1 rounded transition-colors duration-200 font-label-caps text-label-caps flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]">link</span>
+                Links
+            </a>
+<a class="text-primary dark:text-inverse-primary bg-surface-container hover:bg-surface-container dark:hover:bg-surface-container-high px-3 py-1 rounded transition-colors duration-200 font-label-caps text-label-caps flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">settings</span>
+                Settings
+            </a>
+</nav>
+<button class="text-on-surface-variant hover:bg-surface-container p-1 rounded-full transition-colors duration-200 flex items-center justify-center">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<div class="flex flex-1 pt-12 md:pl-sidebar-width w-full max-w-container-max mx-auto">
+<!-- Sidebar (Desktop only) -->
+<aside class="hidden md:block fixed left-0 top-12 bottom-0 w-sidebar-width bg-[#0F172A] border-r border-outline-variant overflow-y-auto">
+<nav class="p-gutter flex flex-col gap-2">
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-2 pl-3">Fraud &amp; Risk</div>
+<a class="flex items-center gap-3 px-3 py-2 text-surface-container-low hover:bg-surface-variant/10 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">shield</span>
+<span class="font-body-md text-body-md">Rules Engine</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-surface-container-low hover:bg-surface-variant/10 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">radar</span>
+<span class="font-body-md text-body-md">Radar</span>
+</a>
+<div class="pl-5 border-l border-outline-variant/30 ml-4 mt-1 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 text-surface-container-low hover:bg-surface-variant/10 rounded-lg transition-colors" href="#">
+<span class="font-body-sm text-body-sm">Reviews</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary/20 text-inverse-primary border-l-[3px] border-primary -ml-[1px] rounded-r-lg transition-colors" href="#">
+<span class="font-body-sm text-body-sm font-semibold">Blocklist</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-surface-container-low hover:bg-surface-variant/10 rounded-lg transition-colors" href="#">
+<span class="font-body-sm text-body-sm">Allowlist</span>
+</a>
+</div>
+</nav>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 p-gutter w-full">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-center justify-between mb-stack-lg gap-4">
+<div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface">Blocklist</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Prevent fraudulent transactions by blocking specific attributes.</p>
+</div>
+<button class="bg-primary text-on-primary hover:bg-primary-fixed-variant px-4 py-2 rounded-lg font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 transition-colors self-start md:self-auto h-9">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                    Add to Blocklist
+                </button>
+</div>
+<!-- Content Area - Level 1 Surface -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden flex flex-col">
+<!-- Toolbar & Tabs -->
+<div class="border-b border-outline-variant px-gutter pt-gutter pb-0 flex flex-col gap-4">
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
+<!-- Tabs -->
+<div class="flex gap-6 overflow-x-auto w-full md:w-auto no-scrollbar">
+<button class="font-body-sm text-body-sm font-semibold text-primary border-b-2 border-primary pb-3 whitespace-nowrap">IP Addresses</button>
+<button class="font-body-sm text-body-sm font-medium text-on-surface-variant hover:text-on-surface pb-3 whitespace-nowrap transition-colors">Card Numbers</button>
+<button class="font-body-sm text-body-sm font-medium text-on-surface-variant hover:text-on-surface pb-3 whitespace-nowrap transition-colors">Email Domains</button>
+</div>
+<!-- Search -->
+<div class="relative w-full md:w-64 pb-3 md:pb-3">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px] md:-mt-1.5">search</span>
+<input class="w-full h-9 pl-9 pr-3 bg-surface text-on-surface border border-outline-variant rounded-lg font-body-sm text-body-sm focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none" placeholder="Search IP addresses..." type="text"/>
+</div>
+</div>
+</div>
+<!-- Data Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low border-b border-outline-variant sticky top-0">
+<tr>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant font-semibold">Value</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant font-semibold">Reason</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant font-semibold">Added On</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant font-semibold text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="font-body-sm text-body-sm divide-y divide-outline-variant">
+<tr class="table-row-hover h-12">
+<td class="p-table-cell-padding">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[16px]">language</span>
+<span class="font-data-mono text-data-mono text-on-surface">192.168.1.1</span>
+</div>
+</td>
+<td class="p-table-cell-padding">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-caps text-[10px] uppercase font-bold tracking-wider">Known Malicious</span>
+</td>
+<td class="p-table-cell-padding text-on-surface-variant">Oct 24, 2023, 14:32</td>
+<td class="p-table-cell-padding text-right">
+<button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</td>
+</tr>
+<tr class="table-row-hover h-12">
+<td class="p-table-cell-padding">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[16px]">language</span>
+<span class="font-data-mono text-data-mono text-on-surface">203.0.113.42</span>
+</div>
+</td>
+<td class="p-table-cell-padding">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-fixed-variant font-label-caps text-[10px] uppercase font-bold tracking-wider">High Frequency</span>
+</td>
+<td class="p-table-cell-padding text-on-surface-variant">Oct 22, 2023, 09:15</td>
+<td class="p-table-cell-padding text-right">
+<button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</td>
+</tr>
+<tr class="table-row-hover h-12">
+<td class="p-table-cell-padding">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[16px]">language</span>
+<span class="font-data-mono text-data-mono text-on-surface">198.51.100.7</span>
+</div>
+</td>
+<td class="p-table-cell-padding">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-surface-variant text-on-surface-variant font-label-caps text-[10px] uppercase font-bold tracking-wider">Manual Entry</span>
+</td>
+<td class="p-table-cell-padding text-on-surface-variant">Oct 15, 2023, 11:45</td>
+<td class="p-table-cell-padding text-right">
+<button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</td>
+</tr>
+<tr class="table-row-hover h-12">
+<td class="p-table-cell-padding">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-[16px]">language</span>
+<span class="font-data-mono text-data-mono text-on-surface">45.22.19.102</span>
+</div>
+</td>
+<td class="p-table-cell-padding">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-caps text-[10px] uppercase font-bold tracking-wider">Known Malicious</span>
+</td>
+<td class="p-table-cell-padding text-on-surface-variant">Oct 10, 2023, 16:20</td>
+<td class="p-table-cell-padding text-right">
+<button class="text-on-surface-variant hover:text-error transition-colors p-1 rounded">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination Footer -->
+<div class="border-t border-outline-variant p-4 flex items-center justify-between text-on-surface-variant">
+<span class="font-body-sm text-body-sm">Showing 1-4 of 124</span>
+<div class="flex gap-2">
+<button class="p-1 rounded hover:bg-surface-container transition-colors disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</button>
+<button class="p-1 rounded hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- BottomNavBar (Mobile only) -->
+<nav class="md:hidden fixed bottom-0 w-full z-50 bg-surface-container-lowest dark:bg-surface-dim border-t border-outline-variant dark:border-outline flex justify-around items-center h-16 px-2">
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-on-secondary-fixed-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest scale-95 active:scale-90 transition-transform duration-150 p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-caps text-label-caps mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-on-secondary-fixed-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest scale-95 active:scale-90 transition-transform duration-150 p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="font-label-caps text-label-caps mt-1">Balance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-on-secondary-fixed-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest scale-95 active:scale-90 transition-transform duration-150 p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-label-caps text-label-caps mt-1">Transactions</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-on-secondary-fixed-variant hover:bg-surface-container-high dark:hover:bg-surface-container-highest scale-95 active:scale-90 transition-transform duration-150 p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">link</span>
+<span class="font-label-caps text-label-caps mt-1">Links</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-3 py-1 scale-95 active:scale-90 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-label-caps text-label-caps mt-1">Settings</span>
+</a>
+</nav>
+</body></html>

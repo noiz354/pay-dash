@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Notification Preferences - The Ledger</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#ffb59a",
+                        "on-surface-variant": "#434654",
+                        "primary-container": "#1a56db",
+                        "on-primary-fixed-variant": "#003dab",
+                        "on-error": "#ffffff",
+                        "test-mode-amber": "#d97706",
+                        "pending-status": "#f59e0b",
+                        "secondary": "#565e74",
+                        "surface-tint": "#1353d8",
+                        "secondary-container": "#dae2fd",
+                        "surface-container-high": "#e7e7f3",
+                        "surface-container-low": "#f3f3fe",
+                        "surface-variant": "#e2e1ed",
+                        "inverse-surface": "#2e3039",
+                        "on-secondary-container": "#5c647a",
+                        "error": "#ba1a1a",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-container": "#ffd4c5",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "on-primary-container": "#d4dcff",
+                        "on-surface": "#191b23",
+                        "failed-status": "#ef4444",
+                        "on-background": "#191b23",
+                        "surface-container-highest": "#e2e1ed",
+                        "on-primary-fixed": "#00174d",
+                        "inverse-on-surface": "#f0f0fb",
+                        "surface-canvas": "#f8fafc",
+                        "primary": "#003fb1",
+                        "tertiary": "#852b00",
+                        "on-primary": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed": "#dae2fd",
+                        "outline": "#737686",
+                        "surface-container-lowest": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "background": "#faf8ff",
+                        "outline-variant": "#c3c5d7",
+                        "surface-dim": "#d9d9e4",
+                        "surface-container": "#ededf8",
+                        "on-secondary-fixed": "#131b2e",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#b5c4ff",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "primary-fixed": "#dbe1ff",
+                        "border-subtle": "#e2e8f0",
+                        "success-status": "#10b981",
+                        "on-tertiary-fixed-variant": "#802a00",
+                        "surface-bright": "#faf8ff",
+                        "inverse-primary": "#b5c4ff",
+                        "surface": "#faf8ff",
+                        "tertiary-fixed": "#ffdbcf",
+                        "on-tertiary-fixed": "#380d00",
+                        "tertiary-container": "#ad3b00"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "gutter": "1.5rem",
+                        "stack-md": "16px",
+                        "sidebar-collapsed": "64px",
+                        "container-max": "1440px",
+                        "cell-y": "12px",
+                        "sidebar-width": "260px",
+                        "cell-x": "16px",
+                        "stack-tight": "4px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "data-mono": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-xl": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "data-mono": ["13px", {"lineHeight": "18px", "fontWeight": "500"}],
+                        "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-md": ["18px", {"lineHeight": "26px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.surface-canvas');
+            color: theme('colors.on-surface');
+        }
+        
+        /* Custom Toggle Switch Styles */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: theme('colors.primary');
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: theme('colors.primary');
+        }
+        
+        .toggle-checkbox {
+            right: 0;
+            z-index: 1;
+            border-color: theme('colors.outline-variant');
+            transition: all 0.3s;
+        }
+        .toggle-label {
+            width: 32px;
+            height: 16px;
+            background-color: theme('colors.surface-variant');
+            border-radius: 9999px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .toggle-label:after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 12px;
+            height: 12px;
+            background-color: white;
+            border-radius: 50%;
+            transition: all 0.3s;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .toggle-checkbox:checked + .toggle-label:after {
+            transform: translateX(16px);
+        }
+
+        /* Select styling for high density */
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23737686' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden bg-surface-canvas text-on-surface font-body-md antialiased">
+<!-- SideNavBar (Shared Component) -->
+<nav class="docked w-sidebar-width h-screen left-0 bg-inverse-surface dark:bg-surface-container-lowest border-r border-outline-variant flex flex-col h-full py-4 z-20 flex-shrink-0">
+<div class="px-gutter mb-8 flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center text-on-primary font-bold">
+<span class="material-symbols-outlined text-[20px]">corporate_fare</span>
+</div>
+<div>
+<div class="font-headline-md text-headline-md font-bold text-inverse-on-surface">Acme Corp</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Primary Account</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto px-4">
+<ul class="space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[20px]">home</span>
+<span class="font-body-md text-body-md">Home</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[20px]">payments</span>
+<span class="font-body-md text-body-md">Payments</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[20px]">group</span>
+<span class="font-body-md text-body-md">Customers</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[20px]">subscriptions</span>
+<span class="font-body-md text-body-md">Subscriptions</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[20px]">code</span>
+<span class="font-body-md text-body-md">Developer</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-primary-fixed border-l-4 border-primary-fixed bg-on-secondary-fixed-variant/20 hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-body-md text-body-md font-medium">Settings</span>
+</a>
+</li>
+</ul>
+</div>
+<div class="px-4 mt-auto pt-4 border-t border-outline-variant/20">
+<ul class="space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[20px]">swap_horiz</span>
+<span class="font-body-md text-body-md">Switch Account</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined text-[20px]">help</span>
+<span class="font-body-md text-body-md">Support</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col h-screen overflow-hidden">
+<!-- TopAppBar (Shared Component) -->
+<header class="docked full-width top-0 h-16 border-b border-outline-variant bg-surface flex justify-between items-center w-full px-gutter max-w-container-max mx-auto z-10 flex-shrink-0">
+<div class="flex items-center gap-6 h-full">
+<span class="font-headline-md text-headline-md font-black text-on-surface">The Ledger</span>
+<nav class="hidden md:flex items-center h-full gap-1 ml-4">
+<a class="h-full flex items-center px-3 font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all" href="#">Dashboard</a>
+<a class="h-full flex items-center px-3 font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all" href="#">Analytics</a>
+<a class="h-full flex items-center px-3 font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all" href="#">Reports</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex items-center border border-outline-variant rounded bg-surface-canvas h-8 px-2 w-64 focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all">
+<span class="material-symbols-outlined text-outline text-[18px] mr-2">search</span>
+<input class="bg-transparent border-none outline-none w-full text-body-sm font-body-sm text-on-surface placeholder:text-outline-variant p-0 h-full focus:ring-0" placeholder="Search..." type="text"/>
+<div class="flex items-center gap-1 opacity-50">
+<kbd class="font-data-mono text-data-mono text-[10px] bg-surface-variant px-1 rounded border border-outline-variant/50">⌘</kbd>
+<kbd class="font-data-mono text-data-mono text-[10px] bg-surface-variant px-1 rounded border border-outline-variant/50">K</kbd>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-1 rounded bg-test-mode-amber/10 text-test-mode-amber font-label-caps text-label-caps border border-test-mode-amber/20">Test Mode</span>
+</div>
+<div class="flex items-center gap-2 ml-2 border-l border-outline-variant pl-4">
+<button class="w-8 h-8 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-low transition-all scale-95 duration-75">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container-low transition-all scale-95 duration-75">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-border-subtle ml-2 cursor-pointer">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A professional corporate headshot of a person looking confidently at the camera, set against a neutral, well-lit studio background. The lighting is soft and even, highlighting sharp modern features suitable for a B2B platform profile picture." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCbg7T31X1XDwXx9xMZkNZ5lDCrRO47rD5lf4_9sOjmzC9LgJg5_y7ftzIrUG7e5BMxydKSsddDE2WaUfJbfqKr9wj908QmcZA6469mqF5a0lqH9UDLq-voqXCtXPo5fHhfQmliBJ5RbuCeu6Z1AQci9EwrniafMom2TpGVnh6U0hRt4T14Z_7QPrWqB0mesTop61cZZpbGlfkpmeBIf9EcSUOMXXMOBr5NtQQ7-O1q6hwAjTaWl0nh"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Page Canvas -->
+<main class="flex-1 overflow-y-auto bg-surface-canvas p-gutter max-w-container-max mx-auto w-full">
+<!-- Page Header -->
+<div class="mb-8">
+<div class="flex items-center gap-2 text-on-surface-variant font-body-sm text-body-sm mb-2">
+<a class="hover:text-primary transition-colors" href="#">Settings</a>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-on-surface">Notifications</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface">Notification Preferences</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2 max-w-2xl">Manage how and when you receive alerts for system events, transactions, and account activities.</p>
+</div>
+<!-- Settings Grid -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+<!-- Channels Column -->
+<div class="xl:col-span-1 space-y-6">
+<div class="bg-surface-container-lowest border border-border-subtle rounded-xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-1">Global Delivery</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-6">Master toggles for communication channels.</p>
+<div class="space-y-4">
+<div class="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-surface-canvas hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-surface-variant flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[18px]">mail</span>
+</div>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface">Email Notifications</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Sent to admin@acmecorp.com</div>
+</div>
+</div>
+<div class="relative inline-block w-8 mr-2 align-middle select-none">
+<input checked="" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer" id="toggle_email" name="toggle_email" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-4 rounded-full bg-surface-variant cursor-pointer" for="toggle_email"></label>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-surface-canvas hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-surface-variant flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[18px]">sms</span>
+</div>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface">SMS Alerts</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Critical security alerts only</div>
+</div>
+</div>
+<div class="relative inline-block w-8 mr-2 align-middle select-none">
+<input checked="" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer" id="toggle_sms" name="toggle_sms" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-4 rounded-full bg-surface-variant cursor-pointer" for="toggle_sms"></label>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-lg border border-border-subtle bg-surface-canvas hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-surface-variant flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+</div>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface">Dashboard Feed</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">In-app notification center</div>
+</div>
+</div>
+<div class="relative inline-block w-8 mr-2 align-middle select-none">
+<input checked="" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer" id="toggle_dash" name="toggle_dash" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-4 rounded-full bg-surface-variant cursor-pointer" for="toggle_dash"></label>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Categories Column -->
+<div class="xl:col-span-2 space-y-6">
+<!-- Payments Section -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-xl overflow-hidden shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+<div class="px-6 py-4 border-b border-border-subtle bg-surface-canvas flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">payments</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Payments</h3>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">3 ACTIVE</span>
+</div>
+<div class="p-0">
+<!-- Table-like structure for high density -->
+<div class="grid grid-cols-12 gap-4 px-6 py-3 border-b border-border-subtle bg-surface-container-low/50 font-label-caps text-label-caps text-on-surface-variant">
+<div class="col-span-5">EVENT TYPE</div>
+<div class="col-span-3 text-center">EMAIL FREQUENCY</div>
+<div class="col-span-2 text-center">DASHBOARD</div>
+<div class="col-span-2 text-center">SMS</div>
+</div>
+<!-- Row 1 -->
+<div class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-border-subtle items-center hover:bg-surface-canvas transition-colors">
+<div class="col-span-5">
+<div class="font-body-md text-body-md font-medium text-on-surface">Successful Charges</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">When a customer payment clears</div>
+</div>
+<div class="col-span-3 flex justify-center">
+<select class="h-8 text-body-sm font-body-sm border-outline-variant rounded bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-1 focus:ring-primary pl-2 pr-8 py-0">
+<option>Daily Digest</option>
+<option>Instant</option>
+<option>Weekly</option>
+<option>Off</option>
+</select>
+</div>
+<div class="col-span-2 flex justify-center">
+<div class="relative inline-block w-8 align-middle select-none">
+<input checked="" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer" id="p_succ_dash" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-4 rounded-full bg-surface-variant cursor-pointer" for="p_succ_dash"></label>
+</div>
+</div>
+<div class="col-span-2 flex justify-center">
+<div class="relative inline-block w-8 align-middle select-none">
+<input class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer" id="p_succ_sms" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-4 rounded-full bg-surface-variant cursor-pointer" for="p_succ_sms"></label>
+</div>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-border-subtle items-center hover:bg-surface-canvas transition-colors">
+<div class="col-span-5">
+<div class="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2">
+                                        Failed Charges
+                                        <span class="px-1.5 py-0.5 rounded-full bg-failed-status/10 text-failed-status font-label-caps text-[9px]">CRITICAL</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Declines, insufficient funds, fraud blocks</div>
+</div>
+<div class="col-span-3 flex justify-center">
+<select class="h-8 text-body-sm font-body-sm border-outline-variant rounded bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-1 focus:ring-primary pl-2 pr-8 py-0">
+<option selected="">Instant</option>
+<option>Daily Digest</option>
+<option>Weekly</option>
+<option>Off</option>
+</select>
+</div>
+<div class="col-span-2 flex justify-center">
+<div class="relative inline-block w-8 align-middle select-none">
+<input checked="" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer" id="p_fail_dash" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-4 rounded-full bg-surface-variant cursor-pointer" for="p_fail_dash"></label>
+</div>
+</div>
+<div class="col-span-2 flex justify-center">
+<div class="relative inline-block w-8 align-middle select-none">
+<input checked="" class="toggle-checkbox absolute block w-4 h-4 rounded-full bg-white border-4 appearance-none cursor-pointer" id="p_fail_sms" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-4 rounded-full bg-surface-variant cursor-pointer" for="p_fail_sms"></label>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Security Section -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-xl overflow-hidden shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)]">
+<div class="px-6 py-4 border-b border-border-subtle bg-surface-canvas flex justify-between items-center">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">shield</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Security &amp; Access</h3>
+</div>
+</div>
+<div class="p-0">
+<!-- Table-like structure for high density -->
+<div class="grid grid-cols-12 gap-4 px-6 py-3 border-b border-border-subtle bg-surface-container-low/50 font-label-caps text-label-caps text-on-surface-variant">
+<div class="col-span-5">EVENT TYPE</div>
+<div class="col-span-3 text-center">EMAIL FREQUENCY</div>
+<div class="col-span-2 text-center">DASHBOARD</div>
+<div class="col-span-2 text-center">SMS</div>
+</div>
+<!-- Row 1 -->
+<div class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-border-subtle items-center hover:bg-surface-canvas transition-colors bg-surface-canvas/50">
+<div class="col-span-5">
+<div class="font-body-md text-body-md font-medium text-on-surface flex items-center gap-2">
+                                        New Device Login
+                                        <span class="material-symbols-outlined text-[14px] text-outline" title="Required by security policy">lock</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Login from an unrecognized IP/device</div>
+</div>
+<div class="col-span-3 flex justify-center">
+<select class="h-8 text-body-sm font-body-sm border-outline-variant/30 rounded bg-surface-variant/30 text-on-surface-variant opacity-70 pl-2 pr-8 py-0 cursor-not-allowed" disabled="">
+<option selected="">Instant (Forced)</option>
+</select>
+</div>
+<div class="col-span-2 flex justify-center">
+<div class="relative inline-block w-8 align-middle select-none opacity-50">
+<input checked="" class="absolute block w-4 h-4 rounded-full bg-white border-4 border-primary appearance-none cursor-not-allowed right-0" disabled="" type="checkbox"/>
+<label class="block overflow-hidden h-4 rounded-full bg-primary cursor-not-allowed"></label>
+</div>
+</div>
+<div class="col-span-2 flex justify-center">
+<div class="relative inline-block w-8 align-middle select-none opacity-50">
+<input checked="" class="absolute block w-4 h-4 rounded-full bg-white border-4 border-primary appearance-none cursor-not-allowed right-0" disabled="" type="checkbox"/>
+<label class="block overflow-hidden h-4 rounded-full bg-primary cursor-not-allowed"></label>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Bar -->
+<div class="flex justify-end gap-3 pt-4">
+<button class="px-4 py-2 rounded border border-outline-variant bg-surface text-on-surface font-body-sm text-body-sm hover:bg-surface-container-low transition-colors">Reset to Defaults</button>
+<button class="px-4 py-2 rounded bg-primary text-on-primary font-body-sm text-body-sm hover:bg-on-primary-fixed-variant transition-colors shadow-sm">Save Preferences</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

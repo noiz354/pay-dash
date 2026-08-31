@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Identity Verification - KYC</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-container": "#ad3b00",
+                        "inverse-primary": "#b5c4ff",
+                        "inverse-surface": "#2e3039",
+                        "secondary-fixed": "#dae2fd",
+                        "primary-container": "#1a56db",
+                        "on-surface-variant": "#434654",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary-container": "#d4dcff",
+                        "surface-container-low": "#f3f3fe",
+                        "on-tertiary-fixed": "#380d00",
+                        "surface-container-highest": "#e2e1ed",
+                        "inverse-on-surface": "#f0f0fb",
+                        "surface": "#faf8ff",
+                        "surface-container": "#ededf8",
+                        "test-mode-amber": "#d97706",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-tertiary-fixed-variant": "#802a00",
+                        "on-primary": "#ffffff",
+                        "on-primary-fixed-variant": "#003dab",
+                        "tertiary-fixed-dim": "#ffb59a",
+                        "pending-status": "#f59e0b",
+                        "on-secondary-container": "#5c647a",
+                        "surface-canvas": "#f8fafc",
+                        "outline-variant": "#c3c5d7",
+                        "error-container": "#ffdad6",
+                        "on-error-container": "#93000a",
+                        "surface-container-high": "#e7e7f3",
+                        "tertiary": "#852b00",
+                        "outline": "#737686",
+                        "on-secondary": "#ffffff",
+                        "secondary": "#565e74",
+                        "success-status": "#10b981",
+                        "on-tertiary-container": "#ffd4c5",
+                        "surface-tint": "#1353d8",
+                        "on-secondary-fixed": "#131b2e",
+                        "failed-status": "#ef4444",
+                        "surface-dim": "#d9d9e4",
+                        "primary-fixed-dim": "#b5c4ff",
+                        "on-error": "#ffffff",
+                        "surface-bright": "#faf8ff",
+                        "surface-variant": "#e2e1ed",
+                        "primary": "#003fb1",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "error": "#ba1a1a",
+                        "tertiary-fixed": "#ffdbcf",
+                        "border-subtle": "#e2e8f0",
+                        "on-tertiary": "#ffffff",
+                        "secondary-container": "#dae2fd",
+                        "on-primary-fixed": "#00174d",
+                        "on-background": "#191b23",
+                        "on-surface": "#191b23",
+                        "background": "#faf8ff",
+                        "primary-fixed": "#dbe1ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "gutter": "1.5rem",
+                        "sidebar-width": "260px",
+                        "cell-x": "16px",
+                        "stack-md": "16px",
+                        "cell-y": "12px",
+                        "container-max": "1440px",
+                        "sidebar-collapsed": "64px",
+                        "stack-tight": "4px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "data-mono": ["JetBrains Mono"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "data-mono": ["13px", { "lineHeight": "18px", "fontWeight": "500" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface-canvas text-on-surface font-body-md min-h-screen flex">
+<!-- SideNavBar -->
+<nav aria-label="Sidebar Navigation" class="docked w-sidebar-width h-screen left-0 fixed bg-inverse-surface border-r border-outline-variant flex flex-col h-full py-4 z-50 hidden md:flex">
+<div class="px-gutter mb-8">
+<h1 class="font-headline-md text-headline-md font-bold text-inverse-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined" data-icon="account_balance" style="font-variation-settings: 'FILL' 1;">account_balance</span>
+                Acme Corp
+            </h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Primary Account</p>
+</div>
+<ul class="flex-1 px-4 space-y-1">
+<li class="cursor-pointer active:opacity-80 rounded-DEFAULT text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors flex items-center gap-3 px-3 py-2">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-body-md text-body-md">Home</span>
+</li>
+<li class="cursor-pointer active:opacity-80 rounded-DEFAULT text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors flex items-center gap-3 px-3 py-2">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-body-md text-body-md">Payments</span>
+</li>
+<li class="cursor-pointer active:opacity-80 rounded-DEFAULT text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors flex items-center gap-3 px-3 py-2">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-body-md text-body-md">Customers</span>
+</li>
+<li class="cursor-pointer active:opacity-80 rounded-DEFAULT text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors flex items-center gap-3 px-3 py-2">
+<span class="material-symbols-outlined" data-icon="subscriptions">subscriptions</span>
+<span class="font-body-md text-body-md">Subscriptions</span>
+</li>
+<li class="cursor-pointer active:opacity-80 rounded-DEFAULT text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors flex items-center gap-3 px-3 py-2">
+<span class="material-symbols-outlined" data-icon="code">code</span>
+<span class="font-body-md text-body-md">Developer</span>
+</li>
+<li class="cursor-pointer active:opacity-80 rounded-DEFAULT text-primary-fixed border-l-4 border-primary-fixed bg-on-secondary-fixed-variant/20 flex items-center gap-3 px-3 py-2">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</li>
+</ul>
+<div class="px-4 mt-auto pt-4 border-t border-outline-variant/30">
+<ul class="space-y-1">
+<li class="cursor-pointer active:opacity-80 rounded-DEFAULT text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors flex items-center gap-3 px-3 py-2">
+<span class="material-symbols-outlined" data-icon="swap_horiz">swap_horiz</span>
+<span class="font-body-sm text-body-sm">Switch Account</span>
+</li>
+<li class="cursor-pointer active:opacity-80 rounded-DEFAULT text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors flex items-center gap-3 px-3 py-2">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+<span class="font-body-sm text-body-sm">Support</span>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col md:ml-[260px] min-w-0">
+<!-- TopAppBar -->
+<header class="bg-surface border-b border-outline-variant bg-surface flat no shadows docked full-width top-0 h-16 flex justify-between items-center w-full px-gutter max-w-container-max sticky z-40">
+<div class="flex items-center gap-6">
+<span class="font-headline-md text-headline-md font-black text-on-surface">The Ledger</span>
+<nav class="hidden lg:flex gap-6">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all py-1" href="#">Dashboard</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all py-1" href="#">Analytics</a>
+<a class="font-label-caps text-label-caps text-primary font-bold border-b-2 border-primary pb-1" href="#">Reports</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<!-- Search -->
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm" data-icon="search">search</span>
+<input class="h-9 pl-9 pr-4 rounded-DEFAULT border border-outline-variant bg-surface-container-lowest text-body-sm font-body-sm focus:border-primary focus:ring-2 focus:ring-primary/20 w-64 transition-all" placeholder="Search (Cmd+K)" type="text"/>
+</div>
+<!-- Test Mode Badge -->
+<div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-test-mode-amber/10 border border-test-mode-amber/20">
+<span class="w-1.5 h-1.5 rounded-full bg-test-mode-amber"></span>
+<span class="font-label-caps text-label-caps text-test-mode-amber uppercase">Test Mode</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-9 h-9 flex items-center justify-center rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="w-9 h-9 flex items-center justify-center rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-low transition-colors">
+<span class="material-symbols-outlined" data-icon="help">help</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant overflow-hidden ml-2">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A professional headshot of a business user in a modern corporate setting, neutral lighting, flat clean style, enterprise software context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAbcET9jD9N5TByZPz0587_u_ZXNghdS9VyQ-yYHYHNrY6Z-uvu7lwg8Rfv3E7gvvib9T55OdgLZFF3MVtxEFEsh4dSWoXXDLLZ0WlhCLqeZRcqk_bkLs8wlLY9XFgO-F21sH1ULtXpY0jNjj7zQszIh-Lpz2CXa30vNcXw7k2jDntaJYeQ2-rEhNnHuh2S16vYfyB8YYoSfnp0iJgHOXlnt3bUmeHMxmVnejoX3VrexgN2zUcOriT4"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Page Content -->
+<div class="flex-1 p-gutter max-w-container-max mx-auto w-full">
+<div class="mb-8">
+<h2 class="font-headline-xl text-headline-xl text-on-surface">Identity Verification</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2">Complete your business KYC to unlock full ledger capabilities.</p>
+</div>
+<!-- Layout Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
+<!-- Left Sidebar: Progress Indicator (Bento style card) -->
+<div class="lg:col-span-3 bg-surface-container-lowest border border-border-subtle rounded-xl p-6 sticky top-[100px]">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-6 border-b border-border-subtle pb-4">Verification Steps</h3>
+<ol class="relative border-l-2 border-surface-container-high space-y-6">
+<!-- Step 1: Completed -->
+<li class="ml-6">
+<span class="absolute flex items-center justify-center w-6 h-6 bg-success-status rounded-full -left-[13px] ring-4 ring-surface-container-lowest">
+<span class="material-symbols-outlined text-white text-[14px]" data-icon="check" style="font-variation-settings: 'FILL' 1;">check</span>
+</span>
+<h4 class="font-headline-md text-headline-md text-on-surface leading-tight">Basic Info</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Company name &amp; details</p>
+</li>
+<!-- Step 2: Active -->
+<li class="ml-6">
+<span class="absolute flex items-center justify-center w-6 h-6 bg-primary rounded-full -left-[13px] ring-4 ring-surface-container-lowest">
+<span class="w-2 h-2 bg-white rounded-full"></span>
+</span>
+<h4 class="font-headline-md text-headline-md text-primary leading-tight">Business Documents</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Upload incorporation proof</p>
+</li>
+<!-- Step 3: Pending -->
+<li class="ml-6">
+<span class="absolute flex items-center justify-center w-6 h-6 bg-surface-container-high rounded-full -left-[13px] ring-4 ring-surface-container-lowest">
+</span>
+<h4 class="font-headline-md text-headline-md text-on-surface-variant leading-tight">Beneficial Owners</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Identify key stakeholders</p>
+</li>
+<!-- Step 4: Pending -->
+<li class="ml-6">
+<span class="absolute flex items-center justify-center w-6 h-6 bg-surface-container-high rounded-full -left-[13px] ring-4 ring-surface-container-lowest">
+</span>
+<h4 class="font-headline-md text-headline-md text-on-surface-variant leading-tight">Final Review</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Submit for approval</p>
+</li>
+</ol>
+</div>
+<!-- Main Content Area: Document Upload & Form -->
+<div class="lg:col-span-9 space-y-6">
+<!-- Glassmorphism-esque Info Card -->
+<div class="bg-primary/5 border border-primary/20 rounded-xl p-6 flex items-start gap-4">
+<div class="bg-primary/10 p-2 rounded-lg shrink-0 mt-1">
+<span class="material-symbols-outlined text-primary" data-icon="info">info</span>
+</div>
+<div>
+<h4 class="font-headline-md text-headline-md text-on-surface">Secure Document Submission</h4>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2">To comply with global anti-money laundering (AML) regulations, we require official documentation proving your entity's registration. These documents are encrypted at rest.</p>
+</div>
+</div>
+<!-- Main Form Card -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-xl overflow-hidden">
+<div class="p-6 border-b border-border-subtle flex justify-between items-center bg-surface-canvas/50">
+<div>
+<h3 class="font-headline-lg text-headline-lg text-on-surface">Upload Business Documents</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Accepted formats: PDF, JPEG, PNG (Max 10MB)</p>
+</div>
+<!-- Status Badge -->
+<div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-pending-status/10 border border-pending-status/20">
+<span class="w-2 h-2 rounded-full bg-pending-status"></span>
+<span class="font-label-caps text-label-caps text-pending-status uppercase tracking-wider">Action Required</span>
+</div>
+</div>
+<div class="p-6 space-y-8">
+<!-- Document Type Selector -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Document Type</label>
+<select class="w-full h-9 px-3 rounded-DEFAULT border border-outline-variant bg-surface-container-lowest text-body-md font-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all">
+<option>Certificate of Incorporation</option>
+<option>Articles of Association</option>
+<option>Business License</option>
+<option>Tax Registration Certificate</option>
+</select>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">Issuing Jurisdiction</label>
+<input class="w-full h-9 px-3 rounded-DEFAULT border border-outline-variant bg-surface-container-lowest text-body-md font-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all" placeholder="e.g., Delaware, USA" type="text"/>
+</div>
+</div>
+<!-- Drag and Drop Area -->
+<div class="border-2 border-dashed border-outline-variant rounded-xl p-10 flex flex-col items-center justify-center bg-surface-container-lowest hover:bg-surface-container-low transition-colors cursor-pointer group relative overflow-hidden">
+<div class="bg-surface-container-high p-4 rounded-full mb-4 group-hover:scale-110 transition-transform duration-300">
+<span class="material-symbols-outlined text-3xl text-on-surface-variant" data-icon="cloud_upload">cloud_upload</span>
+</div>
+<h4 class="font-headline-md text-headline-md text-on-surface text-center">Drag and drop your file here</h4>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2 text-center">or click to browse from your computer</p>
+<input aria-label="Upload document" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" type="file"/>
+</div>
+<!-- Uploaded Files List -->
+<div class="space-y-3">
+<h5 class="font-label-caps text-label-caps text-on-surface-variant uppercase">Attached Files</h5>
+<!-- File Item -->
+<div class="flex items-center justify-between p-3 border border-border-subtle rounded-lg bg-surface-container-lowest hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-3">
+<div class="bg-primary/10 p-2 rounded text-primary">
+<span class="material-symbols-outlined text-[20px]" data-icon="description">description</span>
+</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface font-medium">acme_corp_incorporation_2023.pdf</p>
+<p class="font-data-mono text-data-mono text-on-surface-variant text-xs mt-0.5">2.4 MB</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="flex items-center gap-1 text-success-status font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-[16px]" data-icon="check_circle">check_circle</span>
+                                            Uploaded
+                                        </span>
+<button class="p-1.5 text-on-surface-variant hover:text-error hover:bg-error-container rounded-DEFAULT transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="delete">delete</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Action Bar -->
+<div class="flex justify-end gap-3 pt-6 border-t border-border-subtle">
+<button class="px-4 py-2 font-body-md text-body-md font-medium text-on-surface-variant bg-surface-container-lowest border border-outline-variant rounded-DEFAULT hover:bg-surface-container-low transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20">
+                                    Save Draft
+                                </button>
+<button class="px-6 py-2 font-body-md text-body-md font-medium text-on-primary bg-primary rounded-DEFAULT hover:bg-on-primary-fixed-variant transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-surface-container-lowest flex items-center gap-2">
+                                    Submit Step
+                                    <span class="material-symbols-outlined text-[18px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

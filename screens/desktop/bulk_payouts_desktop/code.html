@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-background antialiased" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bulk Payouts - Kinetic Ledger</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-surface": "#191b23",
+                      "success-status": "#10b981",
+                      "tertiary": "#852b00",
+                      "tertiary-fixed-dim": "#ffb59a",
+                      "primary-fixed": "#dbe1ff",
+                      "on-secondary-fixed": "#131b2e",
+                      "failed-status": "#ef4444",
+                      "surface-variant": "#e2e1ed",
+                      "pending-status": "#f59e0b",
+                      "on-tertiary-fixed": "#380d00",
+                      "background": "#faf8ff",
+                      "secondary-fixed": "#dae2fd",
+                      "on-background": "#191b23",
+                      "inverse-surface": "#2e3039",
+                      "on-surface-variant": "#434654",
+                      "test-mode-amber": "#d97706",
+                      "surface-dim": "#d9d9e4",
+                      "on-error-container": "#93000a",
+                      "surface-container-highest": "#e2e1ed",
+                      "inverse-on-surface": "#f0f0fb",
+                      "secondary": "#565e74",
+                      "primary": "#003fb1",
+                      "on-primary-container": "#d4dcff",
+                      "on-secondary": "#ffffff",
+                      "tertiary-fixed": "#ffdbcf",
+                      "surface-container-high": "#e7e7f3",
+                      "surface-canvas": "#f8fafc",
+                      "outline": "#737686",
+                      "surface-tint": "#1353d8",
+                      "primary-fixed-dim": "#b5c4ff",
+                      "outline-variant": "#c3c5d7",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "surface": "#faf8ff",
+                      "surface-container-lowest": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "error": "#ba1a1a",
+                      "inverse-primary": "#b5c4ff",
+                      "on-error": "#ffffff",
+                      "on-primary": "#ffffff",
+                      "on-tertiary-container": "#ffd4c5",
+                      "border-subtle": "#e2e8f0",
+                      "surface-container": "#ededf8",
+                      "primary-container": "#1a56db",
+                      "surface-bright": "#faf8ff",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "on-primary-fixed-variant": "#003dab",
+                      "surface-container-low": "#f3f3fe",
+                      "on-tertiary": "#ffffff",
+                      "on-tertiary-fixed-variant": "#802a00",
+                      "tertiary-container": "#ad3b00",
+                      "secondary-container": "#dae2fd",
+                      "on-primary-fixed": "#00174d",
+                      "on-secondary-container": "#5c647a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "cell-y": "12px",
+                      "cell-x": "16px",
+                      "sidebar-collapsed": "64px",
+                      "gutter": "1.5rem",
+                      "stack-md": "16px",
+                      "sidebar-width": "260px",
+                      "stack-tight": "4px",
+                      "container-max": "1440px"
+              },
+              "fontFamily": {
+                      "label-caps": ["Inter", "sans-serif"],
+                      "body-sm": ["Inter", "sans-serif"],
+                      "headline-xl": ["Inter", "sans-serif"],
+                      "body-lg": ["Inter", "sans-serif"],
+                      "headline-md": ["Inter", "sans-serif"],
+                      "data-mono": ["JetBrains Mono", "monospace"],
+                      "body-md": ["Inter", "sans-serif"],
+                      "headline-lg": ["Inter", "sans-serif"]
+              },
+              "fontSize": {
+                      "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                      "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                      "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                      "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                      "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                      "data-mono": ["13px", { "lineHeight": "18px", "fontWeight": "500" }],
+                      "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                      "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+              }
+            }
+          }
+        }
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        [data-weight="fill"] {
+            font-variation-settings: 'FILL' 1;
+        }
+        /* Custom scrollbar for tables */
+        .table-scroll::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .table-scroll::-webkit-scrollbar-track {
+            background: theme('colors.surface-canvas'); 
+        }
+        .table-scroll::-webkit-scrollbar-thumb {
+            background: theme('colors.outline-variant'); 
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="flex h-full bg-surface-canvas text-on-surface font-body-md overflow-hidden">
+<!-- SideNavBar -->
+<nav class="w-sidebar-width h-screen fixed left-0 top-0 z-50 transition-all duration-300 bg-on-background flex flex-col py-4 px-3">
+<!-- Brand -->
+<div class="flex items-center px-3 mb-8 gap-3">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary text-[20px]" data-icon="account_balance">account_balance</span>
+</div>
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-primary font-black leading-none">Kinetic Ledger</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant mt-1">Enterprise Tier</p>
+</div>
+</div>
+<!-- Main Nav -->
+<div class="flex flex-col gap-1 flex-1">
+<a class="flex items-center gap-3 px-3 py-2 text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all rounded-lg group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="dashboard">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all rounded-lg group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="account_balance">account_balance</span>
+<span class="font-label-caps text-label-caps">Ledger</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all rounded-lg group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="group">group</span>
+<span class="font-label-caps text-label-caps">Accounts</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary text-on-primary rounded-xl font-bold group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="payments">payments</span>
+<span class="font-label-caps text-label-caps">Payments</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all rounded-lg group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="analytics">analytics</span>
+<span class="font-label-caps text-label-caps">Reporting</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all rounded-lg group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="history">history</span>
+<span class="font-label-caps text-label-caps">Audit Log</span>
+</a>
+</div>
+<!-- Footer Nav -->
+<div class="flex flex-col gap-1 mt-auto pt-4 border-t border-on-surface-variant/30">
+<a class="flex items-center gap-3 px-3 py-2 text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="contact_support">contact_support</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all rounded-lg" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 ml-sidebar-width flex flex-col h-screen overflow-hidden bg-surface-canvas">
+<!-- TopAppBar -->
+<header class="w-full h-14 sticky top-0 z-40 bg-surface-bright flex justify-between items-center px-gutter border-b border-subtle shrink-0">
+<!-- Search -->
+<div class="flex-1 max-w-md">
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[20px]" data-icon="search">search</span>
+<input class="w-full h-9 pl-10 pr-12 bg-surface-container-lowest border border-outline-variant rounded focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none font-body-sm text-body-sm text-on-surface transition-all placeholder:text-outline-variant" placeholder="Search batches, recipients, or reference..." type="text"/>
+<div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
+<kbd class="font-data-mono text-[10px] border border-outline-variant rounded px-1 text-on-surface-variant">⌘</kbd>
+<kbd class="font-data-mono text-[10px] border border-outline-variant rounded px-1 text-on-surface-variant">K</kbd>
+</div>
+</div>
+</div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-2">
+<button aria-label="Help" class="w-9 h-9 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+</button>
+<button aria-label="Notifications" class="w-9 h-9 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer active:scale-95 transition-transform relative">
+<span class="absolute top-2 right-2 w-1.5 h-1.5 bg-error rounded-full"></span>
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+<button aria-label="Settings" class="w-9 h-9 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer active:scale-95 transition-transform">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+</button>
+<div class="h-5 w-[1px] bg-outline-variant mx-2"></div>
+<img alt="User Profile" class="w-8 h-8 rounded-full object-cover border border-subtle" data-alt="A professional headshot of a corporate user, subtle lighting, clean background, ensuring a high-end corporate application aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAkq6ICJAFNzhWJp9cTahRBfq--MhvG3frlvLOkoxk0RqWWPa-AqqwQ-oypvSV8slBOZuR6uDctCS7uOdXTBihAGOxziY2qtab3jzIN9udV3KQPtSWiyJjdePtPzh1P1glailn7KObRADGS-LtlaaAA_mi08Gah7YxIyM6gPBQ2RgZE9KSPj9jHc37eZYzR5V5AX_tYU8MMS8xNEJL1t1wnEdVMFMSdjpF9Bu5fBGtfQCOGZoehfqzY"/>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 overflow-y-auto p-gutter relative">
+<div class="max-w-container-max mx-auto space-y-6 pb-20">
+<!-- Page Header & Actions -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<div class="flex items-center gap-2 text-on-surface-variant mb-1">
+<span class="font-body-sm text-body-sm">Payments</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="chevron_right">chevron_right</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Bulk Payouts</span>
+</div>
+<h2 class="font-headline-xl text-headline-xl text-on-surface m-0 leading-tight">Batch Disbursements</h2>
+</div>
+<div class="flex items-center gap-3">
+<button class="h-9 px-4 flex items-center gap-2 bg-surface-container-lowest border border-outline-variant text-on-surface rounded hover:bg-surface-container transition-colors font-body-sm text-body-sm font-medium">
+<span class="material-symbols-outlined text-[18px]" data-icon="download">download</span>
+                            Export Log
+                        </button>
+<button class="h-9 px-4 flex items-center gap-2 bg-primary text-on-primary rounded hover:bg-primary-container transition-colors shadow-sm font-body-sm text-body-sm font-medium cursor-pointer active:scale-95">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+                            New Batch
+                        </button>
+</div>
+</div>
+<!-- Bento Grid Layout for Summary & Upload -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Metrics Column (Takes 2/3 space on large screens) -->
+<div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+<!-- Pending Value -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-5 flex flex-col justify-between">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-pending-status text-[18px]" data-icon="pending_actions">pending_actions</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Pending Disbursements</span>
+</div>
+<span class="bg-pending-status/10 text-pending-status font-label-caps text-label-caps px-2 py-0.5 rounded-full">Processing</span>
+</div>
+<div>
+<div class="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight">$4,250,890.00</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Across 3 active batches</span>
+</div>
+</div>
+</div>
+<!-- Processed Volume (Last 30d) -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-5 flex flex-col justify-between">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-success-status text-[18px]" data-icon="task_alt">task_alt</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Completed (30D)</span>
+</div>
+<div class="flex items-center text-success-status bg-success-status/10 px-2 py-0.5 rounded-full gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span>
+<span class="font-label-caps text-label-caps">12%</span>
+</div>
+</div>
+<div>
+<div class="font-headline-xl text-headline-xl text-on-surface font-bold tracking-tight">$18,405,200.50</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">14,205 total recipients</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Upload Section (Takes 1/3 space) -->
+<div class="lg:col-span-1 bg-surface-container-lowest border border-subtle rounded-xl p-5 flex flex-col">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="upload_file">upload_file</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Quick Upload</h3>
+</div>
+<div class="flex-1 border-2 border-dashed border-outline-variant rounded-lg bg-surface-canvas flex flex-col items-center justify-center p-6 text-center hover:bg-surface-container-low hover:border-primary transition-colors cursor-pointer group">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center mb-3 group-hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors" data-icon="csv">description</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface mb-1">Drag &amp; drop CSV or JSON file</p>
+<p class="font-label-caps text-label-caps text-outline">or click to browse</p>
+<div class="mt-4 pt-4 border-t border-outline-variant/30 w-full">
+<a class="font-body-sm text-body-sm text-primary hover:underline flex items-center justify-center gap-1" href="#">
+                                    Download Template
+                                    <span class="material-symbols-outlined text-[14px]" data-icon="open_in_new">open_in_new</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

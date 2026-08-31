@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kinetic Ledger - System Health &amp; Webhooks</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-surface": "#191b23",
+                      "success-status": "#10b981",
+                      "tertiary": "#852b00",
+                      "tertiary-fixed-dim": "#ffb59a",
+                      "primary-fixed": "#dbe1ff",
+                      "on-secondary-fixed": "#131b2e",
+                      "failed-status": "#ef4444",
+                      "surface-variant": "#e2e1ed",
+                      "pending-status": "#f59e0b",
+                      "on-tertiary-fixed": "#380d00",
+                      "background": "#faf8ff",
+                      "secondary-fixed": "#dae2fd",
+                      "on-background": "#191b23",
+                      "inverse-surface": "#2e3039",
+                      "on-surface-variant": "#434654",
+                      "test-mode-amber": "#d97706",
+                      "surface-dim": "#d9d9e4",
+                      "on-error-container": "#93000a",
+                      "surface-container-highest": "#e2e1ed",
+                      "inverse-on-surface": "#f0f0fb",
+                      "secondary": "#565e74",
+                      "primary": "#003fb1",
+                      "on-primary-container": "#d4dcff",
+                      "on-secondary": "#ffffff",
+                      "tertiary-fixed": "#ffdbcf",
+                      "surface-container-high": "#e7e7f3",
+                      "surface-canvas": "#f8fafc",
+                      "outline": "#737686",
+                      "surface-tint": "#1353d8",
+                      "primary-fixed-dim": "#b5c4ff",
+                      "outline-variant": "#c3c5d7",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "surface": "#faf8ff",
+                      "surface-container-lowest": "#ffffff",
+                      "error-container": "#ffdad6",
+                      "error": "#ba1a1a",
+                      "inverse-primary": "#b5c4ff",
+                      "on-error": "#ffffff",
+                      "on-primary": "#ffffff",
+                      "on-tertiary-container": "#ffd4c5",
+                      "border-subtle": "#e2e8f0",
+                      "surface-container": "#ededf8",
+                      "primary-container": "#1a56db",
+                      "surface-bright": "#faf8ff",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "on-primary-fixed-variant": "#003dab",
+                      "surface-container-low": "#f3f3fe",
+                      "on-tertiary": "#ffffff",
+                      "on-tertiary-fixed-variant": "#802a00",
+                      "tertiary-container": "#ad3b00",
+                      "secondary-container": "#dae2fd",
+                      "on-primary-fixed": "#00174d",
+                      "on-secondary-container": "#5c647a"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "cell-y": "12px",
+                      "cell-x": "16px",
+                      "sidebar-collapsed": "64px",
+                      "gutter": "1.5rem",
+                      "stack-md": "16px",
+                      "sidebar-width": "260px",
+                      "stack-tight": "4px",
+                      "container-max": "1440px"
+              },
+              "fontFamily": {
+                      "label-caps": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "headline-xl": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "data-mono": [
+                              "JetBrains Mono"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "label-caps": [
+                              "11px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-xl": [
+                              "30px",
+                              {
+                                      "lineHeight": "38px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "18px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "data-mono": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+            },
+          }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: theme('colors.surface-canvas'); color: theme('colors.on-surface'); }
+        .data-mono { font-family: 'JetBrains Mono', monospace; }
+        /* Simple simulated chart styles for visual representation */
+        .chart-bar { transition: height 0.3s ease; }
+    </style>
+</head>
+<body class="flex min-h-screen bg-surface-canvas overflow-x-hidden">
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col h-full py-4 px-3 w-sidebar-width h-screen fixed left-0 top-0 z-50 transition-all duration-300 bg-on-background dark:bg-surface-container-lowest shadow-md group">
+<div class="mb-8 px-3">
+<h1 class="font-headline-lg text-headline-lg text-on-primary font-black flex items-center gap-2">
+<span class="material-symbols-outlined text-3xl">account_balance</span>
+                Kinetic Ledger
+            </h1>
+<p class="font-label-caps text-label-caps text-on-secondary-fixed-variant mt-1">Enterprise Tier</p>
+</div>
+<ul class="flex flex-col gap-2 flex-grow">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined" data-weight="fill">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">account_balance</span>
+<span class="font-body-md text-body-md">Ledger</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-body-md text-body-md">Accounts</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-body-md text-body-md">Payments</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-body-md text-body-md">Reporting</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary text-on-primary rounded-xl font-bold transition-all group-hover:translate-x-1 duration-200 shadow-md" href="#">
+<span class="material-symbols-outlined">monitor_heart</span>
+<span class="font-body-md text-body-md">System Health</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="font-body-md text-body-md">Audit Log</span>
+</a>
+</li>
+</ul>
+<div class="mt-auto border-t border-on-secondary-fixed-variant/20 pt-4">
+<ul class="flex flex-col gap-2">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">contact_support</span>
+<span class="font-body-md text-body-md">Support</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</li>
+</ul>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 md:ml-sidebar-width flex flex-col min-h-screen">
+<!-- TopAppBar (Mobile Only - representing the nav state when sidebar is hidden) -->
+<header class="md:hidden w-full h-14 sticky top-0 z-40 bg-surface-bright flex justify-between items-center px-gutter border-b border-subtle">
+<div class="flex items-center gap-3">
+<button class="material-symbols-outlined text-on-surface">menu</button>
+<span class="font-headline-md text-headline-md font-bold text-primary">System Health</span>
+</div>
+<div class="flex gap-4 text-on-surface-variant">
+<span class="material-symbols-outlined cursor-pointer hover:bg-surface-container transition-colors rounded p-1">notifications</span>
+</div>
+</header>
+<!-- Page Content -->
+<main class="flex-1 p-gutter max-w-container-max mx-auto w-full grid grid-cols-1 xl:grid-cols-12 gap-gutter">
+<!-- Left Column: Health & Traffic (Spans 8 cols on xl) -->
+<div class="xl:col-span-8 flex flex-col gap-gutter">
+<!-- Page Header -->
+<div class="flex justify-between items-end pb-4 border-b border-subtle">
+<div>
+<h2 class="font-headline-xl text-headline-xl text-on-surface">System Status &amp; Webhooks</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Real-time monitoring of API integrations and webhook delivery performance.</p>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low border border-subtle rounded-lg px-3 py-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-success-status animate-pulse"></span>
+<span class="font-data-mono text-data-mono text-success-status">All Systems Operational</span>
+</div>
+</div>
+<!-- Status Cards (Bento style row) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<!-- API Uptime -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">api</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">Core API Uptime</h3>
+<div class="flex items-end gap-2">
+<span class="font-headline-xl text-headline-xl text-on-surface">99.99%</span>
+<span class="font-body-sm text-body-sm text-success-status mb-1 flex items-center"><span class="material-symbols-outlined text-sm">trending_up</span></span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2">Last 30 days. Avg latency 42ms.</p>
+</div>
+<!-- Database Status -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">database</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">Ledger DB Status</h3>
+<div class="flex items-end gap-2">
+<span class="font-headline-xl text-headline-xl text-on-surface">Healthy</span>
+</div>
+<div class="w-full bg-surface-container h-1.5 rounded-full mt-3 overflow-hidden">
+<div class="bg-success-status h-full w-[15%]"></div>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">15% capacity utilized.</p>
+</div>
+<!-- Webhook Queue -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-pending-status">queue</span>
+</div>
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">Webhook Queue Depth</h3>
+<div class="flex items-end gap-2">
+<span class="font-headline-xl text-headline-xl text-pending-status">142</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant mb-1">events</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2">Processing normal. Est delay &lt; 1s.</p>
+</div>
+</div>
+<!-- Webhook Traffic Chart (Simulated) -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-6 shadow-sm">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md text-on-surface">Webhook Delivery Traffic (Last 24h)</h3>
+<div class="flex gap-2">
+<span class="flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant"><span class="w-2 h-2 rounded-full bg-success-status"></span> Success</span>
+<span class="flex items-center gap-1 font-body-sm text-body-sm text-on-surface-variant"><span class="w-2 h-2 rounded-full bg-failed-status"></span> Failed</span>
+</div>
+</div>
+<!-- Simulated Bar Chart area -->
+<div class="h-48 w-full flex items-end gap-1 border-b border-subtle pb-1 relative">
+<!-- Y-axis labels -->
+<div class="absolute left-0 top-0 h-full flex flex-col justify-between text-label-caps text-outline-variant pb-1 pr-2 border-r border-subtle w-8">
+<span>1k</span>
+<span>500</span>
+<span>0</span>
+</div>
+<!-- Chart Bars (dummy data) -->
+<div class="flex-1 flex items-end gap-1 md:gap-2 ml-10 h-full">
+<!-- Example bars combining success and failure -->
+<div class="flex-1 flex flex-col justify-end gap-px h-full group relative cursor-crosshair">
+<div class="w-full bg-failed-status opacity-80 chart-bar hover:opacity-100" style="height: 5%;"></div>
+<div class="w-full bg-success-status opacity-80 chart-bar hover:opacity-100" style="height: 40%;"></div>
+<div class="hidden group-hover:block absolute bottom-full mb-2 bg-inverse-surface text-inverse-on-surface p-2 rounded shadow-lg text-xs whitespace-nowrap z-10 border border-outline-variant">
+<p class="font-bold">12:00 AM</p>
+<p class="text-success-status">Success: 420</p>
+<p class="text-failed-status">Failed: 12</p>
+</div>
+</div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 2%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 35%;"></div></div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 0%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 30%;"></div></div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 10%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 50%;"></div></div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 1%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 60%;"></div></div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 5%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 80%;"></div></div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 20%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 45%;"></div></div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 2%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 55%;"></div></div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 0%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 65%;"></div></div>
+<div class="flex-1 flex flex-col justify-end gap-px h-full"><div class="w-full bg-failed-status opacity-80 chart-bar" style="height: 3%;"></div><div class="w-full bg-success-status opacity-80 chart-bar" style="height: 40%;"></div></div>
+</div>
+</div>
+<!-- X-axis labels -->
+<div class="flex justify-between mt-2 text-label-caps text-outline-variant ml-10">
+<span>12:00 AM</span>
+<span>06:00 AM</span>
+<span>12:00 PM</span>
+<span>06:00 PM</span>
+<span>Now</span>
+</div>
+</div>
+<!-- Recent Deliveries Table -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl shadow-sm overflow-hidden flex flex-col">
+<div class="p-4 border-b border-subtle flex justify-between items-center bg-surface-container-low">
+<h3 class="font-headline-md text-headline-md text-on-surface">Recent Webhook Deliveries</h3>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-outline-variant text-sm">search</span>
+<input class="pl-8 pr-3 py-1.5 h-[36px] bg-surface-container-lowest border border-outline-variant rounded-md text-body-sm focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-64 transition-all" placeholder="Search event ID..." type="text"/>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse min-w-[800px]">
+<thead>
+<tr class="bg-surface-container-lowest border-b border-subtle">
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase">Event ID</th>
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase">Endpoint</th>
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase">Type</th>
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase">Status</th>
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant uppercase">Time / Retry</th>
+<th class="py-3 px-4 text-right"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-subtle font-body-sm text-body-sm">
+<tr class="hover:bg-surface-container-highest/30 transition-colors group">
+<td class="py-3 px-4 font-data-mono text-data-mono text-on-surface">evt_9k2m4x1...</td>
+<td class="py-3 px-4 text-on-surface-variant">api.merchant.com/wh</td>
+<td class="py-3 px-4"><span class="bg-surface-variant px-2 py-0.5 rounded text-xs">payment.succeeded</span></td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 bg-success-status/10 text-success-status px-2 py-0.5 rounded-full font-medium text-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-success-status"></span> 200 OK
+                                        </span>
+</td>
+<td class="py-3 px-4 text-on-surface-variant font-data-mono">10:42:15 AM <span class="text-outline-variant ml-2">(1/3)</span></td>
+<td class="py-3 px-4 text-right">
+<button class="text-primary hover:text-primary-container font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end w-full gap-1">
+                                            Inspect <span class="material-symbols-outlined text-sm">code</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-highest/30 transition-colors group">
+<td class="py-3 px-4 font-data-mono text-data-mono text-on-surface">evt_7j1l9p0...</td>
+<td class="py-3 px-4 text-on-surface-variant">hooks.erp-system.net/in</td>
+<td class="py-3 px-4"><span class="bg-surface-variant px-2 py-0.5 rounded text-xs">account.updated</span></td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 bg-failed-status/10 text-failed-status px-2 py-0.5 rounded-full font-medium text-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-failed-status"></span> 503 Unavailable
+                                        </span>
+</td>
+<td class="py-3 px-4 text-on-surface-variant font-data-mono">10:41:02 AM <span class="text-pending-status ml-2">(3/5)</span></td>
+<td class="py-3 px-4 text-right">
+<button class="text-primary hover:text-primary-container font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end w-full gap-1">
+                                            Inspect <span class="material-symbols-outlined text-sm">code</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-highest/30 transition-colors group">
+<td class="py-3 px-4 font-data-mono text-data-mono text-on-surface">evt_4n8v2c5...</td>
+<td class="py-3 px-4 text-on-surface-variant">api.merchant.com/wh</td>
+<td class="py-3 px-4"><span class="bg-surface-variant px-2 py-0.5 rounded text-xs">payment.failed</span></td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 bg-success-status/10 text-success-status px-2 py-0.5 rounded-full font-medium text-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-success-status"></span> 200 OK
+                                        </span>
+</td>
+<td class="py-3 px-4 text-on-surface-variant font-data-mono">10:39:44 AM <span class="text-outline-variant ml-2">(1/3)</span></td>
+<td class="py-3 px-4 text-right">
+<button class="text-primary hover:text-primary-container font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end w-full gap-1">
+                                            Inspect <span class="material-symbols-outlined text-sm">code</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-highest/30 transition-colors group opacity-75">
+<td class="py-3 px-4 font-data-mono text-data-mono text-on-surface">evt_2b5m8q1...</td>
+<td class="py-3 px-4 text-on-surface-variant">hooks.legacy-app.io/v1</td>
+<td class="py-3 px-4"><span class="bg-surface-variant px-2 py-0.5 rounded text-xs">transfer.created</span></td>
+<td class="py-3 px-4">
+<span class="inline-flex items-center gap-1.5 bg-pending-status/10 text-pending-status px-2 py-0.5 rounded-full font-medium text-xs">
+<span class="w-1.5 h-1.5 rounded-full bg-pending-status animate-pulse"></span> Pending
+                                        </span>
+</td>
+<td class="py-3 px-4 text-on-surface-variant font-data-mono">10:38:10 AM <span class="text-outline-variant ml-2">(in queue)</span></td>
+<td class="py-3 px-4 text-right">
+<button class="text-primary hover:text-primary-container font-medium opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end w-full gap-1">
+                                            Inspect <span class="material-symbols-outlined text-sm">code</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-3 border-t border-subtle bg-surface-container-lowest text-center">
+<a class="text-primary font-body-sm text-body-sm hover:underline" href="#">View Full Webhook Log</a>
+</div>
+</div>
+</div>
+<!-- Right Column: Settings & Alerts Sidebar (Spans 4 cols on xl) -->
+<div class="xl:col-span-4 flex flex-col gap-gutter">
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-5 shadow-sm sticky top-20">
+<div class="flex items-center gap-2 mb-4 pb-3 border-b border-subtle">
+<span class="material-symbols-outlined text-on-surface-variant">settings_alert</span>
+<h3 class="font-headline-md text-headline-md text-on-surface">Monitoring Settings</h3>
+</div>
+<form class="space-y-6">
+<!-- Alert Thresholds -->
+<div>
+<h4 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-3">Alert Thresholds</h4>
+<div class="space-y-4">
+<div>
+<label class="flex justify-between items-center mb-1">
+<span class="font-body-sm text-body-sm text-on-surface">Failure Rate Alert</span>
+<span class="font-data-mono text-data-mono text-primary">&gt; 5%</span>
+</label>
+<input class="w-full h-1.5 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-primary" max="20" min="1" type="range" value="5"/>
+<p class="text-xs text-on-surface-variant mt-1">Alert when failure rate exceeds threshold over 5m window.</p>
+</div>
+<div>
+<label class="flex justify-between items-center mb-1">
+<span class="font-body-sm text-body-sm text-on-surface">Queue Depth Alert</span>
+<span class="font-data-mono text-data-mono text-primary">&gt; 500</span>
+</label>
+<input class="w-full h-1.5 bg-surface-variant rounded-lg appearance-none cursor-pointer accent-primary" max="2000" min="100" step="100" type="range" value="500"/>
+</div>
+</div>
+</div>
+<!-- Notification Channels -->
+<div class="pt-4 border-t border-subtle">
+<h4 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-3">Notification Channels</h4>
+<div class="space-y-3">
+<label class="flex items-center gap-3 p-2 hover:bg-surface-container rounded-md cursor-pointer transition-colors border border-transparent hover:border-subtle">
+<input checked="" class="w-4 h-4 text-primary bg-surface-container-lowest border-outline-variant rounded focus:ring-primary focus:ring-2" type="checkbox"/>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Email Operations Team</span>
+<span class="text-xs text-on-surface-variant">ops-alerts@kinetic.local</span>
+</div>
+</label>
+<label class="flex items-center gap-3 p-2 hover:bg-surface-container rounded-md cursor-pointer transition-colors border border-transparent hover:border-subtle">
+<input checked="" class="w-4 h-4 text-primary bg-surface-container-lowest border-outline-variant rounded focus:ring-primary focus:ring-2" type="checkbox"/>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Slack PagerDuty</span>
+<span class="text-xs text-on-surface-variant">#alerts-critical</span>
+</div>
+</label>
+<label class="flex items-center gap-3 p-2 hover:bg-surface-container rounded-md cursor-pointer transition-colors border border-transparent hover:border-subtle opacity-60">
+<input class="w-4 h-4 text-primary bg-surface-container-lowest border-outline-variant rounded focus:ring-primary focus:ring-2" type="checkbox"/>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">SMS On-call Engineer</span>
+<span class="text-xs text-on-surface-variant">Requires premium tier</span>
+</div>
+</label>
+</div>
+</div>
+<!-- Actions -->
+<div class="pt-4 border-t border-subtle flex gap-3">
+<button class="flex-1 py-2 px-4 bg-primary text-on-primary font-body-sm text-body-sm font-medium rounded-md hover:bg-primary-container transition-colors shadow-sm active:scale-95" type="button">Save Settings</button>
+<button class="py-2 px-4 bg-surface-container border border-subtle text-on-surface font-body-sm text-body-sm font-medium rounded-md hover:bg-surface-container-high transition-colors active:scale-95" type="button">Test Alert</button>
+</div>
+</form>
+</div>
+<!-- Quick Info Card -->
+<div class="bg-inverse-surface text-inverse-on-surface rounded-xl p-5 shadow-sm border border-outline-variant">
+<h4 class="font-headline-md text-headline-md mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-test-mode-amber">lightbulb</span>
+                        Pro Tip
+                    </h4>
+<p class="font-body-sm text-body-sm text-outline-variant mb-4">You can set up custom webhook retry schedules based on specific HTTP response codes in the Developer Portal.</p>
+<a class="text-inverse-primary font-body-sm text-body-sm hover:underline flex items-center gap-1" href="#">
+                        Go to Developer Portal <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</a>
+</div>
+</div>
+</main>
+</div>
+</body></html>

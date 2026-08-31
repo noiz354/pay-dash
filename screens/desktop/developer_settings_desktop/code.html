@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Developer Settings - The Ledger</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-fixed": "#131b2e",
+                        "on-tertiary-container": "#ffd4c5",
+                        "on-primary-fixed": "#00174d",
+                        "inverse-on-surface": "#f0f0fb",
+                        "surface-bright": "#faf8ff",
+                        "on-tertiary": "#ffffff",
+                        "on-surface": "#191b23",
+                        "on-tertiary-fixed": "#380d00",
+                        "tertiary": "#852b00",
+                        "secondary-fixed": "#dae2fd",
+                        "on-error-container": "#93000a",
+                        "border-subtle": "#e2e8f0",
+                        "error-container": "#ffdad6",
+                        "surface-container-low": "#f3f3fe",
+                        "surface-container": "#ededf8",
+                        "primary-fixed-dim": "#b5c4ff",
+                        "on-secondary-container": "#5c647a",
+                        "surface": "#faf8ff",
+                        "test-mode-amber": "#d97706",
+                        "surface-container-high": "#e7e7f3",
+                        "outline-variant": "#c3c5d7",
+                        "surface-dim": "#d9d9e4",
+                        "inverse-primary": "#b5c4ff",
+                        "primary-container": "#1a56db",
+                        "inverse-surface": "#2e3039",
+                        "on-surface-variant": "#434654",
+                        "on-background": "#191b23",
+                        "surface-canvas": "#f8fafc",
+                        "surface-variant": "#e2e1ed",
+                        "tertiary-fixed": "#ffdbcf",
+                        "on-primary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "background": "#faf8ff",
+                        "tertiary-container": "#ad3b00",
+                        "success-status": "#10b981",
+                        "primary-fixed": "#dbe1ff",
+                        "primary": "#003fb1",
+                        "on-primary-container": "#d4dcff",
+                        "tertiary-fixed-dim": "#ffb59a",
+                        "error": "#ba1a1a",
+                        "on-primary-fixed-variant": "#003dab",
+                        "on-tertiary-fixed-variant": "#802a00",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "pending-status": "#f59e0b",
+                        "surface-container-highest": "#e2e1ed",
+                        "outline": "#737686",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-container": "#dae2fd",
+                        "secondary": "#565e74",
+                        "surface-tint": "#1353d8",
+                        "failed-status": "#ef4444",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "on-secondary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "sidebar-width": "260px",
+                        "stack-md": "16px",
+                        "cell-x": "16px",
+                        "container-max": "1440px",
+                        "sidebar-collapsed": "64px",
+                        "stack-tight": "4px",
+                        "cell-y": "12px",
+                        "gutter": "1.5rem"
+                    },
+                    "fontFamily": {
+                        "body-sm": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "data-mono": ["JetBrains Mono"]
+                    },
+                    "fontSize": {
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "data-mono": ["13px", { "lineHeight": "18px", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #f8fafc; /* surface-canvas */ }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .nav-icon { font-variation-settings: 'FILL' 0; }
+        .nav-icon.active { font-variation-settings: 'FILL' 1; }
+    </style>
+</head>
+<body class="text-on-surface font-body-md bg-surface-canvas min-h-screen flex flex-col md:flex-row">
+<!-- SideNavBar -->
+<nav class="hidden md:flex bg-inverse-surface dark:bg-surface-container-lowest text-primary-fixed dark:text-primary font-body-md text-body-md w-sidebar-width h-screen fixed left-0 flex-col py-4 border-r border-outline-variant z-20">
+<div class="px-gutter mb-8 flex items-center gap-3">
+<img alt="Business Logo" class="w-8 h-8 rounded object-cover" data-alt="A small, stylized, geometric business logo in sharp contrasting colors representing a secure corporate identity, set against a dark background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkiAPsHokptEIUIepqm22qYvohmhPYbusBOlhjl3shajmgWSmtHpXwTMUzew8ueeTYg_NOF4RxtT0kJ8FCclkZyAwLs4VAGN02VTGr9xw3qr2PolubKTSQKKeaqkwJWBwYjzaqiA9se3R_UQFkUB45pXK13TDJySAAFsOFa9opzs2WZ4aw7AJTI73EX3FugaPWcVLka9VyLNShxpbGGWC_Bv4G8IDdyBOjLBJRig_Nku37tB2s52-D"/>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-inverse-on-surface leading-tight">Acme Corp</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-xs">Primary Account</p>
+</div>
+</div>
+<ul class="flex-1 px-3 space-y-1">
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined nav-icon text-lg">home</span>
+<span>Home</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined nav-icon text-lg">payments</span>
+<span>Payments</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined nav-icon text-lg">group</span>
+<span>Customers</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined nav-icon text-lg">subscriptions</span>
+<span>Subscriptions</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded text-primary-fixed border-l-4 border-primary-fixed bg-on-secondary-fixed-variant/20 hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined nav-icon active text-lg">code</span>
+<span>Developer</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined nav-icon text-lg">settings</span>
+<span>Settings</span>
+</a>
+</li>
+</ul>
+<div class="px-3 mt-auto space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined nav-icon text-lg">swap_horiz</span>
+<span>Switch Account</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined nav-icon text-lg">help</span>
+<span>Support</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 md:ml-[260px] flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-surface-container-lowest text-primary dark:text-inverse-primary font-label-caps text-label-caps h-16 border-b border-outline-variant flex justify-between items-center w-full px-gutter max-w-container-max mx-auto sticky top-0 z-10">
+<div class="flex items-center gap-6">
+<span class="font-headline-md text-headline-md font-black text-on-surface uppercase tracking-tight">The Ledger</span>
+<nav class="hidden lg:flex gap-6 h-full items-end">
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all scale-95 duration-75 py-2" href="#">Dashboard</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all scale-95 duration-75 py-2" href="#">Analytics</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all scale-95 duration-75 py-2" href="#">Reports</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden md:flex relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="pl-9 pr-3 py-1.5 h-9 bg-surface-container border border-border-subtle rounded text-body-sm focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none w-64 transition-all" placeholder="Search... (Cmd+K)" type="text"/>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-2 py-1 bg-test-mode-amber/10 text-test-mode-amber rounded font-label-caps text-[10px]">Test Mode</span>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-low rounded-full transition-colors">
+<span class="material-symbols-outlined text-lg">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container-low rounded-full transition-colors">
+<span class="material-symbols-outlined text-lg">help</span>
+</button>
+<img alt="User Profile" class="w-8 h-8 rounded-full border border-border-subtle ml-2 object-cover" data-alt="A professional headshot of a corporate user, brightly lit, high resolution, square crop, used as a profile avatar." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzpVMSLkMtg7gTOJZezgi5xuu6a07gxLWmDdhK37W2NrTogrfam7hZKqkf81Gu8U8r6itZySAzymy2mPSJCoVUWUmH3Ii8nYj_Sb6JwjQwRD-DIyfXfBk7mlWfNlwtj6CAivoGbz_rQpgZ3VCwWx12f0ft26kTK7dBBMbmQKwO4hKdUJ_SdNyAAzGLKMT1mcF4rJvKijHyJvCij-VG1Mcph-HXdLyKM3oh09xjYR2H5J1JXq8WnRzp"/>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 p-gutter max-w-[1024px] w-full mx-auto pb-24">
+<div class="mb-8">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-2">Developer Settings</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Manage your API keys, webhooks, and security preferences for system integration.</p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Main Column (Keys & Webhooks) -->
+<div class="lg:col-span-2 space-y-6">
+<!-- API Keys Card -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-lg shadow-sm">
+<div class="p-6 border-b border-border-subtle flex justify-between items-center bg-surface">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">API Keys</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Authenticate requests to The Ledger API.</p>
+</div>
+<button class="bg-primary text-on-primary px-4 py-2 rounded text-label-caps font-label-caps hover:bg-primary-fixed-variant transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">add</span>
+                                Generate Key
+                            </button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-border-subtle font-label-caps text-label-caps text-on-surface-variant">
+<th class="py-3 px-cell-x font-semibold">Name</th>
+<th class="py-3 px-cell-x font-semibold">Token</th>
+<th class="py-3 px-cell-x font-semibold text-right">Created</th>
+<th class="py-3 px-cell-x font-semibold text-right"></th>
+</tr>
+</thead>
+<tbody>
+<tr class="border-b border-border-subtle hover:bg-surface-container/50 transition-colors">
+<td class="py-cell-y px-cell-x font-body-sm text-on-surface">Production Master Key</td>
+<td class="py-cell-y px-cell-x font-data-mono text-data-mono text-on-surface-variant">sk_live_••••••••••••8f92</td>
+<td class="py-cell-y px-cell-x font-body-sm text-on-surface-variant text-right">Oct 12, 2023</td>
+<td class="py-cell-y px-cell-x text-right">
+<button class="text-outline hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-sm">more_vert</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-cell-y px-cell-x font-body-sm text-on-surface">Staging Integration</td>
+<td class="py-cell-y px-cell-x font-data-mono text-data-mono text-on-surface-variant">sk_test_••••••••••••3a1b</td>
+<td class="py-cell-y px-cell-x font-body-sm text-on-surface-variant text-right">Nov 04, 2023</td>
+<td class="py-cell-y px-cell-x text-right">
+<button class="text-outline hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-sm">more_vert</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Webhook Endpoints Card -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-lg shadow-sm">
+<div class="p-6 border-b border-border-subtle flex justify-between items-center bg-surface">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Webhook Endpoints</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Receive real-time event notifications.</p>
+</div>
+<button class="border border-outline text-on-surface px-4 py-2 rounded text-label-caps font-label-caps hover:bg-surface-container-low transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">add_link</span>
+                                Add Endpoint
+                            </button>
+</div>
+<div class="p-0">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-border-subtle font-label-caps text-label-caps text-on-surface-variant">
+<th class="py-3 px-cell-x font-semibold">Status</th>
+<th class="py-3 px-cell-x font-semibold">URL</th>
+<th class="py-3 px-cell-x font-semibold text-right">Events</th>
+</tr>
+</thead>
+<tbody>
+<tr class="border-b border-border-subtle hover:bg-surface-container/50 transition-colors">
+<td class="py-cell-y px-cell-x">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-success-status/10 text-success-status font-label-caps text-[10px]">
+<span class="w-1.5 h-1.5 rounded-full bg-success-status"></span> Active
+                                            </span>
+</td>
+<td class="py-cell-y px-cell-x font-data-mono text-data-mono text-on-surface truncate max-w-[200px]">https://api.acme.com/webhooks/ledger</td>
+<td class="py-cell-y px-cell-x font-body-sm text-on-surface-variant text-right">payment.*</td>
+</tr>
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-cell-y px-cell-x">
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-failed-status/10 text-failed-status font-label-caps text-[10px]">
+<span class="w-1.5 h-1.5 rounded-full bg-failed-status"></span> Failing
+                                            </span>
+</td>
+<td class="py-cell-y px-cell-x font-data-mono text-data-mono text-on-surface truncate max-w-[200px]">https://staging.acme.com/hooks/sync</td>
+<td class="py-cell-y px-cell-x font-body-sm text-on-surface-variant text-right">customer.*</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Side Column (Security & Docs) -->
+<div class="space-y-6">
+<!-- IP Whitelist Card -->
+<div class="bg-surface-container-lowest border border-border-subtle rounded-lg shadow-sm p-6">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">IP Whitelist</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-4">Restrict API access to specific IP addresses.</p>
+<div class="flex gap-2 mb-4">
+<input class="flex-1 h-9 px-3 bg-surface border border-border-subtle rounded text-body-sm font-data-mono focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none" placeholder="e.g. 192.168.1.1" type="text"/>
+<button class="bg-surface-container-highest text-on-surface px-3 py-1.5 rounded font-label-caps hover:bg-outline-variant transition-colors">Add</button>
+</div>
+<ul class="space-y-2 border-t border-border-subtle pt-4">
+<li class="flex justify-between items-center py-1">
+<span class="font-data-mono text-data-mono text-on-surface">203.0.113.45</span>
+<button class="text-outline hover:text-failed-status transition-colors"><span class="material-symbols-outlined text-sm">close</span></button>
+</li>
+<li class="flex justify-between items-center py-1">
+<span class="font-data-mono text-data-mono text-on-surface">198.51.100.2</span>
+<button class="text-outline hover:text-failed-status transition-colors"><span class="material-symbols-outlined text-sm">close</span></button>
+</li>
+</ul>
+</div>
+<!-- Documentation Card (Bento Style) -->
+<a class="block bg-surface-tint text-on-primary rounded-lg p-6 shadow-sm hover:opacity-95 transition-opacity relative overflow-hidden group" href="#">
+<div class="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
+<span class="material-symbols-outlined text-9xl">menu_book</span>
+</div>
+<div class="relative z-10">
+<span class="material-symbols-outlined mb-3 text-3xl">api</span>
+<h3 class="font-headline-md text-headline-md font-bold mb-1">API Documentation</h3>
+<p class="font-body-sm text-body-sm text-on-primary-container opacity-90 mb-4">Explore comprehensive guides, SDKs, and endpoint references.</p>
+<span class="inline-flex items-center gap-1 font-label-caps text-label-caps">
+                                View Docs <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</span>
+</div>
+</a>
+</div>
+</div>
+</main>
+</div>
+</body></html>

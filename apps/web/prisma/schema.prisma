@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  email         String?   @unique
+  name          String?
+  externalId    String?   @unique(map: "externalId")
+  role          String    @default("member")
+  accounts      Account[]
+  ledgerEntries LedgerEntry[]
+}
+
+model Account {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  String
+  providerAccountId String
+  type      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([provider, providerAccountId])
+}
+
+model LedgerEntry {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id])
+  amount          BigDecimal
+  currency        String   @default("IDR")
+  status          String   @default("PENDING")
+  referenceId     String?
+  xenditPaymentId String?
+  description     String?
+  metadata        String   @default("{}")
+}

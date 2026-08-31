@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kinetic Ledger - Onboarding Checklist</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "secondary-container": "#dae2fd",
+                      "on-secondary-container": "#5c647a",
+                      "on-tertiary-fixed-variant": "#802a00",
+                      "outline": "#737686",
+                      "on-tertiary-fixed": "#380d00",
+                      "error": "#ba1a1a",
+                      "surface-dim": "#d9d9e4",
+                      "secondary": "#565e74",
+                      "surface-bright": "#faf8ff",
+                      "success-status": "#10b981",
+                      "primary": "#003fb1",
+                      "on-error-container": "#93000a",
+                      "on-primary": "#ffffff",
+                      "on-secondary-fixed": "#131b2e",
+                      "surface-container-low": "#f3f3fe",
+                      "tertiary-fixed": "#ffdbcf",
+                      "background": "#faf8ff",
+                      "primary-fixed-dim": "#b5c4ff",
+                      "on-tertiary-container": "#ffd4c5",
+                      "test-mode-amber": "#d97706",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-canvas": "#f8fafc",
+                      "surface-variant": "#e2e1ed",
+                      "inverse-surface": "#2e3039",
+                      "surface-container": "#ededf8",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "surface": "#faf8ff",
+                      "surface-tint": "#1353d8",
+                      "on-error": "#ffffff",
+                      "on-primary-fixed": "#00174d",
+                      "primary-fixed": "#dbe1ff",
+                      "tertiary-container": "#ad3b00",
+                      "surface-container-high": "#e7e7f3",
+                      "border-subtle": "#e2e8f0",
+                      "secondary-fixed": "#dae2fd",
+                      "tertiary-fixed-dim": "#ffb59a",
+                      "on-surface-variant": "#434654",
+                      "surface-container-highest": "#e2e1ed",
+                      "error-container": "#ffdad6",
+                      "outline-variant": "#c3c5d7",
+                      "on-primary-fixed-variant": "#003dab",
+                      "tertiary": "#852b00",
+                      "on-background": "#191b23",
+                      "on-primary-container": "#d4dcff",
+                      "failed-status": "#ef4444",
+                      "on-secondary": "#ffffff",
+                      "on-tertiary": "#ffffff",
+                      "primary-container": "#1a56db",
+                      "pending-status": "#f59e0b",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "inverse-on-surface": "#f0f0fb",
+                      "on-surface": "#191b23",
+                      "inverse-primary": "#b5c4ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "container-max": "1440px",
+                      "sidebar-width": "260px",
+                      "gutter": "1.5rem",
+                      "stack-md": "16px",
+                      "stack-tight": "4px",
+                      "cell-x": "16px",
+                      "cell-y": "12px",
+                      "sidebar-collapsed": "64px"
+              },
+              "fontFamily": {
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "data-mono": [
+                              "JetBrains Mono"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "label-caps": [
+                              "Inter"
+                      ],
+                      "headline-xl": [
+                              "Inter"
+                      ],
+                      "body-lg": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-md": [
+                              "18px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "data-mono": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-caps": [
+                              "11px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-xl": [
+                              "30px",
+                              {
+                                      "lineHeight": "38px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+            }
+          }
+        }
+    </script>
+</head>
+<body class="bg-surface-canvas text-on-surface font-body-md antialiased h-screen overflow-hidden">
+<!-- TopAppBar -->
+<header class="w-full h-14 sticky top-0 z-40 bg-surface-bright dark:bg-inverse-surface border-b border-subtle dark:border-outline-variant flat no shadows flex justify-between items-center px-gutter max-w-container-max mx-auto hidden md:flex">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary-fixed">Kinetic Ledger</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container dark:hover:bg-on-surface-variant transition-colors cursor-pointer active:scale-95 transition-transform p-2 rounded-full">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">help</span>
+</button>
+<button class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container dark:hover:bg-on-surface-variant transition-colors cursor-pointer active:scale-95 transition-transform p-2 rounded-full relative">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full"></span>
+</button>
+<button class="text-on-surface-variant dark:text-outline-variant hover:bg-surface-container dark:hover:bg-on-surface-variant transition-colors cursor-pointer active:scale-95 transition-transform p-2 rounded-full">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container overflow-hidden ml-2 cursor-pointer border border-subtle">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A small, professional headshot of a business user in a modern corporate setting. The lighting is bright and clean, fitting a light-mode enterprise software aesthetic. The subject is well-lit against a neutral background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCylSWqgaiauz94ay9sboIj-khbBciToHn21VeCtbBhhUjdjYdB7M4UPJTdCzpxGH-SptXxmzwpYvqs8KiIRZBoF7DlT_muQWsDs5iTeuWdNWzsmRqcAm2KNXHRa0g4WyqXUmfZISsQM8QpLqqafJRc5YbLY2vABoknZ7NDCAXfHVr27nQoZ7STPiJXT8FUMDIyTNWxd_65JKhPctZ6oCmuhOs7o6PqWVIFuUKhyCXjtf2OOC2K3C6o"/>
+</div>
+</div>
+</header>
+<div class="flex h-[calc(100vh-3.5rem)]">
+<!-- SideNavBar -->
+<aside class="w-sidebar-width h-full bg-on-background dark:bg-surface-container-lowest text-primary-fixed dark:text-primary shadow-md flex flex-col py-4 px-3 hidden md:flex shrink-0">
+<div class="mb-8 px-3">
+<div class="font-headline-lg text-headline-lg text-on-primary font-black mb-1">Kinetic Ledger</div>
+<div class="font-label-caps text-label-caps text-on-secondary-fixed-variant opacity-80">Enterprise Tier</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant dark:text-on-surface-variant hover:bg-on-secondary-fixed-variant/20 dark:hover:bg-surface-container-high transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined font-label-caps text-label-caps" style="font-variation-settings: 'FILL' 0;">dashboard</span>
+<span class="font-label-caps text-label-caps">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant dark:text-on-surface-variant hover:bg-on-secondary-fixed-variant/20 dark:hover:bg-surface-container-high transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined font-label-caps text-label-caps" style="font-variation-settings: 'FILL' 0;">account_balance</span>
+<span class="font-label-caps text-label-caps">Ledger</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary text-on-primary rounded-xl font-bold" href="#">
+<span class="material-symbols-outlined font-label-caps text-label-caps" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="font-label-caps text-label-caps">Accounts</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant dark:text-on-surface-variant hover:bg-on-secondary-fixed-variant/20 dark:hover:bg-surface-container-high transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined font-label-caps text-label-caps" style="font-variation-settings: 'FILL' 0;">payments</span>
+<span class="font-label-caps text-label-caps">Payments</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant dark:text-on-surface-variant hover:bg-on-secondary-fixed-variant/20 dark:hover:bg-surface-container-high transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined font-label-caps text-label-caps" style="font-variation-settings: 'FILL' 0;">analytics</span>
+<span class="font-label-caps text-label-caps">Reporting</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant dark:text-on-surface-variant hover:bg-on-secondary-fixed-variant/20 dark:hover:bg-surface-container-high transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined font-label-caps text-label-caps" style="font-variation-settings: 'FILL' 0;">history</span>
+<span class="font-label-caps text-label-caps">Audit Log</span>
+</a>
+</nav>
+<div class="mt-auto space-y-1 pt-4 border-t border-on-secondary-fixed-variant/20">
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant dark:text-on-surface-variant hover:bg-on-secondary-fixed-variant/20 dark:hover:bg-surface-container-high transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined font-label-caps text-label-caps" style="font-variation-settings: 'FILL' 0;">contact_support</span>
+<span class="font-label-caps text-label-caps">Support</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant dark:text-on-surface-variant hover:bg-on-secondary-fixed-variant/20 dark:hover:bg-surface-container-high transition-all group-hover:translate-x-1 duration-200" href="#">
+<span class="material-symbols-outlined font-label-caps text-label-caps" style="font-variation-settings: 'FILL' 0;">settings</span>
+<span class="font-label-caps text-label-caps">Settings</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto bg-surface-canvas p-gutter">
+<div class="max-w-4xl mx-auto space-y-stack-md">
+<!-- Page Header -->
+<div class="flex flex-col gap-2 mb-8">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="font-body-sm text-body-sm hover:text-primary cursor-pointer">Accounts</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="font-body-sm text-body-sm">Acme Corp Setup</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface">Sub-Merchant Onboarding</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant max-w-2xl">Complete the required steps to activate trading capabilities for Acme Corp.</p>
+</div>
+<!-- Progress Tracker -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-6 shadow-sm">
+<div class="flex justify-between items-end mb-4">
+<div>
+<div class="font-headline-md text-headline-md mb-1">Onboarding Progress</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">3 of 4 sections completed</div>
+</div>
+<div class="font-headline-lg text-headline-lg text-primary">75%</div>
+</div>
+<div class="w-full bg-surface-variant rounded-full h-2 overflow-hidden">
+<div class="bg-primary h-full rounded-full transition-all duration-500 ease-out" style="width: 75%"></div>
+</div>
+</div>
+<!-- Checklist Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-md">
+<!-- Business Profile (Completed) -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-32 h-32 bg-success-status/5 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+<div class="flex justify-between items-start mb-4 relative z-10">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-success-status/10 flex items-center justify-center text-success-status">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">domain</span>
+</div>
+<h2 class="font-headline-md text-headline-md">Business Profile</h2>
+</div>
+<div class="px-2 py-1 bg-success-status/10 text-success-status font-label-caps text-label-caps rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                COMPLETED
+                            </div>
+</div>
+<div class="space-y-3 relative z-10 mt-6">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-success-status text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<div class="font-body-md text-body-md font-medium">Company Details</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Legal name, DBA, address</div>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-success-status text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<div class="font-body-md text-body-md font-medium">Ownership Structure</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">UBOs holding &gt; 25%</div>
+</div>
+</div>
+</div>
+<button class="mt-6 w-full py-2 px-4 bg-surface-container hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium rounded-lg transition-colors border border-subtle">Review Details</button>
+</div>
+<!-- Compliance Documents (Completed) -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-32 h-32 bg-success-status/5 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+<div class="flex justify-between items-start mb-4 relative z-10">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-success-status/10 flex items-center justify-center text-success-status">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">description</span>
+</div>
+<h2 class="font-headline-md text-headline-md">Compliance</h2>
+</div>
+<div class="px-2 py-1 bg-success-status/10 text-success-status font-label-caps text-label-caps rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                COMPLETED
+                            </div>
+</div>
+<div class="space-y-3 relative z-10 mt-6">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-success-status text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<div class="font-body-md text-body-md font-medium">Articles of Incorporation</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Verified by system</div>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-success-status text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<div class="font-body-md text-body-md font-medium">W-9 Tax Form</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Signed &amp; uploaded</div>
+</div>
+</div>
+</div>
+<button class="mt-6 w-full py-2 px-4 bg-surface-container hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium rounded-lg transition-colors border border-subtle">View Documents</button>
+</div>
+<!-- Bank Account Setup (Completed) -->
+<div class="bg-surface-container-lowest border border-subtle rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-32 h-32 bg-success-status/5 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+<div class="flex justify-between items-start mb-4 relative z-10">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-success-status/10 flex items-center justify-center text-success-status">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">account_balance_wallet</span>
+</div>
+<h2 class="font-headline-md text-headline-md">Bank Setup</h2>
+</div>
+<div class="px-2 py-1 bg-success-status/10 text-success-status font-label-caps text-label-caps rounded-full flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                COMPLETED
+                            </div>
+</div>
+<div class="space-y-3 relative z-10 mt-6">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-success-status text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<div class="font-body-md text-body-md font-medium">Operating Account</div>
+<div class="font-data-mono text-data-mono text-on-surface-variant">****4592</div>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-success-status text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<div class="font-body-md text-body-md font-medium">Micro-deposits</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant">Verified on Oct 24</div>
+</div>
+</div>
+</div>
+<button class="mt-6 w-full py-2 px-4 bg-surface-container hover:bg-surface-variant text-on-surface font-body-sm text-body-sm font-medium rounded-lg transition-colors border border-subtle">Manage Accounts</button>
+</div>
+<!-- Technical Integration (In Progress) -->
+<div class="bg-surface-container-lowest border-2 border-primary rounded-xl p-6 relative overflow-hidden group shadow-[0_0_15px_rgba(0,63,177,0.1)]">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
+<div class="flex justify-between items-start mb-4 relative z-10">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">integration_instructions</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-primary">Technical Setup</h2>
+</div>
+<div class="px-2 py-1 bg-pending-status/10 text-pending-status font-label-caps text-label-caps rounded-full flex items-center gap-1 border border-pending-status/20">
+<span class="material-symbols-outlined text-[14px]">pending</span>
+                                IN PROGRESS
+                            </div>
+</div>
+<div class="space-y-3 relative z-10 mt-6">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-success-status text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface-variant line-through">API Keys Generated</div>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-success-status text-[20px] mt-0.5" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface-variant line-through">Webhook Endpoints Configured</div>
+</div>
+</div>
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-outline text-[20px] mt-0.5">radio_button_unchecked</span>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface">First Test Transaction</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-1">Send a successful payment in test mode to proceed.</div>
+</div>
+</div>
+</div>
+<button class="mt-6 w-full py-2 px-4 bg-primary hover:bg-primary-container text-on-primary font-body-sm text-body-sm font-medium rounded-lg transition-colors shadow-sm flex items-center justify-center gap-2">
+                            Go to Developer Dashboard
+                            <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Customer Directory - Imanino Corps</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#e1e0ff",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "secondary-container": "#dae2fd",
+                        "on-primary-fixed": "#00174d",
+                        "outline": "#737686",
+                        "on-secondary": "#ffffff",
+                        "primary-container": "#1a56db",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-error-container": "#93000a",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-container": "#5c647a",
+                        "surface-dim": "#d8dadc",
+                        "tertiary-container": "#4c4ed9",
+                        "surface-container": "#eceef0",
+                        "on-surface": "#191c1e",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed-variant": "#003dab",
+                        "surface": "#f7f9fb",
+                        "inverse-primary": "#b5c4ff",
+                        "outline-variant": "#c3c5d7",
+                        "on-surface-variant": "#434654",
+                        "surface-container-high": "#e6e8ea",
+                        "inverse-on-surface": "#eff1f3",
+                        "surface-bright": "#f7f9fb",
+                        "primary-fixed": "#dbe1ff",
+                        "on-secondary-fixed": "#131b2e",
+                        "error": "#ba1a1a",
+                        "surface-variant": "#e0e3e5",
+                        "on-primary": "#ffffff",
+                        "inverse-surface": "#2d3133",
+                        "on-background": "#191c1e",
+                        "surface-tint": "#1353d8",
+                        "error-container": "#ffdad6",
+                        "primary-fixed-dim": "#b5c4ff",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-fixed": "#dae2fd",
+                        "tertiary": "#3231c1",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "surface-container-highest": "#e0e3e5",
+                        "background": "#f7f9fb",
+                        "on-tertiary-container": "#dbdaff",
+                        "primary": "#003fb1",
+                        "surface-container-low": "#f2f4f6",
+                        "on-primary-container": "#d4dcff",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-tertiary-fixed": "#07006c",
+                        "secondary": "#565e74"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "table-cell-padding": "12px 16px",
+                        "stack-sm": "0.5rem",
+                        "stack-md": "1rem",
+                        "stack-xs": "0.25rem",
+                        "stack-lg": "1.5rem",
+                        "sidebar-width": "260px",
+                        "gutter": "1.5rem",
+                        "container-max": "1440px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter", "sans-serif"],
+                        "body-sm": ["Inter", "sans-serif"],
+                        "label-caps": ["Inter", "sans-serif"],
+                        "headline-xl": ["Inter", "sans-serif"],
+                        "headline-md": ["Inter", "sans-serif"],
+                        "body-lg": ["Inter", "sans-serif"],
+                        "headline-lg": ["Inter", "sans-serif"],
+                        "data-mono": ["JetBrains Mono", "monospace"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "data-mono": ["13px", { "lineHeight": "18px", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #F8FAFC; /* Level 0 Canvas */
+            -webkit-font-smoothing: antialiased;
+        }
+        .data-row:hover {
+            background-color: #F1F5F9; /* Subtle hover shift per guidelines */
+        }
+    </style>
+</head>
+<body class="font-body-md text-on-surface bg-background antialiased flex flex-col md:flex-row min-h-screen">
+<!-- Mobile Top App Bar (Shared Component) -->
+<header class="md:hidden docked full-width top-0 sticky z-50 bg-surface border-b border-outline-variant flat no shadows transition-colors duration-200 ease-in-out">
+<div class="flex justify-between items-center px-4 h-14 w-full">
+<button class="text-on-surface-variant hover:bg-surface-container-low p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">account_balance</span>
+</button>
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface">Imanino Corps</h1>
+<button class="text-on-surface-variant hover:bg-surface-container-low p-2 rounded-full flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">notifications</span>
+</button>
+</div>
+</header>
+<!-- Desktop Sidebar -->
+<aside class="hidden md:flex flex-col w-[260px] bg-[#0F172A] text-white fixed h-full z-40 border-r border-outline-variant/20">
+<div class="p-6">
+<h1 class="font-headline-md text-headline-md font-bold tracking-tight">Imanino Corps</h1>
+</div>
+<nav class="flex-1 px-4 py-2 space-y-1">
+<a class="flex items-center px-3 py-2 text-on-secondary-fixed-variant hover:bg-white/5 rounded-DEFAULT transition-colors" href="#">
+<span class="material-symbols-outlined mr-3 text-[20px]" style="font-variation-settings: 'FILL' 0;">home</span>
+<span class="font-body-sm text-body-sm">Dashboard</span>
+</a>
+<div class="pt-4 pb-1">
+<p class="px-3 font-label-caps text-label-caps text-white/40">DIRECTORY</p>
+</div>
+<!-- Active State -->
+<a class="flex items-center px-3 py-2 bg-primary/20 border-l-4 border-primary text-white rounded-r-DEFAULT transition-colors" href="#">
+<span class="material-symbols-outlined mr-3 text-[20px]" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="font-body-sm text-body-sm font-medium">Customers</span>
+</a>
+<a class="flex items-center px-3 py-2 text-white/60 hover:bg-white/5 rounded-DEFAULT transition-colors" href="#">
+<span class="material-symbols-outlined mr-3 text-[20px]" style="font-variation-settings: 'FILL' 0;">receipt_long</span>
+<span class="font-body-sm text-body-sm">Transactions</span>
+</a>
+<a class="flex items-center px-3 py-2 text-white/60 hover:bg-white/5 rounded-DEFAULT transition-colors" href="#">
+<span class="material-symbols-outlined mr-3 text-[20px]" style="font-variation-settings: 'FILL' 0;">account_balance_wallet</span>
+<span class="font-body-sm text-body-sm">Balance</span>
+</a>
+</nav>
+<div class="p-4">
+<a class="flex items-center px-3 py-2 text-white/60 hover:bg-white/5 rounded-DEFAULT transition-colors" href="#">
+<span class="material-symbols-outlined mr-3 text-[20px]" style="font-variation-settings: 'FILL' 0;">settings</span>
+<span class="font-body-sm text-body-sm">Settings</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-[260px] pb-24 md:pb-8 w-full max-w-[1440px] mx-auto px-4 md:px-gutter pt-6 md:pt-8 flex flex-col gap-6">
+<!-- Page Header & Actions -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h2 class="font-headline-xl text-headline-xl text-on-surface">Customer Directory</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Manage client relationships and reference IDs.</p>
+</div>
+<div class="flex items-center gap-3">
+<div class="relative w-full md:w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+<input class="w-full h-[36px] pl-9 pr-3 rounded-DEFAULT border border-outline-variant bg-white font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" placeholder="Search customers..." type="text"/>
+</div>
+<button class="h-[36px] px-4 bg-primary text-on-primary rounded-DEFAULT font-body-sm text-body-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2 whitespace-nowrap shadow-sm">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">add</span>
+                    Add Customer
+                </button>
+</div>
+</div>
+<!-- High-Density Data Table / List -->
+<div class="bg-white border border-outline-variant rounded-lg overflow-hidden shadow-sm">
+<!-- Table Header -->
+<div class="hidden md:grid grid-cols-12 gap-4 px-4 py-3 bg-surface-container-low border-b border-outline-variant">
+<div class="col-span-4 font-label-caps text-label-caps text-on-surface-variant">CUSTOMER</div>
+<div class="col-span-3 font-label-caps text-label-caps text-on-surface-variant">EMAIL</div>
+<div class="col-span-3 font-label-caps text-label-caps text-on-surface-variant">REFERENCE ID</div>
+<div class="col-span-2 font-label-caps text-label-caps text-on-surface-variant text-right">STATUS</div>
+</div>
+<!-- List Items -->
+<div class="divide-y divide-outline-variant">
+<!-- Item 1 -->
+<div class="group data-row cursor-pointer transition-colors px-4 py-3 md:py-2 md:h-[48px] flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 md:items-center">
+<div class="col-span-4 flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-body-sm text-body-sm font-medium shrink-0">
+                            AC
+                        </div>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface">Acme Corporation</div>
+<div class="md:hidden font-body-sm text-body-sm text-on-surface-variant">contact@acmecorp.com</div>
+</div>
+</div>
+<div class="hidden md:block col-span-3 font-body-sm text-body-sm text-on-surface-variant truncate">
+                        contact@acmecorp.com
+                    </div>
+<div class="col-span-3 font-data-mono text-data-mono text-on-surface-variant">
+<span class="md:hidden text-xs text-on-surface-variant/70 mr-1">ID:</span>REF-10042
+                    </div>
+<div class="col-span-2 flex items-center justify-between md:justify-end gap-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800">
+                            Active
+                        </span>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] group-hover:text-primary transition-colors">chevron_right</span>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="group data-row cursor-pointer transition-colors px-4 py-3 md:py-2 md:h-[48px] flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 md:items-center">
+<div class="col-span-4 flex items-center gap-3">
+<img class="w-8 h-8 rounded-full object-cover shrink-0 border border-outline-variant/30" data-alt="A small circular avatar showing a professional, modern stylized initial logo for Global Logistics. The background is a subtle gradient of blue and purple. High-key lighting, corporate B2B aesthetic, clean vector style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBx8D_mD3EPI-A_7K_XaaOunxWGiamc_GgFe1glY1edK7upYZA6s8k_Nu6Ur9Mdx6pwMTNPQUszAfXeYwgMRI5v7b-7jzO6Pc3smeOBka7y2si546U3i74PbjhRZJAYZL4huaXPO5YfMqC1Xcf4q80VXsioYU2UUdOu5p-BxO2dXKyyE277_87-yg7xIWQi78XfTeRfI2luFN_BWsgr5wwGleukz7MbxcLL-EhDeLCMXd_SZSdZGInL"/>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface">Global Logistics Ltd.</div>
+<div class="md:hidden font-body-sm text-body-sm text-on-surface-variant">billing@globallogistics.com</div>
+</div>
+</div>
+<div class="hidden md:block col-span-3 font-body-sm text-body-sm text-on-surface-variant truncate">
+                        billing@globallogistics.com
+                    </div>
+<div class="col-span-3 font-data-mono text-data-mono text-on-surface-variant">
+<span class="md:hidden text-xs text-on-surface-variant/70 mr-1">ID:</span>REF-10056
+                    </div>
+<div class="col-span-2 flex items-center justify-between md:justify-end gap-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800">
+                            Active
+                        </span>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] group-hover:text-primary transition-colors">chevron_right</span>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="group data-row cursor-pointer transition-colors px-4 py-3 md:py-2 md:h-[48px] flex flex-col md:grid md:grid-cols-12 gap-2 md:gap-4 md:items-center">
+<div class="col-span-4 flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-orange-100 text-orange-800 flex items-center justify-center font-body-sm text-body-sm font-medium shrink-0">
+                            ST
+                        </div>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface">Stark Industries</div>
+<div class="md:hidden font-body-sm text-body-sm text-on-surface-variant">tony@stark.com</div>
+</div>
+</div>
+<div class="hidden md:block col-span-3 font-body-sm text-body-sm text-on-surface-variant truncate">
+                        tony@stark.com
+                    </div>
+<div class="col-span-3 font-data-mono text-data-mono text-on-surface-variant">
+<span class="md:hidden text-xs text-on-surface-variant/70 mr-1">ID:</span>REF-10088
+                    </div>
+<div class="col-span-2 flex items-center justify-between md:justify-end gap-4">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800">
+                            Review
+                        </span>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px] group-hover:text-primary transition-colors">chevron_right</span>
+</div>
+</div>
+</div>
+<!-- Pagination Footer -->
+<div class="px-4 py-3 border-t border-outline-variant bg-surface-container-low flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Showing 1 to 3 of 45 entries</span>
+<div class="flex gap-1">
+<button class="p-1 rounded-DEFAULT hover:bg-surface-variant text-on-surface-variant disabled:opacity-50"><span class="material-symbols-outlined text-[20px]">chevron_left</span></button>
+<button class="p-1 rounded-DEFAULT hover:bg-surface-variant text-on-surface-variant"><span class="material-symbols-outlined text-[20px]">chevron_right</span></button>
+</div>
+</div>
+</div>
+</main>
+<!-- Mobile Bottom Nav Bar (Shared Component) -->
+<!-- Active intent: "Customers" is not in the list, fallback to Home for browsing context or suppress. Given JSON, active: Home -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center h-16 px-2 pb-safe bg-surface border-t border-outline-variant flat no shadows z-50">
+<a class="flex flex-col items-center justify-center text-primary bg-primary-container rounded-full px-4 py-1 active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="font-label-caps text-label-caps mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-fixed-variant hover:bg-surface-container-highest active:scale-95 transition-transform duration-150 px-2 py-1 rounded-full" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">account_balance_wallet</span>
+<span class="font-label-caps text-label-caps mt-1">Balance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-fixed-variant hover:bg-surface-container-highest active:scale-95 transition-transform duration-150 px-2 py-1 rounded-full" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">receipt_long</span>
+<span class="font-label-caps text-label-caps mt-1">Transactions</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-fixed-variant hover:bg-surface-container-highest active:scale-95 transition-transform duration-150 px-2 py-1 rounded-full" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">link</span>
+<span class="font-label-caps text-label-caps mt-1">Links</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-fixed-variant hover:bg-surface-container-highest active:scale-95 transition-transform duration-150 px-2 py-1 rounded-full" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">settings</span>
+<span class="font-label-caps text-label-caps mt-1">Settings</span>
+</a>
+</nav>
+</body></html>

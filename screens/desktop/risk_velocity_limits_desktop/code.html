@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Kinetic Ledger - Risk &amp; Velocity Limits</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-surface": "#191b23",
+                        "success-status": "#10b981",
+                        "tertiary": "#852b00",
+                        "tertiary-fixed-dim": "#ffb59a",
+                        "primary-fixed": "#dbe1ff",
+                        "on-secondary-fixed": "#131b2e",
+                        "failed-status": "#ef4444",
+                        "surface-variant": "#e2e1ed",
+                        "pending-status": "#f59e0b",
+                        "on-tertiary-fixed": "#380d00",
+                        "background": "#faf8ff",
+                        "secondary-fixed": "#dae2fd",
+                        "on-background": "#191b23",
+                        "inverse-surface": "#2e3039",
+                        "on-surface-variant": "#434654",
+                        "test-mode-amber": "#d97706",
+                        "surface-dim": "#d9d9e4",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#e2e1ed",
+                        "inverse-on-surface": "#f0f0fb",
+                        "secondary": "#565e74",
+                        "primary": "#003fb1",
+                        "on-primary-container": "#d4dcff",
+                        "on-secondary": "#ffffff",
+                        "tertiary-fixed": "#ffdbcf",
+                        "surface-container-high": "#e7e7f3",
+                        "surface-canvas": "#f8fafc",
+                        "outline": "#737686",
+                        "surface-tint": "#1353d8",
+                        "primary-fixed-dim": "#b5c4ff",
+                        "outline-variant": "#c3c5d7",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface": "#faf8ff",
+                        "surface-container-lowest": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "error": "#ba1a1a",
+                        "inverse-primary": "#b5c4ff",
+                        "on-error": "#ffffff",
+                        "on-primary": "#ffffff",
+                        "on-tertiary-container": "#ffd4c5",
+                        "border-subtle": "#e2e8f0",
+                        "surface-container": "#ededf8",
+                        "primary-container": "#1a56db",
+                        "surface-bright": "#faf8ff",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-primary-fixed-variant": "#003dab",
+                        "surface-container-low": "#f3f3fe",
+                        "on-tertiary": "#ffffff",
+                        "on-tertiary-fixed-variant": "#802a00",
+                        "tertiary-container": "#ad3b00",
+                        "secondary-container": "#dae2fd",
+                        "on-primary-fixed": "#00174d",
+                        "on-secondary-container": "#5c647a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "cell-y": "12px",
+                        "cell-x": "16px",
+                        "sidebar-collapsed": "64px",
+                        "gutter": "1.5rem",
+                        "stack-md": "16px",
+                        "sidebar-width": "260px",
+                        "stack-tight": "4px",
+                        "container-max": "1440px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "data-mono": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "data-mono": ["13px", { "lineHeight": "18px", "fontWeight": "500" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: var(--color-surface-canvas); }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .filled-icon { font-variation-settings: 'FILL' 1; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Custom Toggle Switch */
+        .toggle-checkbox:checked { right: 0; border-color: #003fb1; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #003fb1; }
+        .toggle-checkbox:checked + .toggle-label:after { transform: translateX(100%); border-color: white; }
+        
+        /* Number Input Reset */
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+    </style>
+</head>
+<body class="bg-surface-canvas text-on-surface h-screen flex overflow-hidden selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- SideNavBar -->
+<nav class="w-sidebar-width h-screen fixed left-0 top-0 z-50 transition-all duration-300 bg-on-background dark:bg-surface-container-lowest flex flex-col h-full py-4 px-3 shadow-md border-r border-subtle hidden lg:flex">
+<div class="mb-8 px-3">
+<h1 class="font-headline-lg text-headline-lg text-on-primary font-black tracking-tight">Kinetic Ledger</h1>
+<p class="font-label-caps text-label-caps text-on-secondary-fixed-variant mt-1">Enterprise Tier</p>
+</div>
+<ul class="flex flex-col gap-1 flex-grow">
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined group-hover:translate-x-1 duration-200">dashboard</span> Dashboard</a></li>
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined group-hover:translate-x-1 duration-200">account_balance</span> Ledger</a></li>
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined group-hover:translate-x-1 duration-200">group</span> Accounts</a></li>
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined group-hover:translate-x-1 duration-200">payments</span> Payments</a></li>
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined group-hover:translate-x-1 duration-200">analytics</span> Reporting</a></li>
+<!-- Active State -->
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl bg-primary text-on-primary font-bold transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined filled-icon">security</span> Risk Limits</a></li>
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined group-hover:translate-x-1 duration-200">history</span> Audit Log</a></li>
+</ul>
+<ul class="flex flex-col gap-1 mt-auto">
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined group-hover:translate-x-1 duration-200">contact_support</span> Support</a></li>
+<li><a class="flex items-center gap-3 px-3 py-2 rounded-xl text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/20 transition-all group font-body-sm text-body-sm" href="#"><span class="material-symbols-outlined group-hover:translate-x-1 duration-200">settings</span> Settings</a></li>
+</ul>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 lg:ml-[260px] flex flex-col h-screen overflow-hidden bg-surface-canvas relative">
+<!-- TopAppBar -->
+<header class="w-full h-14 sticky top-0 z-40 bg-surface-bright border-b border-subtle flex justify-between items-center px-gutter shrink-0">
+<div class="flex items-center gap-4 lg:hidden">
+<button class="text-on-surface-variant p-1 rounded hover:bg-surface-container"><span class="material-symbols-outlined">menu</span></button>
+<span class="font-headline-md text-headline-md font-bold text-primary">Kinetic Ledger</span>
+</div>
+<!-- Global Search (Cmd+K) -->
+<div class="hidden lg:flex flex-1 max-w-md relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+<input class="w-full h-9 pl-10 pr-12 bg-surface-container-low border border-subtle rounded-md text-body-sm font-body-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary-fixed-dim transition-all" placeholder="Search rules, entities, or limits..." type="text"/>
+<div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+<kbd class="font-data-mono text-[10px] text-on-surface-variant border border-outline-variant rounded px-1.5 py-0.5 bg-surface">⌘K</kbd>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded-full cursor-pointer active:scale-95"><span class="material-symbols-outlined">help</span></button>
+<div class="relative">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded-full cursor-pointer active:scale-95"><span class="material-symbols-outlined">notifications</span></button>
+<span class="absolute top-1 right-1 w-2 h-2 bg-failed-status rounded-full"></span>
+</div>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container transition-colors rounded-full cursor-pointer active:scale-95 mr-2"><span class="material-symbols-outlined">settings</span></button>
+<img alt="User Profile" class="w-8 h-8 rounded-full border border-subtle object-cover cursor-pointer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCskoQ_aE03tJSCMsdTLhMaffBesFzEWeq0kpL0sFCFFVGe_yg0E3XVJo5kZhxl4kQMAIUrL9Pm7WibkJC-zUYxoTo0sMipgoPkI9st3BFpY9DHs3ByoP199Bn4W49_aX6b6HdhC4ONi8dHq3UGYOTa1cEnlIVE555rmDm8Dio0KF50rOV6WwyThYa5zxI_1NFGPAhLFnR6CzpgvCJF30clo4tUFM-6IapK7LfDCLkMageWTuVnc-dy"/>
+</div>
+</header>
+<!-- Scrollable Canvas -->
+<div class="flex-1 overflow-y-auto p-gutter scroll-smooth">
+<div class="max-w-container-max mx-auto space-y-6 pb-20">
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-subtle pb-4">
+<div>
+<h2 class="font-headline-xl text-headline-xl text-on-surface">Risk &amp; Velocity Limits</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Configure transaction thresholds and monitor real-time velocity triggers.</p>
+</div>
+<div class="flex items-center gap-3">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success-status/10 text-success-status font-label-caps text-label-caps border border-success-status/20">
+<span class="w-1.5 h-1.5 rounded-full bg-success-status"></span> Active Ruleset
+                        </span>
+<button class="h-9 px-4 bg-surface-container border border-subtle text-on-surface font-label-caps text-label-caps rounded hover:bg-surface-container-high transition-colors">Discard Draft</button>
+<button class="h-9 px-4 bg-primary text-on-primary font-label-caps text-label-caps rounded shadow-sm hover:bg-surface-tint transition-colors">Deploy Changes</button>
+</div>
+</div>
+<!-- Active Alerts Bento Grid -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="md:col-span-1 bg-surface-container-lowest border border-subtle p-4 rounded-lg flex flex-col justify-between">
+<div class="flex items-center justify-between mb-4">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Alerts (24h)</span>
+<span class="material-symbols-outlined text-failed-status text-[20px]">warning</span>
+</div>
+<div>
+<div class="font-headline-xl text-headline-xl text-on-surface">14</div>
+<p class="font-body-sm text-body-sm text-failed-status flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-[16px]">arrow_upward</span> 12% vs yesterday
+                             </p>
+</div>
+</div>
+<div class="md:col-span-2 bg-surface-container-lowest border border-subtle p-4 rounded-lg">
+<div class="flex items-center justify-between mb-3 border-b border-subtle pb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Critical Triggers</span>
+<button class="text-primary font-body-sm text-body-sm hover:underline">View All</button>
+</div>
+<div class="space-y-2">
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full bg-failed-status"></span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Velocity Max: Card ending 4492</span>
+</div>
+<span class="font-data-mono text-data-mono text-on-surface-variant">10:42 AM</span>
+</div>
+<div class="flex items-center justify-between py-1">
+<div class="flex items-center gap-3">
+<span class="w-2 h-2 rounded-full bg-pending-status"></span>
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Txn Limit Approaching: Merchant A</span>
+</div>
+<span class="font-data-mono text-data-mono text-on-surface-variant">09:15 AM</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Configuration Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left Column: Settings -->
+<div class="lg:col-span-8 space-y-6">
+<!-- Global Volume Limits -->
+<div class="bg-surface-container-lowest border border-subtle rounded-lg overflow-hidden">
+<div class="bg-surface-container-low px-4 py-3 border-b border-subtle flex justify-between items-center">
+<h3 class="font-headline-md text-headline-md text-on-surface">Global Volume Limits</h3>
+<div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+<input checked="" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" id="global-vol" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-5 rounded-full bg-outline-variant cursor-pointer" for="global-vol"></label>
+</div>
+</div>
+<div class="p-4 space-y-5">
+<!-- Daily Limit -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+<div>
+<label class="block font-body-sm text-body-sm font-medium text-on-surface mb-1">Max Daily Volume (USD)</label>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">Total settled value per 24h rolling window.</p>
+</div>
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant font-data-mono">$</span>
+<input class="w-full h-9 pl-8 pr-3 bg-surface border border-subtle rounded text-right font-data-mono text-data-mono focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="number" value="1500000"/>
+</div>
+</div>
+<hr class="border-subtle"/>
+<!-- Monthly Limit -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+<div>
+<label class="block font-body-sm text-body-sm font-medium text-on-surface mb-1">Max Monthly Volume (USD)</label>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[12px]">Hard cap for calendar month processing.</p>
+</div>
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant font-data-mono">$</span>
+<input class="w-full h-9 pl-8 pr-3 bg-surface border border-subtle rounded text-right font-data-mono text-data-mono focus:border-primary focus:ring-1 focus:ring-primary transition-all" type="number" value="45000000"/>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Context/Logs -->
+<div class="lg:col-span-4 space-y-6">
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

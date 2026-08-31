@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Identity Verification (KYC) - LedgerScale</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary": "#3231c1",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-primary-fixed-variant": "#003dab",
+                        "on-error": "#ffffff",
+                        "on-surface-variant": "#434654",
+                        "surface-tint": "#1353d8",
+                        "primary-fixed": "#dbe1ff",
+                        "primary-container": "#1a56db",
+                        "on-primary": "#ffffff",
+                        "surface-container-highest": "#e0e3e5",
+                        "error-container": "#ffdad6",
+                        "background": "#f7f9fb",
+                        "surface-dim": "#d8dadc",
+                        "surface-container-low": "#f2f4f6",
+                        "secondary-fixed": "#dae2fd",
+                        "on-background": "#191c1e",
+                        "on-primary-container": "#d4dcff",
+                        "secondary": "#565e74",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "on-primary-fixed": "#00174d",
+                        "surface-container-lowest": "#ffffff",
+                        "on-error-container": "#93000a",
+                        "on-tertiary-container": "#dbdaff",
+                        "on-surface": "#191c1e",
+                        "surface": "#f7f9fb",
+                        "surface-variant": "#e0e3e5",
+                        "outline-variant": "#c3c5d7",
+                        "primary-fixed-dim": "#b5c4ff",
+                        "on-secondary": "#ffffff",
+                        "tertiary-container": "#4c4ed9",
+                        "on-secondary-container": "#5c647a",
+                        "inverse-primary": "#b5c4ff",
+                        "outline": "#737686",
+                        "secondary-container": "#dae2fd",
+                        "primary": "#003fb1",
+                        "on-tertiary": "#ffffff",
+                        "surface-bright": "#f7f9fb",
+                        "on-secondary-fixed": "#131b2e",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "inverse-surface": "#2d3133",
+                        "tertiary-fixed": "#e1e0ff",
+                        "surface-container": "#eceef0",
+                        "error": "#ba1a1a",
+                        "surface-container-high": "#e6e8ea",
+                        "inverse-on-surface": "#eff1f3",
+                        "secondary-fixed-dim": "#bec6e0"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "stack-xs": "0.25rem",
+                        "container-max": "1440px",
+                        "stack-sm": "0.5rem",
+                        "stack-lg": "1.5rem",
+                        "gutter": "1.5rem",
+                        "stack-md": "1rem",
+                        "sidebar-width": "260px",
+                        "table-cell-padding": "12px 16px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "data-mono": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "data-mono": ["13px", { "lineHeight": "18px", "fontWeight": "500" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #F8FAFC; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-on-surface min-h-screen flex flex-col font-body-md">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface-container-lowest dark:bg-inverse-surface border-b border-outline-variant dark:border-on-surface-variant flex justify-between items-center px-gutter h-16 max-w-container-max mx-auto">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed" data-icon="account_balance">account_balance</span>
+<span class="font-headline-xl text-headline-xl text-primary dark:text-primary-fixed tracking-tight">LedgerScale</span>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant dark:text-surface-variant hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors rounded-full p-2 cursor-pointer" data-icon="notifications">notifications</span>
+</div>
+</header>
+<!-- SideNav for Desktop -->
+<nav class="hidden lg:flex flex-col h-full py-stack-lg fixed left-0 top-16 w-sidebar-width bg-surface-container-lowest dark:bg-inverse-surface border-r border-outline-variant dark:border-on-surface-variant z-40 transition-all duration-200 ease-in-out">
+<div class="px-4 mb-8">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<span class="material-symbols-outlined text-secondary" data-icon="person">person</span>
+</div>
+<div>
+<div class="font-body-md text-body-md text-primary dark:text-primary-fixed font-semibold">Operations Lead</div>
+<div class="font-body-sm text-body-sm text-secondary">Verified Merchant</div>
+<div class="font-label-caps text-label-caps text-secondary mt-1">Tier 3</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-6 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="store">store</span>
+<span class="font-body-md text-body-md">Merchant Profile</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span class="font-body-md text-body-md">Settlements</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="history_edu">history_edu</span>
+<span class="font-body-md text-body-md">Audit Logs</span>
+</a>
+<a class="flex items-center gap-3 px-6 py-3 text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</div>
+</nav>
+<!-- Main Content -->
+<main class="flex-1 mt-16 lg:ml-sidebar-width p-gutter max-w-container-max mx-auto w-full mb-20 md:mb-0">
+<div class="max-w-3xl mx-auto">
+<div class="text-center mb-10">
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-2">Identity Verification</h1>
+<p class="font-body-lg text-body-lg text-secondary">Complete your KYC process to unlock full platform capabilities.</p>
+</div>
+<!-- Trust Indicator Banner -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 flex items-start gap-4 mb-8 shadow-sm">
+<span class="material-symbols-outlined text-primary mt-1" data-icon="shield">shield</span>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface">Secure Verification Process</h3>
+<p class="font-body-sm text-body-sm text-secondary mt-1">Your data is encrypted end-to-end and stored securely according to banking-grade standards. We use this information solely for identity verification.</p>
+</div>
+</div>
+<!-- Progress Tracker -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-8 mb-8 shadow-sm relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary-fixed opacity-20 rounded-bl-full -z-10"></div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-6">Verification Steps</h2>
+<div class="relative">
+<div class="absolute left-4 top-4 bottom-4 w-px bg-outline-variant"></div>
+<div class="flex flex-col gap-8">
+<!-- Step 1 -->
+<div class="flex gap-4 relative z-10">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-sm z-10">1</div>
+<div class="flex-1 pb-4">
+<h4 class="font-body-lg text-body-lg text-on-surface font-semibold">Business Information</h4>
+<p class="font-body-sm text-body-sm text-secondary mt-1">Provide basic details about your company structure and operations.</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="flex gap-4 relative z-10 opacity-60">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline flex items-center justify-center font-bold text-sm text-secondary z-10">2</div>
+<div class="flex-1 pb-4">
+<h4 class="font-body-lg text-body-lg text-on-surface font-semibold">Document Upload</h4>
+<p class="font-body-sm text-body-sm text-secondary mt-1">Upload required legal and identification documents for verification.</p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex gap-4 relative z-10 opacity-60">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline flex items-center justify-center font-bold text-sm text-secondary z-10">3</div>
+<div class="flex-1">
+<h4 class="font-body-lg text-body-lg text-on-surface font-semibold">Review &amp; Submit</h4>
+<p class="font-body-sm text-body-sm text-secondary mt-1">Review your provided information and submit for final approval.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-8 flex justify-end">
+<button class="bg-primary hover:bg-on-primary-fixed-variant text-on-primary font-body-md text-body-md font-semibold py-3 px-8 rounded-lg transition-colors shadow-sm flex items-center gap-2">
+                        Start Verification
+                        <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Help Section -->
+<div class="flex justify-center items-center gap-2 text-secondary font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-lg" data-icon="help_outline">help_outline</span>
+<span>Need help with verification? <a class="text-primary hover:underline" href="#">Contact Support</a></span>
+</div>
+</div>
+</main>
+<!-- BottomNavBar for Mobile -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center h-16 px-stack-sm pb-safe bg-surface-container-lowest dark:bg-inverse-surface border-t border-outline-variant dark:border-on-surface-variant z-50">
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-secondary-fixed-dim px-4 py-1 hover:text-primary dark:hover:text-primary-fixed active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-label-caps text-label-caps">Payments</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container dark:bg-primary text-on-primary-container dark:text-on-primary rounded-xl px-4 py-1 active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="verified_user">verified_user</span>
+<span class="font-label-caps text-label-caps">KYC</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-secondary-fixed-dim px-4 py-1 hover:text-primary dark:hover:text-primary-fixed active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-label-caps text-label-caps">Users</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-secondary-fixed-dim px-4 py-1 hover:text-primary dark:hover:text-primary-fixed active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-label-caps text-label-caps">Reports</span>
+</a>
+</nav>
+</body></html>

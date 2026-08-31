@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Team Management - LedgerScale</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary": "#3231c1",
+                    "on-secondary-fixed-variant": "#3f465c",
+                    "on-tertiary-fixed": "#07006c",
+                    "on-primary-fixed-variant": "#003dab",
+                    "on-error": "#ffffff",
+                    "on-surface-variant": "#434654",
+                    "surface-tint": "#1353d8",
+                    "primary-fixed": "#dbe1ff",
+                    "primary-container": "#1a56db",
+                    "on-primary": "#ffffff",
+                    "surface-container-highest": "#e0e3e5",
+                    "error-container": "#ffdad6",
+                    "background": "#f7f9fb",
+                    "surface-dim": "#d8dadc",
+                    "surface-container-low": "#f2f4f6",
+                    "secondary-fixed": "#dae2fd",
+                    "on-background": "#191c1e",
+                    "on-primary-container": "#d4dcff",
+                    "secondary": "#565e74",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "on-primary-fixed": "#00174d",
+                    "surface-container-lowest": "#ffffff",
+                    "on-error-container": "#93000a",
+                    "on-tertiary-container": "#dbdaff",
+                    "on-surface": "#191c1e",
+                    "surface": "#f7f9fb",
+                    "surface-variant": "#e0e3e5",
+                    "outline-variant": "#c3c5d7",
+                    "primary-fixed-dim": "#b5c4ff",
+                    "on-secondary": "#ffffff",
+                    "tertiary-container": "#4c4ed9",
+                    "on-secondary-container": "#5c647a",
+                    "inverse-primary": "#b5c4ff",
+                    "outline": "#737686",
+                    "secondary-container": "#dae2fd",
+                    "primary": "#003fb1",
+                    "on-tertiary": "#ffffff",
+                    "surface-bright": "#f7f9fb",
+                    "on-secondary-fixed": "#131b2e",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "inverse-surface": "#2d3133",
+                    "tertiary-fixed": "#e1e0ff",
+                    "surface-container": "#eceef0",
+                    "error": "#ba1a1a",
+                    "surface-container-high": "#e6e8ea",
+                    "inverse-on-surface": "#eff1f3",
+                    "secondary-fixed-dim": "#bec6e0"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "stack-xs": "0.25rem",
+                    "container-max": "1440px",
+                    "stack-sm": "0.5rem",
+                    "stack-lg": "1.5rem",
+                    "gutter": "1.5rem",
+                    "stack-md": "1rem",
+                    "sidebar-width": "260px",
+                    "table-cell-padding": "12px 16px"
+            },
+            "fontFamily": {
+                    "headline-lg": ["Inter", "sans-serif"],
+                    "headline-xl": ["Inter", "sans-serif"],
+                    "body-sm": ["Inter", "sans-serif"],
+                    "data-mono": ["JetBrains Mono", "monospace"],
+                    "body-md": ["Inter", "sans-serif"],
+                    "body-lg": ["Inter", "sans-serif"],
+                    "headline-md": ["Inter", "sans-serif"],
+                    "label-caps": ["Inter", "sans-serif"]
+            },
+            "fontSize": {
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "headline-xl": ["30px", {"lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                    "data-mono": ["13px", {"lineHeight": "18px", "fontWeight": "500"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-md": ["18px", {"lineHeight": "26px", "fontWeight": "600"}],
+                    "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}]
+            }
+          }
+        }
+      }
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .filled-icon {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background font-body-md min-h-screen flex flex-col md:flex-row">
+<!-- Mobile Top Navigation -->
+<header class="flex justify-between items-center px-gutter h-16 w-full max-w-container-max mx-auto fixed top-0 w-full z-50 border-b border-outline-variant dark:border-on-surface-variant bg-surface-container-lowest dark:bg-inverse-surface md:hidden">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed">account_balance</span>
+<span class="font-headline-md text-headline-md text-primary dark:text-primary-fixed tracking-tight">LedgerScale</span>
+</div>
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed">notifications</span>
+</header>
+<!-- Navigation Drawer (Desktop) -->
+<nav class="hidden lg:flex flex-col h-full py-stack-lg fixed left-0 top-0 h-full w-sidebar-width border-r border-outline-variant dark:border-on-surface-variant bg-surface-container-lowest dark:bg-inverse-surface z-40 transition-all duration-200 ease-in-out">
+<div class="px-gutter mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-headline-md text-headline-md">
+                MA
+             </div>
+<div>
+<div class="font-headline-md text-headline-md text-primary dark:text-primary-fixed">Operations Lead</div>
+<div class="font-body-sm text-body-sm text-secondary dark:text-secondary-fixed-dim">Verified Merchant • Tier 3</div>
+</div>
+</div>
+<ul class="flex-1 flex flex-col gap-1 px-4">
+<li>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined">store</span>
+<span class="font-body-md text-body-md">Merchant Profile</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+<span class="font-body-md text-body-md">Settlements</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined">history_edu</span>
+<span class="font-body-md text-body-md">Audit Logs</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-low dark:hover:bg-on-secondary-fixed-variant transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</li>
+</ul>
+<div class="px-gutter mt-auto">
+<a class="flex items-center gap-3 px-4 py-2 rounded-lg text-secondary dark:text-secondary-fixed-dim bg-secondary-container dark:bg-on-secondary-fixed-variant text-on-secondary-container dark:text-secondary-fixed border-l-4 border-primary" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-body-md text-body-md font-semibold">Users</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 lg:ml-sidebar-width pt-16 md:pt-0 pb-20 md:pb-0 min-h-screen">
+<!-- Page Header -->
+<div class="px-gutter py-stack-lg border-b border-outline-variant bg-surface-container-lowest sticky top-0 md:top-0 z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Team Management</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Manage platform access, roles, and permissions for your organization.</p>
+</div>
+<button class="bg-primary text-on-primary hover:bg-on-primary-fixed-variant active:opacity-80 transition-opacity px-6 py-2.5 rounded-lg font-body-md text-body-md font-semibold flex items-center gap-2 w-full sm:w-auto justify-center shadow-sm">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                Add Member
+            </button>
+</div>
+<div class="p-gutter max-w-container-max mx-auto">
+<!-- Filters & Search Bar -->
+<div class="flex flex-col sm:flex-row gap-4 mb-6 bg-surface-container-lowest p-4 rounded-xl border border-outline-variant shadow-sm">
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full h-[36px] pl-10 pr-4 rounded-md border-outline-variant bg-surface focus:border-primary focus:ring-2 focus:ring-primary-fixed-dim font-body-sm text-body-sm transition-shadow" placeholder="Search members by name or email..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="h-[36px] px-4 border border-outline-variant rounded-md bg-surface-container-lowest hover:bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm flex items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                        Role
+                    </button>
+<button class="h-[36px] px-4 border border-outline-variant rounded-md bg-surface-container-lowest hover:bg-surface-container-low text-on-surface-variant font-body-sm text-body-sm flex items-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-[18px]">rule</span>
+                        Status
+                    </button>
+</div>
+</div>
+<!-- High-Density Data Table -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant overflow-hidden shadow-sm">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low border-b border-outline-variant">
+<tr>
+<th class="font-label-caps text-label-caps text-on-surface-variant px-[16px] py-[12px] whitespace-nowrap">Member</th>
+<th class="font-label-caps text-label-caps text-on-surface-variant px-[16px] py-[12px] whitespace-nowrap">Role</th>
+<th class="font-label-caps text-label-caps text-on-surface-variant px-[16px] py-[12px] whitespace-nowrap">Status</th>
+<th class="font-label-caps text-label-caps text-on-surface-variant px-[16px] py-[12px] whitespace-nowrap text-right">Last Active</th>
+<th class="px-[16px] py-[12px] w-[48px]"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<!-- Row 1 -->
+<tr class="hover:bg-surface transition-colors group cursor-pointer h-[48px]">
+<td class="px-[16px] py-[8px]">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-body-sm text-body-sm font-semibold shrink-0">
+                                            ES
+                                        </div>
+<div>
+<div class="font-body-sm text-body-sm font-medium text-on-surface">Elena Sokolova</div>
+<div class="font-body-sm text-[12px] text-on-surface-variant">elena.s@ledgerscale.io</div>
+</div>
+</div>
+</td>
+<td class="px-[16px] py-[8px]">
+<span class="font-body-sm text-body-sm text-on-surface">Administrator</span>
+</td>
+<td class="px-[16px] py-[8px]">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-label-caps text-[10px]">Active</span>
+</td>
+<td class="px-[16px] py-[8px] text-right font-data-mono text-data-mono text-on-surface-variant">
+                                    2 mins ago
+                                </td>
+<td class="px-[16px] py-[8px] text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">chevron_right</span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface transition-colors group cursor-pointer h-[48px]">
+<td class="px-[16px] py-[8px]">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-tertiary-container text-on-tertiary-container flex items-center justify-center font-body-sm text-body-sm font-semibold shrink-0">
+                                            MJ
+                                        </div>
+<div>
+<div class="font-body-sm text-body-sm font-medium text-on-surface">Marcus Johnson</div>
+<div class="font-body-sm text-[12px] text-on-surface-variant">marcus.j@ledgerscale.io</div>
+</div>
+</div>
+</td>
+<td class="px-[16px] py-[8px]">
+<span class="font-body-sm text-body-sm text-on-surface">Developer</span>
+</td>
+<td class="px-[16px] py-[8px]">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-label-caps text-[10px]">Pending</span>
+</td>
+<td class="px-[16px] py-[8px] text-right font-data-mono text-data-mono text-outline">
+                                    --
+                                </td>
+<td class="px-[16px] py-[8px] text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">chevron_right</span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface transition-colors group cursor-pointer h-[48px]">
+<td class="px-[16px] py-[8px]">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary-container text-on-secondary-container flex items-center justify-center font-body-sm text-body-sm font-semibold shrink-0">
+                                            SC
+                                        </div>
+<div>
+<div class="font-body-sm text-body-sm font-medium text-on-surface">Sarah Chen</div>
+<div class="font-body-sm text-[12px] text-on-surface-variant">sarah.c@ledgerscale.io</div>
+</div>
+</div>
+</td>
+<td class="px-[16px] py-[8px]">
+<span class="font-body-sm text-body-sm text-on-surface">Risk Analyst</span>
+</td>
+<td class="px-[16px] py-[8px]">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-label-caps text-[10px]">Active</span>
+</td>
+<td class="px-[16px] py-[8px] text-right font-data-mono text-data-mono text-on-surface-variant">
+                                    1 hour ago
+                                </td>
+<td class="px-[16px] py-[8px] text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">chevron_right</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface transition-colors group cursor-pointer h-[48px]">
+<td class="px-[16px] py-[8px]">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-body-sm text-body-sm font-semibold shrink-0">
+                                            DK
+                                        </div>
+<div>
+<div class="font-body-sm text-body-sm font-medium text-on-surface">David Kim</div>
+<div class="font-body-sm text-[12px] text-on-surface-variant">david.k@ledgerscale.io</div>
+</div>
+</div>
+</td>
+<td class="px-[16px] py-[8px]">
+<span class="font-body-sm text-body-sm text-on-surface">Compliance Officer</span>
+</td>
+<td class="px-[16px] py-[8px]">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-label-caps text-[10px]">Active</span>
+</td>
+<td class="px-[16px] py-[8px] text-right font-data-mono text-data-mono text-on-surface-variant">
+                                    Yesterday
+                                </td>
+<td class="px-[16px] py-[8px] text-right">
+<span class="material-symbols-outlined text-outline group-hover:text-primary transition-colors">chevron_right</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="border-t border-outline-variant bg-surface-container-lowest px-4 py-3 flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Showing 1 to 4 of 24 members</span>
+<div class="flex gap-2">
+<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant text-on-surface-variant hover:bg-surface-container-low disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant text-on-surface-variant hover:bg-surface-container-low">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Mobile Bottom Navigation -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-16 px-stack-sm pb-safe bg-surface-container-lowest dark:bg-inverse-surface border-t border-outline-variant dark:border-on-surface-variant z-50 md:hidden">
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-secondary-fixed-dim px-4 py-1 hover:text-primary dark:hover:text-primary-fixed active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-caps text-label-caps mt-1">Payments</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-secondary-fixed-dim px-4 py-1 hover:text-primary dark:hover:text-primary-fixed active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">verified_user</span>
+<span class="font-label-caps text-label-caps mt-1">KYC</span>
+</a>
+<a class="flex flex-col items-center justify-center bg-primary-container dark:bg-primary text-on-primary-container dark:text-on-primary rounded-xl px-4 py-1 active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-caps text-label-caps mt-1">Users</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-secondary-container dark:text-secondary-fixed-dim px-4 py-1 hover:text-primary dark:hover:text-primary-fixed active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-caps text-label-caps mt-1">Reports</span>
+</a>
+</nav>
+</body></html>

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Merchant Profile - The Ledger</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "tertiary-container": "#ad3b00",
+                      "inverse-primary": "#b5c4ff",
+                      "inverse-surface": "#2e3039",
+                      "secondary-fixed": "#dae2fd",
+                      "primary-container": "#1a56db",
+                      "on-surface-variant": "#434654",
+                      "surface-container-lowest": "#ffffff",
+                      "on-primary-container": "#d4dcff",
+                      "surface-container-low": "#f3f3fe",
+                      "on-tertiary-fixed": "#380d00",
+                      "surface-container-highest": "#e2e1ed",
+                      "inverse-on-surface": "#f0f0fb",
+                      "surface": "#faf8ff",
+                      "surface-container": "#ededf8",
+                      "test-mode-amber": "#d97706",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "on-tertiary-fixed-variant": "#802a00",
+                      "on-primary": "#ffffff",
+                      "on-primary-fixed-variant": "#003dab",
+                      "tertiary-fixed-dim": "#ffb59a",
+                      "pending-status": "#f59e0b",
+                      "on-secondary-container": "#5c647a",
+                      "surface-canvas": "#f8fafc",
+                      "outline-variant": "#c3c5d7",
+                      "error-container": "#ffdad6",
+                      "on-error-container": "#93000a",
+                      "surface-container-high": "#e7e7f3",
+                      "tertiary": "#852b00",
+                      "outline": "#737686",
+                      "on-secondary": "#ffffff",
+                      "secondary": "#565e74",
+                      "success-status": "#10b981",
+                      "on-tertiary-container": "#ffd4c5",
+                      "surface-tint": "#1353d8",
+                      "on-secondary-fixed": "#131b2e",
+                      "failed-status": "#ef4444",
+                      "surface-dim": "#d9d9e4",
+                      "primary-fixed-dim": "#b5c4ff",
+                      "on-error": "#ffffff",
+                      "surface-bright": "#faf8ff",
+                      "surface-variant": "#e2e1ed",
+                      "primary": "#003fb1",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "error": "#ba1a1a",
+                      "tertiary-fixed": "#ffdbcf",
+                      "border-subtle": "#e2e8f0",
+                      "on-tertiary": "#ffffff",
+                      "secondary-container": "#dae2fd",
+                      "on-primary-fixed": "#00174d",
+                      "on-background": "#191b23",
+                      "on-surface": "#191b23",
+                      "background": "#faf8ff",
+                      "primary-fixed": "#dbe1ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "gutter": "1.5rem",
+                      "sidebar-width": "260px",
+                      "cell-x": "16px",
+                      "stack-md": "16px",
+                      "cell-y": "12px",
+                      "container-max": "1440px",
+                      "sidebar-collapsed": "64px",
+                      "stack-tight": "4px"
+              },
+              "fontFamily": {
+                      "body-lg": [
+                              "Inter"
+                      ],
+                      "headline-xl": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "data-mono": [
+                              "JetBrains Mono"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ],
+                      "label-caps": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-xl": [
+                              "30px",
+                              {
+                                      "lineHeight": "38px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md": [
+                              "18px",
+                              {
+                                      "lineHeight": "26px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "data-mono": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-caps": [
+                              "11px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body { background-color: theme('colors.surface-canvas'); color: theme('colors.on-surface'); }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+    </style>
+</head>
+<body class="min-h-screen font-body-md text-body-md flex">
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col bg-inverse-surface border-r border-outline-variant w-sidebar-width h-screen left-0 fixed py-4 z-20">
+<div class="px-gutter mb-8">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-primary-fixed flex items-center justify-center text-on-primary-fixed">
+<span class="material-symbols-outlined">account_balance</span>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-inverse-on-surface">Acme Corp</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Primary Account</p>
+</div>
+</div>
+</div>
+<ul class="flex-1 flex flex-col gap-1 px-3">
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded font-body-md text-body-md text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">home</span>
+                    Home
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded font-body-md text-body-md text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">payments</span>
+                    Payments
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded font-body-md text-body-md text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">group</span>
+                    Customers
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded font-body-md text-body-md text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">subscriptions</span>
+                    Subscriptions
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded font-body-md text-body-md text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">code</span>
+                    Developer
+                </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded font-body-md text-body-md text-primary-fixed border-l-4 border-primary-fixed bg-on-secondary-fixed-variant/20 hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined icon-fill">settings</span>
+                    Settings
+                </a>
+</li>
+</ul>
+<div class="px-3 mt-auto flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded font-body-md text-body-md text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">swap_horiz</span>
+                Switch Account
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded font-body-md text-body-md text-on-surface-variant hover:text-inverse-on-surface hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer active:opacity-80" href="#">
+<span class="material-symbols-outlined">help</span>
+                Support
+            </a>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-sidebar-width flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-gutter max-w-container-max bg-surface border-b border-outline-variant h-16 sticky top-0 z-10">
+<div class="flex items-center gap-6">
+<div class="font-headline-md text-headline-md font-black text-on-surface tracking-tight">The Ledger</div>
+<div class="hidden md:flex gap-6 h-full items-end pb-1 font-label-caps text-label-caps">
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all scale-95 duration-75 px-2 py-1 rounded" href="#">Dashboard</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all scale-95 duration-75 px-2 py-1 rounded" href="#">Analytics</a>
+<a class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-all scale-95 duration-75 px-2 py-1 rounded" href="#">Reports</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden lg:flex items-center gap-2 bg-test-mode-amber/10 px-3 py-1 rounded-full text-test-mode-amber font-label-caps text-label-caps">
+<span class="w-2 h-2 rounded-full bg-test-mode-amber"></span>
+                    Test Mode
+                </div>
+<button class="text-on-surface-variant hover:bg-surface-container-low p-2 rounded transition-all scale-95 duration-75">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:bg-surface-container-low p-2 rounded transition-all scale-95 duration-75">
+<span class="material-symbols-outlined">help</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-outline-variant overflow-hidden cursor-pointer hover:ring-2 ring-primary transition-all">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A professional headshot of a business executive in a modern office environment. Soft, natural lighting highlights the face, creating a trustworthy and competent mood. The aesthetic is clean, corporate, and high-fidelity, matching a premium B2B SaaS platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDP_vvlhID2WjUjAGD8dzjgtfTLetOMB3Dhmvz2RLswZa0kBPsxX4bPu47inl5XwPN45au7f2C3RGt41Z0k7sSLUbIFnV9MmPWmZbeVMJbKrXEAUbR0Ek-5Z44ypRyy-CvX7G1KODRCSIUSvxslL4mcbgZY9uND_3qZ9ujmwPZJq_icu3Ku1fq8oUm4cc3sCYjSHBHiRx3VfD8qYcqqI_N61N9M0fPxQSGextTosG-a5lKB9OKMo5iY"/>
+</div>
+</div>
+</header>
+<!-- Settings Canvas -->
+<div class="p-gutter flex-1 w-full max-w-5xl mx-auto space-y-8 pb-32">
+<div class="flex flex-col gap-2">
+<h2 class="font-headline-xl text-headline-xl text-on-surface">Merchant Profile</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Manage your business identity, contact details, and platform branding preferences.</p>
+</div>
+<!-- Business Information Card -->
+<section class="bg-surface-container-lowest border border-border-subtle rounded-xl overflow-hidden">
+<div class="px-6 py-4 border-b border-border-subtle bg-surface/50">
+<h3 class="font-headline-md text-headline-md text-on-surface">Business Information</h3>
+</div>
+<div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Legal Business Name</label>
+<input class="w-full h-9 px-3 rounded border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" type="text" value="Acme Corporation LLC"/>
+</div>
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Doing Business As (DBA)</label>
+<input class="w-full h-9 px-3 rounded border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" type="text" value="Acme"/>
+</div>
+<div class="space-y-1 md:col-span-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Registered Address</label>
+<input class="w-full h-9 px-3 rounded border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all mb-3" type="text" value="123 Financial Plaza, Suite 400"/>
+<div class="grid grid-cols-3 gap-3">
+<input class="w-full h-9 px-3 rounded border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" type="text" value="New York"/>
+<input class="w-full h-9 px-3 rounded border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" type="text" value="NY"/>
+<input class="w-full h-9 px-3 rounded border border-outline-variant bg-surface-container-lowest text-on-surface font-body-md text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" type="text" value="10004"/>
+</div>
+</div>
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Tax ID (EIN)</label>
+<input class="w-full h-9 px-3 rounded border border-outline-variant bg-surface-container-lowest text-on-surface font-data-mono text-data-mono focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" type="text" value="12-3456789"/>
+</div>
+</div>
+</section>
+<!-- Branding Card -->
+<section class="bg-surface-container-lowest border border-border-subtle rounded-xl overflow-hidden">
+<div class="px-6 py-4 border-b border-border-subtle bg-surface/50">
+<h3 class="font-headline-md text-headline-md text-on-surface">Platform Branding</h3>
+</div>
+<div class="p-6 flex flex-col md:flex-row gap-8">
+<div class="flex-1 space-y-4">
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Brand Logo</label>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-3">Appears on checkout pages and receipts.</p>
+<div class="flex items-center gap-4">
+<div class="w-16 h-16 rounded border border-outline-variant bg-surface-container-highest flex items-center justify-center overflow-hidden">
+<img alt="Company Logo" class="w-full h-full object-cover" data-alt="A minimalist, geometric corporate logo design featuring interlocking A and C letters in deep blue and slate tones. The design is modern, sharp, and clean, presented on a pure white background typical of high-end fintech branding." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBG2zIJTW2oZwBPQe4szZvIp0bP8_vupP04z_g7nxbcO-eybPITl8rgr_J4BTEauLXjGMVVnVGrMU1qFNS7iWEdXVv_trIvzfYkaxNeknMaW_7hG4kb2pL0nRLVOKtoOs7wD9BmXgGMYmrabvZotdohv87ZBO3oZUYY91EAGK33C9BkUbUFsFsRHry52K0j9oB7HLd4s4gIPKijfgLHUzYGOARytljBKp0DauwX_gQJ0NBZqt0VythY"/>
+</div>
+<button class="px-4 py-2 border border-outline-variant rounded hover:bg-surface-container-low font-body-md text-body-md text-on-surface transition-colors">Upload New</button>
+</div>
+</div>
+</div>
+<div class="flex-1 space-y-4">
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant">Primary Brand Color</label>
+<div class="flex items-center gap-3 mt-2">
+<div class="w-9 h-9 rounded border border-outline-variant bg-primary-container cursor-pointer shadow-sm"></div>
+<input class="w-32 h-9 px-3 rounded border border-outline-variant bg-surface-container-lowest text-on-surface font-data-mono text-data-mono focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all uppercase" type="text" value="#1a56db"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Sticky Action Footer -->
+<div class="fixed bottom-0 left-0 right-0 md:ml-sidebar-width bg-surface-container-lowest border-t border-border-subtle p-4 px-gutter flex justify-end gap-3 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+<button class="px-4 py-2 rounded font-body-md text-body-md font-semibold text-on-surface-variant hover:bg-surface-container-low transition-colors">Cancel</button>
+<button class="px-6 py-2 rounded bg-primary text-on-primary font-body-md text-body-md font-semibold hover:bg-on-primary-fixed-variant transition-colors shadow-sm">Save Changes</button>
+</div>
+</main>
+</body></html>

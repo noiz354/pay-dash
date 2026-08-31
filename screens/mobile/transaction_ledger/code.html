@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Transactions</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary": "#ffffff",
+                        "secondary-fixed-dim": "#bec6e0",
+                        "on-secondary-fixed-variant": "#3f465c",
+                        "surface-variant": "#e0e3e5",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#e6e8ea",
+                        "primary-fixed-dim": "#b5c4ff",
+                        "surface": "#f7f9fb",
+                        "secondary": "#565e74",
+                        "inverse-on-surface": "#eff1f3",
+                        "secondary-container": "#dae2fd",
+                        "surface-container": "#eceef0",
+                        "background": "#f7f9fb",
+                        "tertiary-fixed-dim": "#c0c1ff",
+                        "on-surface": "#191c1e",
+                        "surface-container-highest": "#e0e3e5",
+                        "on-background": "#191c1e",
+                        "surface-bright": "#f7f9fb",
+                        "outline-variant": "#c3c5d7",
+                        "on-secondary-fixed": "#131b2e",
+                        "primary-container": "#1a56db",
+                        "on-primary-fixed": "#00174d",
+                        "on-primary-fixed-variant": "#003dab",
+                        "surface-tint": "#1353d8",
+                        "error-container": "#ffdad6",
+                        "surface-dim": "#d8dadc",
+                        "on-surface-variant": "#434654",
+                        "tertiary-container": "#4c4ed9",
+                        "outline": "#737686",
+                        "primary": "#003fb1",
+                        "error": "#ba1a1a",
+                        "primary-fixed": "#dbe1ff",
+                        "on-error": "#ffffff",
+                        "on-primary-container": "#d4dcff",
+                        "inverse-surface": "#2d3133",
+                        "tertiary-fixed": "#e1e0ff",
+                        "secondary-fixed": "#dae2fd",
+                        "on-secondary-container": "#5c647a",
+                        "on-primary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "surface-container-low": "#f2f4f6",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "inverse-primary": "#b5c4ff",
+                        "on-tertiary-container": "#dbdaff",
+                        "on-tertiary-fixed": "#07006c",
+                        "tertiary": "#3231c1",
+                        "on-error-container": "#93000a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "stack-sm": "0.5rem",
+                        "stack-lg": "1.5rem",
+                        "container-max": "1440px",
+                        "stack-md": "1rem",
+                        "gutter": "1.5rem",
+                        "table-cell-padding": "12px 16px",
+                        "stack-xs": "0.25rem",
+                        "sidebar-width": "260px"
+                    },
+                    "fontFamily": {
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "headline-xl": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "data-mono": ["JetBrains Mono"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-xl": ["30px", { "lineHeight": "38px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["18px", { "lineHeight": "26px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "data-mono": ["13px", { "lineHeight": "18px", "fontWeight": "500" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen pb-16 md:pb-0 flex">
+<!-- NavigationDrawer (Desktop) -->
+<nav class="hidden md:flex w-[260px] h-full fixed left-0 top-0 bg-inverse-surface flex-col py-stack-lg z-40">
+<div class="px-gutter mb-8">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary font-headline-md">
+                    IC
+                </div>
+<div class="flex flex-col">
+<span class="text-primary-fixed font-headline-md text-headline-md font-bold">Imanino Corps</span>
+<span class="text-secondary-fixed-dim text-body-sm">Enterprise Account</span>
+</div>
+</div>
+<div class="mt-2 px-2 py-1 bg-on-secondary-fixed-variant rounded text-secondary-fixed-dim text-label-caps uppercase w-max">
+                Live Mode
+            </div>
+</div>
+<ul class="flex flex-col flex-1 px-4 gap-1">
+<li class="px-4 py-2 rounded-DEFAULT text-secondary-fixed-dim hover:text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined">home</span>
+<span class="font-body-md text-body-md">Home</span>
+</li>
+<li class="px-4 py-2 rounded-DEFAULT text-secondary-fixed-dim hover:text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined">account_balance</span>
+<span class="font-body-md text-body-md">Balance</span>
+</li>
+<li class="px-4 py-2 rounded-DEFAULT text-primary-fixed-dim border-l-4 border-primary-fixed-dim bg-on-secondary-fixed-variant/20 font-bold cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined">receipt_long</span>
+<span class="font-body-md text-body-md">Transactions</span>
+</li>
+<li class="px-4 py-2 rounded-DEFAULT text-secondary-fixed-dim hover:text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined">link</span>
+<span class="font-body-md text-body-md">Payment Links</span>
+</li>
+<li class="px-4 py-2 rounded-DEFAULT text-secondary-fixed-dim hover:text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined">autorenew</span>
+<span class="font-body-md text-body-md">Subscriptions</span>
+</li>
+<li class="px-4 py-2 rounded-DEFAULT text-secondary-fixed-dim hover:text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined">qr_code</span>
+<span class="font-body-md text-body-md">QR Codes</span>
+</li>
+<li class="px-4 py-2 rounded-DEFAULT text-secondary-fixed-dim hover:text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer flex items-center gap-3">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-body-md text-body-md">Disbursements</span>
+</li>
+<li class="px-4 py-2 rounded-DEFAULT text-secondary-fixed-dim hover:text-on-secondary-fixed-variant hover:bg-on-secondary-fixed-variant/10 transition-colors cursor-pointer flex items-center gap-3 mt-auto">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</li>
+</ul>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 md:ml-[260px] w-full max-w-container-max mx-auto flex flex-col min-h-screen">
+<!-- TopAppBar (Desktop) -->
+<header class="hidden md:flex justify-between items-center h-14 px-gutter border-b border-outline-variant bg-surface sticky top-0 z-30">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined cursor-pointer text-primary">menu</span>
+<h1 class="font-headline-lg text-headline-lg font-black text-primary">Payment Gateway</h1>
+</div>
+<div class="px-3 py-1 bg-error-container text-on-error-container rounded-DEFAULT text-label-caps font-bold">
+                TEST MODE
+            </div>
+</header>
+<!-- Page Content -->
+<div class="p-gutter flex-1 flex flex-col gap-stack-lg">
+<header class="flex justify-between items-end">
+<div>
+<h2 class="font-headline-xl text-headline-xl text-on-surface">Transactions</h2>
+<p class="text-on-surface-variant font-body-md mt-1">Review and manage your payment flow.</p>
+</div>
+</header>
+<!-- Metrics -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<div class="bg-surface-container-lowest border border-surface-variant p-6 rounded-xl">
+<div class="flex justify-between items-start mb-4">
+<span class="text-on-surface-variant font-label-caps text-label-caps uppercase">Incoming Volume</span>
+<div class="flex items-center gap-1 text-[green] bg-[green]/10 px-2 py-0.5 rounded-full text-label-caps">
+<span class="material-symbols-outlined text-[14px]">arrow_upward</span>
+                            12.5%
+                        </div>
+</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">$1,245,000.00</div>
+</div>
+<div class="bg-surface-container-lowest border border-surface-variant p-6 rounded-xl">
+<div class="flex justify-between items-start mb-4">
+<span class="text-on-surface-variant font-label-caps text-label-caps uppercase">Outgoing Volume</span>
+<div class="flex items-center gap-1 text-[green] bg-[green]/10 px-2 py-0.5 rounded-full text-label-caps">
+<span class="material-symbols-outlined text-[14px]">arrow_upward</span>
+                            4.2%
+                        </div>
+</div>
+<div class="font-headline-lg text-headline-lg text-on-surface">$342,150.00</div>
+</div>
+</div>
+<!-- Filters -->
+<div class="flex flex-col sm:flex-row gap-4">
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full h-9 pl-10 pr-4 bg-surface-container-lowest border border-surface-variant rounded-lg text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" placeholder="Search reference IDs..." type="text"/>
+</div>
+<div class="flex gap-2">
+<div class="relative">
+<input class="h-9 px-4 bg-surface-container-lowest border border-surface-variant rounded-lg text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all" type="date"/>
+</div>
+<button class="h-9 px-4 bg-surface-container border border-surface-variant rounded-lg font-body-md flex items-center gap-2 hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                        Filters
+                    </button>
+</div>
+</div>
+<!-- Data Table -->
+<div class="bg-surface-container-lowest border border-surface-variant rounded-xl overflow-hidden flex-1">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low border-b border-surface-variant">
+<tr>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Reference ID</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Date &amp; Time</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Method</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Status</th>
+<th class="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider text-right">Amount</th>
+</tr>
+</thead>
+<tbody class="font-body-md divide-y divide-surface-variant">
+<tr class="hover:bg-surface-bright transition-colors cursor-pointer">
+<td class="p-table-cell-padding font-data-mono text-data-mono text-on-surface">TXN-098234-A</td>
+<td class="p-table-cell-padding text-on-surface-variant">Oct 24, 14:32:01</td>
+<td class="p-table-cell-padding text-on-surface">Credit Card</td>
+<td class="p-table-cell-padding">
+<span class="inline-flex items-center px-2 py-1 rounded-full text-label-caps font-bold bg-[green]/10 text-[green]">Success</span>
+</td>
+<td class="p-table-cell-padding font-data-mono text-data-mono text-on-surface text-right">$4,500.00</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors cursor-pointer">
+<td class="p-table-cell-padding font-data-mono text-data-mono text-on-surface">TXN-098233-B</td>
+<td class="p-table-cell-padding text-on-surface-variant">Oct 24, 14:15:22</td>
+<td class="p-table-cell-padding text-on-surface">E-Wallet</td>
+<td class="p-table-cell-padding">
+<span class="inline-flex items-center px-2 py-1 rounded-full text-label-caps font-bold bg-[#D97706]/10 text-[#D97706]">Pending</span>
+</td>
+<td class="p-table-cell-padding font-data-mono text-data-mono text-on-surface text-right">$125.50</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors cursor-pointer">
+<td class="p-table-cell-padding font-data-mono text-data-mono text-on-surface">TXN-098232-C</td>
+<td class="p-table-cell-padding text-on-surface-variant">Oct 24, 13:45:00</td>
+<td class="p-table-cell-padding text-on-surface">Virtual Account</td>
+<td class="p-table-cell-padding">
+<span class="inline-flex items-center px-2 py-1 rounded-full text-label-caps font-bold bg-[red]/10 text-[red]">Failed</span>
+</td>
+<td class="p-table-cell-padding font-data-mono text-data-mono text-on-surface text-right">$8,200.00</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors cursor-pointer">
+<td class="p-table-cell-padding font-data-mono text-data-mono text-on-surface">TXN-098231-D</td>
+<td class="p-table-cell-padding text-on-surface-variant">Oct 24, 12:10:45</td>
+<td class="p-table-cell-padding text-on-surface">Credit Card</td>
+<td class="p-table-cell-padding">
+<span class="inline-flex items-center px-2 py-1 rounded-full text-label-caps font-bold bg-[green]/10 text-[green]">Success</span>
+</td>
+<td class="p-table-cell-padding font-data-mono text-data-mono text-on-surface text-right">$450.00</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile) -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-16 bg-surface-container-highest dark:bg-inverse-surface z-50 lg:hidden border-t border-outline-variant shadow-lg font-label-caps text-label-caps">
+<div class="flex flex-col items-center justify-center text-on-surface-variant active:bg-surface-variant scale-95 transition-transform cursor-pointer w-16 h-full">
+<span class="material-symbols-outlined">home</span>
+<span>Home</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant active:bg-surface-variant scale-95 transition-transform cursor-pointer w-16 h-full">
+<span class="material-symbols-outlined">account_balance</span>
+<span>Balance</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-primary-container text-on-primary-container rounded-full px-4 py-1 active:bg-surface-variant scale-95 transition-transform cursor-pointer h-12">
+<span class="material-symbols-outlined">receipt_long</span>
+<span>Transact</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant active:bg-surface-variant scale-95 transition-transform cursor-pointer w-16 h-full">
+<span class="material-symbols-outlined">link</span>
+<span>Links</span>
+</div>
+<div class="flex flex-col items-center justify-center text-on-surface-variant active:bg-surface-variant scale-95 transition-transform cursor-pointer w-16 h-full">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</div>
+</nav>
+</body></html>
