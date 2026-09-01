@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 
 // Reusable Sidebar — w-sidebar-width fixed left-0, bg-inverse-surface (transaction_ledger_desktop:122, DESIGN.md:14)

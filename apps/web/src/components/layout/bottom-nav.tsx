@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 
 // Reusable BottomNav — fixed bottom-0 h-16 lg:hidden (balance_history:359, dashboard_home:315)

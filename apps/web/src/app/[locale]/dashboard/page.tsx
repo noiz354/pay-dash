@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { MetricCard } from "@/components/layout/metric-card";
 import { DataTable, DataTableContent, TableHeadCell, TableCellMono } from "@/components/layout/data-table";
 import { Hero3DWrapper } from "@/components/three/hero-wrapper";
