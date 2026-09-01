@@ -49,8 +49,8 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
                   : "text-[var(--inverse-on-surface)] hover:bg-white/10"
               )}
             >
-              <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
-              {item.label}
+              <span className="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">{item.icon}</span>
+              <span className="truncate min-w-0">{item.label}</span>
             </Link>
           );
         })}

@@ -17,8 +17,8 @@ export default function DashboardPage() {
         <div className="flex gap-2">
           <Button variant="outline" className="border-[var(--border-subtle)] bg-[var(--surface)] hover:bg-[var(--surface-container-low)]">Download Report</Button>
           <Link href="/transactions">
-            <Button className="bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--on-primary-fixed-variant)] flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">add</span> New Transaction
+            <Button className="bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--on-primary-fixed-variant)] flex items-center gap-2 whitespace-nowrap">
+              <span className="material-symbols-outlined text-[18px] shrink-0" aria-hidden="true">add</span> <span>New Transaction</span>
             </Button>
           </Link>
         </div>
@@ -27,7 +27,7 @@ export default function DashboardPage() {
       {/* Bento Grid — screens/desktop/dashboard_home_desktop:242-349 */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Setup Progress — lg:col-span-4 */}
-        <Card className="lg:col-span-4 bg-[var(--surface)] border-[var(--border-subtle)] p-5 flex flex-col shadow-sm">
+        <Card className="lg:col-span-4 bg-[var(--surface)] border-[var(--border-subtle)] p-5 flex flex-col shadow-sm min-w-0 overflow-hidden">
           <div className="flex justify-between items-center mb-4">
             <h3 className="headline-md text-[var(--on-surface)]">Setup Progress</h3>
             <span className="label-caps text-[var(--primary)] bg-[var(--primary-container)]/10 px-2 py-0.5 rounded">60%</span>
@@ -35,25 +35,25 @@ export default function DashboardPage() {
           <div className="w-full bg-[var(--surface-container-high)] rounded-full h-1.5 mb-6">
             <div className="bg-[var(--primary)] h-1.5 rounded-full" style={{ width: "60%" }} aria-valuenow={60} aria-valuemin={0} aria-valuemax={100} role="progressbar" />
           </div>
-          <div className="space-y-4 flex-1">
-            <div className="flex gap-3 items-start">
-              <span className="material-symbols-outlined text-[var(--success-status)] text-[20px] mt-0.5" aria-hidden="true">check_circle</span>
-              <p className="body-sm font-medium text-[var(--on-surface-variant)] line-through">Verify Business Details</p>
+          <div className="space-y-4 flex-1 min-w-0">
+            <div className="flex gap-3 items-start min-w-0">
+              <span className="material-symbols-outlined text-[var(--success-status)] text-[20px] mt-0.5 shrink-0" aria-hidden="true">check_circle</span>
+              <p className="body-sm font-medium text-[var(--on-surface-variant)] line-through break-words min-w-0">Verify Business Details</p>
             </div>
-            <div className="flex gap-3 items-start">
-              <span className="material-symbols-outlined text-[var(--success-status)] text-[20px] mt-0.5" aria-hidden="true">check_circle</span>
-              <p className="body-sm font-medium text-[var(--on-surface-variant)] line-through">Connect Bank Account</p>
+            <div className="flex gap-3 items-start min-w-0">
+              <span className="material-symbols-outlined text-[var(--success-status)] text-[20px] mt-0.5 shrink-0" aria-hidden="true">check_circle</span>
+              <p className="body-sm font-medium text-[var(--on-surface-variant)] line-through break-words min-w-0">Connect Bank Account</p>
             </div>
-            <div className="flex gap-3 items-start bg-[var(--surface-container-low)] p-2 rounded -mx-2 border border-[var(--primary)]/20">
-              <span className="material-symbols-outlined text-[var(--primary)] text-[20px] mt-0.5" aria-hidden="true">radio_button_unchecked</span>
-              <div>
-                <p className="body-sm font-medium text-[var(--on-surface)]">Configure Routing Rules</p>
-                <p className="body-sm text-[var(--on-surface-variant)] text-[12px] mt-0.5">Set up intelligent payment routing to optimize costs.</p>
+            <div className="flex gap-3 items-start bg-[var(--surface-container-low)] p-2 rounded -mx-2 border border-[var(--primary)]/20 min-w-0 overflow-hidden">
+              <span className="material-symbols-outlined text-[var(--primary)] text-[20px] mt-0.5 shrink-0" aria-hidden="true">radio_button_unchecked</span>
+              <div className="min-w-0 flex-1">
+                <p className="body-sm font-medium text-[var(--on-surface)] break-words">Configure Routing Rules</p>
+                <p className="body-sm text-[var(--on-surface-variant)] text-[12px] mt-0.5 break-words">Set up intelligent payment routing to optimize costs.</p>
               </div>
             </div>
-            <div className="flex gap-3 items-start">
-              <span className="material-symbols-outlined text-[var(--outline)] text-[20px] mt-0.5" aria-hidden="true">radio_button_unchecked</span>
-              <p className="body-sm font-medium text-[var(--on-surface)]">Enable Webhooks</p>
+            <div className="flex gap-3 items-start min-w-0">
+              <span className="material-symbols-outlined text-[var(--outline)] text-[20px] mt-0.5 shrink-0" aria-hidden="true">radio_button_unchecked</span>
+              <p className="body-sm font-medium text-[var(--on-surface)] break-words min-w-0">Enable Webhooks</p>
             </div>
           </div>
         </Card>
@@ -66,8 +66,8 @@ export default function DashboardPage() {
               <h4 className="data-mono text-[28px] font-bold text-[var(--on-surface)] leading-none">$1.24M</h4>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className="flex items-center text-[var(--success-status)] bg-[var(--success-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px]">
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">trending_up</span> +12.5%
+              <span className="flex items-center gap-1 text-[var(--success-status)] bg-[var(--success-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px] whitespace-nowrap">
+                <span className="material-symbols-outlined text-[14px] shrink-0" aria-hidden="true">trending_up</span> +12.5%
               </span>
               <span className="body-sm text-[12px] text-[var(--on-surface-variant)]">vs last month</span>
             </div>
@@ -78,8 +78,8 @@ export default function DashboardPage() {
               <h4 className="data-mono text-[28px] font-bold text-[var(--on-surface)] leading-none">8,402</h4>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className="flex items-center text-[var(--success-status)] bg-[var(--success-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px]">
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">trending_up</span> +4.2%
+              <span className="flex items-center gap-1 text-[var(--success-status)] bg-[var(--success-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px] whitespace-nowrap">
+                <span className="material-symbols-outlined text-[14px] shrink-0" aria-hidden="true">trending_up</span> +4.2%
               </span>
               <span className="body-sm text-[12px] text-[var(--on-surface-variant)]">vs last month</span>
             </div>
@@ -90,8 +90,8 @@ export default function DashboardPage() {
               <h4 className="data-mono text-[28px] font-bold text-[var(--on-surface)] leading-none">0.8%</h4>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className="flex items-center text-[var(--failed-status)] bg-[var(--failed-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px]">
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">trending_up</span> +0.1%
+              <span className="flex items-center gap-1 text-[var(--failed-status)] bg-[var(--failed-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px] whitespace-nowrap">
+                <span className="material-symbols-outlined text-[14px] shrink-0" aria-hidden="true">trending_up</span> +0.1%
               </span>
               <span className="body-sm text-[12px] text-[var(--on-surface-variant)]">vs last month</span>
             </div>
@@ -105,9 +105,9 @@ export default function DashboardPage() {
               { label: "Payouts", icon: "account_balance", href: "/payouts/bulk" },
               { label: "API Keys", icon: "api", href: "/settings/api-keys" },
             ].map((a) => (
-              <Link key={a.label} href={a.href} className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-lg p-4 flex flex-col items-center justify-center gap-2 hover:bg-[var(--surface-container-low)] hover:border-[var(--primary)]/50 group transition-colors">
-                <span className="material-symbols-outlined text-[var(--on-surface-variant)] group-hover:text-[var(--primary)]" aria-hidden="true">{a.icon}</span>
-                <span className="body-sm font-medium text-[var(--on-surface)]">{a.label}</span>
+              <Link key={a.label} href={a.href} className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-lg p-4 flex flex-col items-center justify-center gap-2 hover:bg-[var(--surface-container-low)] hover:border-[var(--primary)]/50 group transition-colors min-w-0">
+                <span className="material-symbols-outlined text-[var(--on-surface-variant)] group-hover:text-[var(--primary)] shrink-0" aria-hidden="true">{a.icon}</span>
+                <span className="body-sm font-medium text-[var(--on-surface)] text-center break-words">{a.label}</span>
               </Link>
             ))}
           </div>
@@ -116,15 +116,15 @@ export default function DashboardPage() {
 
       <Hero3DWrapper />
 
-      {/* DataTable — label-caps sticky, data-mono right-aligned */}
+      {/* DataTable — label-caps sticky, data-mono right-aligned — fixed AMOUNTSTATUS merge */}
       <DataTable className="mt-6">
         <DataTableContent>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed min-w-[480px]">
             <thead className="sticky top-0 bg-[var(--surface-container-low)]">
               <tr className="label-caps text-[var(--on-surface-variant)]">
-                <TableHeadCell>ID</TableHeadCell>
-                <TableHeadCell className="text-right">Amount</TableHeadCell>
-                <TableHeadCell>Status</TableHeadCell>
+                <TableHeadCell className="w-[160px]">ID</TableHeadCell>
+                <TableHeadCell className="w-[140px] text-right">Amount</TableHeadCell>
+                <TableHeadCell className="w-[120px]">Status</TableHeadCell>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-subtle)]">

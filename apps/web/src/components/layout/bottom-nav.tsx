@@ -28,8 +28,8 @@ export function BottomNav({ activeHref }: { activeHref?: string }) {
                 : "text-[var(--on-surface-variant)]"
             )}
           >
-            <span className="material-symbols-outlined text-[20px]" aria-hidden="true">{item.icon}</span>
-            <span className="text-xs">{item.label}</span>
+            <span className="material-symbols-outlined text-[20px] shrink-0" aria-hidden="true">{item.icon}</span>
+            <span className="text-xs truncate">{item.label}</span>
           </Link>
         );
       })}
