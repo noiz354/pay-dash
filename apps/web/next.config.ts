@@ -44,6 +44,7 @@ const nextConfig: NextConfig = {
       // Detail routes reached from ledger rows / row actions
       { source: "/transactions/:id", destination: "/id/transactions/:id" },
       { source: "/customers/:id", destination: "/id/customers/:id" },
+      { source: "/billing/:id", destination: "/id/billing/:id" },
     ];
     return [
       ...appRoutes.map((source) => ({ source, destination: `/id${source}` })),

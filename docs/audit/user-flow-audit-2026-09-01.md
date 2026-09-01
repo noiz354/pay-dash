@@ -164,3 +164,54 @@ three prototype rows instead of deleting them, and exposes
 `listCustomers` / `getCustomer` / `getCustomerTransactions` /
 `getCustomerMetrics` / `createCustomer` / `updateCustomer` / `customersToCsv`.
 See ADR-0007.
+
+---
+
+# Page 4 — `/[locale]/billing` (audit + build, 2026-09-01)
+
+## User capabilities (intended action → expected outcome)
+
+| Element | Intended action | Before | Now |
+|---|---|---|---|
+| Breadcrumb "Enterprise" | → dashboard | Raw `next/link`, dropped the locale | Locale-aware `Link` |
+| Next Invoice Date | Show the next billing run | Literal "Oct 01, 2023" | Computed first-of-next-month; the auto-debit line links to `/settings/merchant` |
+| Accrued Fees / -4.2% | Live accrual | Literals | Sum of this month's ledger fees + real month-over-month delta |
+| Filter button | Narrow invoices | Decorative | Status / Period / Sort selects + search, all URL state |
+| Export Statement | Download | No handler | `/api/exports/invoices`, filter-aware, pending + toast |
+| Invoice ID link | Open the invoice | Linked to a route that did not exist | `/[locale]/billing/[id]` exists; whole row is clickable |
+| Amount column | Money | Bare strings, currency in the header | `formatMoney(amount, currency)` |
+| Status badge | Paid / Pending / Overdue | Static, Overdue was a dead end | Adds `DRAFT` (accruing); Overdue escalates to a banner with **Pay now** |
+| PDF icon | Download the invoice | No handler | `/api/exports/invoices/[id]`, spinner → toast |
+| — | Pay an invoice | Missing entirely | `<PayInvoiceDialog/>` + `payInvoiceAction`, reachable via `?pay=1` from banner, card, row menu and detail header |
+
+## Missing UI components (built)
+
+`<BillingSummaryCards/>`, `<OverdueBanner/>`, `<InvoiceFilters/>`,
+`<InvoicesTable/>`, `<InvoiceStatusPill/>`, `<InvoiceRowActions/>`,
+`<PayInvoiceDialog/>`, `<DownloadInvoiceButton/>`, `<InvoicesEmptyState/>`,
+`<InvoiceHeader/>`, `<InvoiceTotals/>`, `<InvoiceLineItems/>`,
+`<InvoicePaymentTimeline/>`, plus `loading.tsx` / `not-found.tsx` at both route
+levels and `SectionBoundary` isolation around the summary and the table.
+
+## State & feedback gaps (closed)
+
+Summary + table skeletons · `useFormStatus` disabled pay button · download
+spinner in place of the icon · sonner toasts carrying the payment reference and
+a follow-up action · confirmation gate before any charge · double-pay guard ·
+per-widget error isolation · three distinct empty states · overdue rows tinted
+rather than merely badged · `aria-live` invoice count.
+
+## Routing dead-ends (closed)
+
+`/billing/[id]` created (and added to `next.config.ts` rewrites) · Export and
+PDF buttons now have endpoints · invoice → billed transactions →
+`/transactions` · invoice → `/settings/merchant` for the auto-debit method the
+summary advertises · locale-preserving breadcrumb · unknown invoice id → in-shell
+not-found.
+
+## Data seam
+
+`src/server/data/invoices.ts` — `listInvoices`, `getInvoice`,
+`getInvoiceTransactions`, `getInvoiceLineItems`, `getInvoiceTimeline`,
+`getBillingSummary`, `payInvoice`, `invoicesToCsv`, `invoiceStatementCsv`.
+Client-safe vocabulary in `src/lib/invoice-status.ts`. See ADR-0008.
