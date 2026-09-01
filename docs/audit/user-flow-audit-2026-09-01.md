@@ -270,3 +270,57 @@ Client-safe vocabulary in `src/lib/invoice-status.ts`. See ADR-0008.
 - Developer docs card `<a href="#">` → `/support`.
 - Developer webhook card → `/webhooks` console; developer API-keys card → `/settings/api-keys`.
 - Hub "Related settings" surfaces `/payouts/settings`, `/webhooks`, `/billing`.
+
+---
+
+## Page 6 — `/[locale]/payouts` (+ `[id]`, bulk, settings)
+
+### User Capabilities (intended action → expected outcome)
+
+| Element | Intended action | Expected outcome |
+| --- | --- | --- |
+| Sidebar "Bulk Payouts" / "Payout Settings" | Enter the payouts area | Land under a real `/payouts` parent |
+| Payout history | Find a past disbursement | Filterable, sortable, paginated batch list |
+| Summary cards | Read exposure | Derived money figures, each linking to the filtered view |
+| Batch row | Inspect a disbursement | Route to `/payouts/[id]` with recipients and outcomes |
+| New Batch | Start a disbursement | Dialog with upload/paste, preview and create |
+| Drop zone | Upload recipients | Real file input, drag & drop, parse, validate, preview |
+| Download Template | Get the CSV schema | Generated from the parser itself |
+| Release funds | Pay the batch | Confirmed dialog, deterministic settlement, result toast |
+| Cancel batch | Stop a scheduled batch | Rows returned, nothing paid, timeline entry |
+| Retry | Recover a failure | Per-row and per-batch retry with pending state |
+| Export Log / Recipients CSV | Reconcile | Filtered batch CSV + per-batch recipient CSV |
+| Automated payouts / cadence / threshold | Configure the schedule | Dirty-tracked form, conditional day field, parsed amount |
+| Change (destination) | Swap bank account | Account list, verification gate, add-account form |
+
+### Missing UI Components (built this pass)
+
+- **`/payouts` index** (route did not exist) with `<PayoutsSummaryCards/>`, `<BatchFilters/>`,
+  `<BatchesTable/>`, `<BatchesEmptyState/>`, plus a `/payouts` sidebar entry.
+- **`/payouts/[id]`** batch detail: header with derived status and four totals, `<RecipientsTable/>`
+  (per-row status, failure reason, retry), `<BatchTimeline/>`, `<RetryFailuresButton/>`.
+- `<BatchUploadDropzone/>` — file input + drag/drop + paste, 2 MB guard, live parse.
+- `<RecipientPreviewTable/>` — valid/rejected tabs, per-line reasons, rejected-rows export.
+- `<CreateBatchDialog/>` (`?new=1`) and `<ReleaseBatchDialog/>` (`?send=1` / `?cancel=1`).
+- `<PayoutScheduleForm/>` — dirty state, conditional weekday / day-of-month, parsed threshold.
+- `<DestinationAccountDialog/>` — account list, verification gate, inline add-account form.
+- `<PayoutStatusPill/>` / `<RecipientStatusPill/>`, `loading.tsx` ×4, `not-found.tsx` ×2.
+
+### State & Feedback Gaps (closed)
+
+- No batch entity existed, so no state could be shown; batches now carry a derived status and a
+  timeline of every create/release/retry/cancel.
+- Money was rendered as broken literals (`,250,890.00`); everything goes through `formatMoney`.
+- The upload had no progress, validation or partial-failure reporting — the highest-stakes
+  interaction with the least feedback. It now reports "N valid / M invalid" *before* submission.
+- Disbursement and cancellation are gated behind an explicit confirmation checkbox.
+- Failure is recoverable at two granularities, each with its own pending state and toast.
+- Schedule form gained dirty tracking, a working Discard, and validation on cadence and amount.
+
+### Routing Dead-Ends (fixed)
+
+- `/payouts` 404 → real index; added to the sidebar.
+- "Download Template" `href="#"` → generated CSV (client download + `/api/exports/payout-template`).
+- Bulk breadcrumb "Payments" `<span>` → locale-aware `Link` to `/payouts`.
+- Stat cards and "3 active batches" now link into filtered lists and batch detail.
+- Cross-links added: index ↔ bulk ↔ settings, detail → `/balance`, settings → `/settings/notifications`.
