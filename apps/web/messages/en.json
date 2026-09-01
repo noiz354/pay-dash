@@ -1,0 +1,13 @@
+{
+  "Dashboard": {
+    "title": "Dashboard — Kinetic Ledger",
+    "subtitle": "Server Component by default; prototype: screens/desktop/dashboard_home_desktop + screens/mobile/dashboard_home",
+    "totalVolume": "Total Volume",
+    "pending": "Pending",
+    "successRate": "Success Rate"
+  },
+  "Common": {
+    "testMode": "TEST MODE — Data is not live",
+    "search": "Search"
+  }
+}

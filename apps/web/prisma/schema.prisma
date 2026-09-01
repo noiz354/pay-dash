@@ -7,28 +7,68 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Better Auth core schema + app extensions (role, externalId, ledgerEntries)
+// Reusable — NEXTJS #103 Better Auth, #106 Prisma; ADR-0004 Accepted (Better Auth swappable to Clerk via lib/auth.ts)
 model User {
   id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  email         String?   @unique
-  name          String?
-  externalId    String?   @unique(map: "externalId")
+  // App extensions
   role          String    @default("member")
+  externalId    String?   @unique(map: "externalId")
+  sessions      Session[]
   accounts      Account[]
   ledgerEntries LedgerEntry[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
 }
 
 model Account {
-  id        String  @id @default(cuid())
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider  String
-  providerAccountId String
-  type      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@unique([provider, providerAccountId])
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@map("verification")
 }
 
 model LedgerEntry {
@@ -37,7 +77,7 @@ model LedgerEntry {
   updatedAt       DateTime @updatedAt
   userId          String?
   user            User?    @relation(fields: [userId], references: [id])
-  amount          BigDecimal
+  amount          Decimal   @db.Decimal(15, 2)
   currency        String   @default("IDR")
   status          String   @default("PENDING")
   referenceId     String?

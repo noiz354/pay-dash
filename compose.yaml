@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: xendit
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: xendit-web:prod
+    container_name: xendit-web-prod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORT:-37421}:3000"
+    env_file:
+      - apps/web/.env.prod
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/xendit
+      NEXT_PUBLIC_APP_URL: http://localhost:${WEB_PORT:-37421}
+      BETTER_AUTH_URL: http://localhost:${WEB_PORT:-37421}
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health | grep -q ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

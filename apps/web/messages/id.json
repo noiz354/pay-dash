@@ -1,0 +1,13 @@
+{
+  "Dashboard": {
+    "title": "Dasbor — Kinetic Ledger",
+    "subtitle": "Komponen Server; prototipe: screens/desktop/dashboard_home_desktop + screens/mobile/dashboard_home",
+    "totalVolume": "Total Volume",
+    "pending": "Tertunda",
+    "successRate": "Tingkat Keberhasilan"
+  },
+  "Common": {
+    "testMode": "MODE UJI — Data tidak live",
+    "search": "Cari"
+  }
+}
