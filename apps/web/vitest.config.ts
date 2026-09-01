@@ -13,6 +13,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "./src"),
+      // `server-only` throws outside a Server Component build; stub it so
+      // `src/server/data/*` can be unit-tested directly in jsdom.
+      "server-only": resolve(__dirname, "./src/test/server-only.ts"),
     },
   },
 });

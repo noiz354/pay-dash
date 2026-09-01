@@ -4,6 +4,7 @@ import "./globals.css";
 import { TestModeBanner } from "@/components/layout/test-mode-banner";
 import { WebVitals } from "@/instrumentation-client";
 import { cn } from "@/lib/utils";
+import { Toaster } from "@/components/ui/sonner";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <TestModeBanner />
         <WebVitals />
         {children}
+        <Toaster position="bottom-right" richColors closeButton />
       </body>
     </html>
   );

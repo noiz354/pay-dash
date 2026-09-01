@@ -1,166 +1,212 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import type { Metadata } from "next";
+import { Link } from "@/i18n/navigation";
+import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
+import { SettingsNav } from "@/components/settings/settings-nav";
+import { DeveloperToggle } from "@/components/settings/developer-toggle";
+import { IpAllowlistManager } from "@/components/settings/ip-allowlist-manager";
+import { CreateApiKeyDialog } from "@/components/settings/create-api-key-dialog";
+import { getDeveloperSettings, listApiKeys } from "@/server/data/settings";
+import { formatRelative } from "@/lib/format";
 
-export default function DeveloperSettingsPage() {
+export const metadata: Metadata = {
+  title: "Developer · Settings",
+  description: "Sandbox mode, webhook retries and the IP allowlist.",
+};
+
+const WEBHOOKS = [
+  { url: "https://api.acme.com/webhooks/ledger", events: "payment.*", status: "Active" as const },
+  { url: "https://staging.acme.com/hooks/sync", events: "customer.*", status: "Failing" as const },
+];
+
+export default async function DeveloperSettingsPage() {
+  const [developer, keys] = await Promise.all([getDeveloperSettings(), listApiKeys()]);
+  const activeKeys = keys.filter((k) => k.status === "ACTIVE");
+
   return (
-    <main className="mx-auto max-w-container-max p-gutter space-y-6">
-      {/* Header with LIVE MODE pill from mobile 160-163 */}
+    <main className="mx-auto w-full max-w-container-max p-gutter space-y-6">
+      <nav aria-label="Breadcrumb" className="body-sm flex items-center gap-2 text-[var(--on-surface-variant)]">
+        <Link href="/settings" className="transition-colors hover:text-[var(--primary)]">
+          Settings
+        </Link>
+        <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
+          chevron_right
+        </span>
+        <span className="text-[var(--on-surface)]">Developer</span>
+      </nav>
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="headline-xl text-[var(--on-surface)]">Developer Settings</h1>
-          <p className="body-sm text-[var(--on-surface-variant)] mt-1">Manage API keys, webhooks, and access controls.</p>
-        </div>
-        <div className="flex items-center bg-[var(--surface-container)] rounded-full p-1 border border-[var(--outline-variant)] w-fit">
-          <button className="px-4 py-1.5 rounded-full label-caps text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] transition-colors">
-            TEST DATA
-          </button>
-          <button className="px-4 py-1.5 rounded-full bg-white shadow-sm label-caps text-[var(--primary)] border border-[var(--outline-variant)]">
-            LIVE MODE
-          </button>
+          <p className="body-sm text-[var(--on-surface-variant)] mt-1">
+            Manage API keys, webhooks, and access controls.
+          </p>
         </div>
       </div>
 
-      {/* Bento Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main column */}
-        <div className="lg:col-span-8 space-y-6">
-          {/* API Keys Card */}
-          <Card className="overflow-hidden">
-            <div className="p-6 border-b border-[var(--border-subtle)] flex justify-between items-center bg-[var(--surface)]">
-              <div>
-                <h3 className="headline-md text-[var(--on-surface)]">API Keys</h3>
-                <p className="body-sm text-[var(--on-surface-variant)] mt-1">Authenticate requests to The Ledger API.</p>
-              </div>
-              <Button className="gap-2">
-                <span className="material-symbols-outlined text-sm">add</span>
-                Generate Key
-              </Button>
+      <SettingsNav />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="space-y-6 lg:col-span-8">
+          <Card className="overflow-hidden p-0">
+            <div className="border-b border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-4">
+              <h2 className="headline-md text-[var(--on-surface)]">Environment</h2>
+              <p className="body-sm text-[var(--on-surface-variant)]">
+                Controls that change how the API behaves for every integration.
+              </p>
             </div>
-            <CardContent className="p-0">
+            <div className="divide-y divide-[var(--border-subtle)]">
+              <DeveloperToggle
+                field="sandboxMode"
+                icon="science"
+                label="Sandbox mode"
+                description="Route dashboard requests to test data instead of live money."
+                enabled={developer.sandboxMode}
+              />
+              <DeveloperToggle
+                field="webhookRetries"
+                icon="replay"
+                label="Webhook retries"
+                description="Retry failed deliveries with exponential backoff for 24 hours."
+                enabled={developer.webhookRetries}
+              />
+            </div>
+          </Card>
+
+          <Card className="overflow-hidden p-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-4">
+              <div>
+                <h2 className="headline-md text-[var(--on-surface)]">API Keys</h2>
+                <p className="body-sm text-[var(--on-surface-variant)] mt-1">
+                  {activeKeys.length} active credential{activeKeys.length === 1 ? "" : "s"} authenticate requests
+                  to The Ledger API.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/settings/api-keys"
+                  className="label-md rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[var(--on-surface)] hover:bg-[var(--surface-container-low)]"
+                >
+                  Manage keys
+                </Link>
+                <CreateApiKeyDialog defaultEnvironment="TEST" triggerLabel="Generate Key" />
+              </div>
+            </div>
+            <div className="overflow-x-auto">
               <Table>
-                <TableHeader className="bg-[var(--surface-container-low)] label-caps sticky top-0">
+                <TableHeader className="label-caps bg-[var(--surface-container-low)]">
                   <TableRow>
                     <TableHead className="label-caps text-[var(--on-surface-variant)]">Name</TableHead>
                     <TableHead className="label-caps text-[var(--on-surface-variant)]">Token</TableHead>
-                    <TableHead className="label-caps text-[var(--on-surface-variant)] text-right">Created</TableHead>
-                    <TableHead className="label-caps text-[var(--on-surface-variant)] text-right" />
+                    <TableHead className="label-caps text-right text-[var(--on-surface-variant)]">
+                      Last used
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow className="hover:bg-[var(--surface-container)]/50">
-                    <TableCell className="body-sm text-[var(--on-surface)]">Production Master Key</TableCell>
-                    <TableCell className="data-mono text-[var(--on-surface-variant)]">sk_live_••••••••••••8f92</TableCell>
-                    <TableCell className="body-sm text-[var(--on-surface-variant)] text-right">Oct 12, 2023</TableCell>
-                    <TableCell className="text-right">
-                      <button className="text-[var(--outline)] hover:text-[var(--on-surface)] transition-colors">
-                        <span className="material-symbols-outlined text-sm">more_vert</span>
-                      </button>
-                    </TableCell>
-                  </TableRow>
-                  <TableRow className="hover:bg-[var(--surface-container)]/50">
-                    <TableCell className="body-sm text-[var(--on-surface)]">Staging Integration</TableCell>
-                    <TableCell className="data-mono text-[var(--on-surface-variant)]">sk_test_••••••••••••3a1b</TableCell>
-                    <TableCell className="body-sm text-[var(--on-surface-variant)] text-right">Nov 04, 2023</TableCell>
-                    <TableCell className="text-right">
-                      <button className="text-[var(--outline)] hover:text-[var(--on-surface)] transition-colors">
-                        <span className="material-symbols-outlined text-sm">more_vert</span>
-                      </button>
-                    </TableCell>
-                  </TableRow>
+                  {activeKeys.map((key) => (
+                    <TableRow key={key.id} className="hover:bg-[var(--surface-container)]/50">
+                      <TableCell className="body-sm text-[var(--on-surface)]">{key.name}</TableCell>
+                      <TableCell className="data-mono text-[var(--on-surface-variant)]">
+                        {key.maskedSecret}
+                      </TableCell>
+                      <TableCell className="body-sm text-right text-[var(--on-surface-variant)]">
+                        {key.lastUsedAt ? formatRelative(key.lastUsedAt) : "Never used"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-            </CardContent>
+            </div>
           </Card>
 
-          {/* Webhook Endpoints Card */}
-          <Card className="overflow-hidden">
-            <div className="p-6 border-b border-[var(--border-subtle)] flex justify-between items-center bg-[var(--surface)]">
+          <Card className="overflow-hidden p-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-4">
               <div>
-                <h3 className="headline-md text-[var(--on-surface)]">Webhook Endpoints</h3>
-                <p className="body-sm text-[var(--on-surface-variant)] mt-1">Receive real-time event notifications.</p>
+                <h2 className="headline-md text-[var(--on-surface)]">Webhook Endpoints</h2>
+                <p className="body-sm text-[var(--on-surface-variant)] mt-1">
+                  Receive real-time event notifications.
+                </p>
               </div>
-              <Button variant="outline" className="gap-2">
-                <span className="material-symbols-outlined text-sm">add_link</span>
-                Add Endpoint
-              </Button>
+              <Link
+                href="/webhooks"
+                className="label-md rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[var(--on-surface)] hover:bg-[var(--surface-container-low)]"
+              >
+                Open webhook console
+              </Link>
             </div>
-            <CardContent className="p-0">
+            <div className="overflow-x-auto">
               <Table>
-                <TableHeader className="bg-[var(--surface-container-low)] label-caps sticky top-0">
+                <TableHeader className="label-caps bg-[var(--surface-container-low)]">
                   <TableRow>
                     <TableHead className="label-caps text-[var(--on-surface-variant)]">Status</TableHead>
                     <TableHead className="label-caps text-[var(--on-surface-variant)]">URL</TableHead>
-                    <TableHead className="label-caps text-[var(--on-surface-variant)] text-right">Events</TableHead>
+                    <TableHead className="label-caps text-right text-[var(--on-surface-variant)]">Events</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow className="hover:bg-[var(--surface-container)]/50">
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[var(--status-success-bg)] text-[var(--success-status)] label-caps text-[10px] border border-[var(--success-status)]/20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-status)]" /> Active
-                      </span>
-                    </TableCell>
-                    <TableCell className="data-mono text-[var(--on-surface)] truncate max-w-[200px]">https://api.acme.com/webhooks/ledger</TableCell>
-                    <TableCell className="body-sm text-[var(--on-surface-variant)] text-right">payment.*</TableCell>
-                  </TableRow>
-                  <TableRow className="hover:bg-[var(--surface-container)]/50">
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[var(--status-error-bg)] text-[var(--failed-status)] label-caps text-[10px] border border-[var(--failed-status)]/20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--failed-status)]" /> Failing
-                      </span>
-                    </TableCell>
-                    <TableCell className="data-mono text-[var(--on-surface)] truncate max-w-[200px]">https://staging.acme.com/hooks/sync</TableCell>
-                    <TableCell className="body-sm text-[var(--on-surface-variant)] text-right">customer.*</TableCell>
-                  </TableRow>
+                  {WEBHOOKS.map((hook) => (
+                    <TableRow key={hook.url} className="hover:bg-[var(--surface-container)]/50">
+                      <TableCell>
+                        <span
+                          className={
+                            hook.status === "Active"
+                              ? "label-caps inline-flex items-center gap-1.5 rounded-full border border-[var(--success-status)]/20 bg-[var(--status-success-bg)] px-2 py-0.5 text-[10px] text-[var(--success-status)]"
+                              : "label-caps inline-flex items-center gap-1.5 rounded-full border border-[var(--failed-status)]/20 bg-[var(--status-error-bg)] px-2 py-0.5 text-[10px] text-[var(--failed-status)]"
+                          }
+                        >
+                          <span
+                            className={
+                              hook.status === "Active"
+                                ? "h-1.5 w-1.5 rounded-full bg-[var(--success-status)]"
+                                : "h-1.5 w-1.5 rounded-full bg-[var(--failed-status)]"
+                            }
+                          />
+                          {hook.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="data-mono max-w-[240px] truncate text-[var(--on-surface)]">
+                        {hook.url}
+                      </TableCell>
+                      <TableCell className="body-sm text-right text-[var(--on-surface-variant)]">
+                        {hook.events}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
-            </CardContent>
+            </div>
           </Card>
         </div>
 
-        {/* Side Column */}
-        <div className="lg:col-span-4 space-y-6">
-          {/* IP Whitelist Card */}
-          <Card className="p-6">
-            <h3 className="headline-md text-[var(--on-surface)] mb-1">IP Whitelist</h3>
-            <p className="body-sm text-[var(--on-surface-variant)] mb-4">Restrict API access to specific IP addresses.</p>
-            <div className="flex gap-2 mb-4">
-              <Input placeholder="e.g. 192.168.1.1" className="flex-1 h-9 data-mono bg-[var(--surface)]" />
-              <Button variant="outline" className="shrink-0">Add</Button>
-            </div>
-            <ul className="space-y-2 border-t border-[var(--border-subtle)] pt-4">
-              <li className="flex justify-between items-center py-1">
-                <span className="data-mono text-[var(--on-surface)]">203.0.113.45</span>
-                <button className="text-[var(--outline)] hover:text-[var(--failed-status)] transition-colors">
-                  <span className="material-symbols-outlined text-sm">close</span>
-                </button>
-              </li>
-              <li className="flex justify-between items-center py-1">
-                <span className="data-mono text-[var(--on-surface)]">198.51.100.2</span>
-                <button className="text-[var(--outline)] hover:text-[var(--failed-status)] transition-colors">
-                  <span className="material-symbols-outlined text-sm">close</span>
-                </button>
-              </li>
-            </ul>
-          </Card>
+        <div className="space-y-6 lg:col-span-4">
+          <IpAllowlistManager entries={developer.ipAllowlist} />
 
-          {/* Documentation Card surface-tint */}
-          <a href="#" className="block bg-[var(--surface-tint)] text-[var(--on-primary)] rounded-xl p-6 shadow-sm hover:opacity-95 transition-opacity relative overflow-hidden group">
-            <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-500">
-              <span className="material-symbols-outlined text-9xl">menu_book</span>
-            </div>
-            <div className="relative z-10">
-              <span className="material-symbols-outlined mb-3 text-3xl">api</span>
-              <h3 className="headline-md font-bold mb-1">API Documentation</h3>
-              <p className="body-sm text-[var(--on-primary-container)] opacity-90 mb-4">Explore comprehensive guides, SDKs, and endpoint references.</p>
-              <span className="inline-flex items-center gap-1 label-caps">
-                View Docs <span className="material-symbols-outlined text-sm">arrow_forward</span>
+          <Link
+            href="/support"
+            className="group relative block overflow-hidden rounded-xl bg-[var(--surface-tint)] p-6 text-[var(--on-primary)] shadow-sm transition-opacity hover:opacity-95"
+          >
+            <div className="absolute -right-4 -bottom-4 opacity-10 transition-transform duration-500 group-hover:scale-110">
+              <span className="material-symbols-outlined text-9xl" aria-hidden="true">
+                menu_book
               </span>
             </div>
-          </a>
+            <div className="relative z-10">
+              <span className="material-symbols-outlined mb-3 text-3xl" aria-hidden="true">
+                api
+              </span>
+              <h3 className="headline-md mb-1 font-bold">API Documentation</h3>
+              <p className="body-sm mb-4 text-[var(--on-primary-container)] opacity-90">
+                Explore guides, SDKs and endpoint references, or open a ticket with the integrations team.
+              </p>
+              <span className="label-caps inline-flex items-center gap-1">
+                View Docs
+                <span className="material-symbols-outlined text-sm" aria-hidden="true">
+                  arrow_forward
+                </span>
+              </span>
+            </div>
+          </Link>
         </div>
       </div>
     </main>

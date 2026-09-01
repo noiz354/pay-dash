@@ -1,91 +1,80 @@
-import { Button } from "@/components/ui/button";
+import type { Metadata } from "next";
+import { Link } from "@/i18n/navigation";
+import { ExportCsvButton } from "@/components/transactions/export-csv-button";
+import { PayoutsSummaryCards } from "@/components/payouts/payouts-summary-cards";
+import { BatchUploadDropzone } from "@/components/payouts/batch-upload-dropzone";
+import { BatchesTable } from "@/components/payouts/batches-table";
+import { getPayoutsOverview, listBatches } from "@/server/data/payouts";
 
-export default function BulkPayoutsPage() {
+// Bulk payouts workspace. The prototype's numbers were broken literals and its
+// dropzone was a decorative div; both now come from (and write to) real data.
+
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Bulk Payouts — Kinetic Ledger",
+  description: "Upload recipients, review the parse and release a batch.",
+};
+
+export default async function BulkPayoutsPage() {
+  const [overview, recent] = await Promise.all([
+    getPayoutsOverview(),
+    listBatches({ sort: "recent", pageSize: 5 }),
+  ]);
+
   return (
-    <main className="mx-auto w-full max-w-[var(--container-max)] p-[var(--gutter)] space-y-6">
+    <main className="mx-auto w-full max-w-container-max space-y-6 p-gutter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <nav aria-label="Breadcrumb" className="mb-1 flex items-center gap-2 text-[var(--on-surface-variant)]">
-            <span className="body-sm">Payments</span>
-            <span className="material-symbols-outlined text-[16px]" aria-hidden="true">chevron_right</span>
-            <span className="body-sm font-medium text-[var(--on-surface)]" aria-current="page">Bulk Payouts</span>
+            <Link href="/payouts" className="body-sm transition-colors hover:text-[var(--primary)]">
+              Payouts
+            </Link>
+            <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+              chevron_right
+            </span>
+            <span className="body-sm font-medium text-[var(--on-surface)]" aria-current="page">
+              Bulk Payouts
+            </span>
           </nav>
           <h1 className="headline-xl leading-tight text-[var(--on-surface)]">Batch Disbursements</h1>
+          <p className="body-md mt-2 max-w-2xl text-[var(--on-surface-variant)]">
+            Upload a recipient file, check the parse result, then create the batch. Nothing is paid until you
+            release it.
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="h-9 gap-2 border-[var(--outline-variant)] bg-[var(--surface-container-lowest)] px-4 text-[var(--on-surface)] hover:bg-[var(--surface-container)] body-sm font-medium">
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">download</span>
-            Export Log
-          </Button>
-          <Button aria-label="New Batch" className="h-9 gap-2 bg-[var(--primary)] px-4 text-[var(--on-primary)] shadow-sm hover:bg-[var(--on-primary-fixed-variant)] body-sm font-medium active:scale-95">
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">add</span>
-            New Batch
-          </Button>
+          <ExportCsvButton label="Export Log" endpoint="/api/exports/payouts" filePrefix="payout-batches" />
+          <Link
+            href="/payouts/settings"
+            className="label-md rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[var(--on-surface)] hover:bg-[var(--surface-container-low)]"
+          >
+            Payout settings
+          </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-2">
-          <div className="flex flex-col justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-5">
-            <div className="mb-4 flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-container)]">
-                  <span className="material-symbols-outlined text-[18px] text-[var(--pending-status)]" aria-hidden="true">pending_actions</span>
-                </div>
-                <span className="label-caps text-[var(--on-surface-variant)]">Pending Disbursements</span>
-              </div>
-              <span className="rounded-full bg-[var(--pending-status)]/10 px-2 py-0.5 label-caps text-[var(--pending-status)]">Processing</span>
-            </div>
-            <div>
-              <div className="headline-xl font-bold tracking-tight text-[var(--on-surface)]">,250,890.00</div>
-              <div className="mt-1 flex items-center gap-2">
-                <span className="body-sm text-[var(--on-surface-variant)]">Across 3 active batches</span>
-              </div>
-            </div>
-          </div>
+      <PayoutsSummaryCards overview={overview} />
 
-          <div className="flex flex-col justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-5">
-            <div className="mb-4 flex items-start justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-container)]">
-                  <span className="material-symbols-outlined text-[18px] text-[var(--success-status)]" aria-hidden="true">task_alt</span>
-                </div>
-                <span className="label-caps text-[var(--on-surface-variant)]">Completed (30D)</span>
-              </div>
-              <div className="flex items-center gap-1 rounded-full bg-[var(--success-status)]/10 px-2 py-0.5 text-[var(--success-status)]">
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">trending_up</span>
-                <span className="label-caps">12%</span>
-              </div>
-            </div>
-            <div>
-              <div className="headline-xl font-bold tracking-tight text-[var(--on-surface)]">8,405,200.50</div>
-              <div className="mt-1 flex items-center gap-2">
-                <span className="body-sm text-[var(--on-surface-variant)]">14,205 total recipients</span>
-              </div>
-            </div>
-          </div>
+      <section className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <span className="material-symbols-outlined text-[20px] text-[var(--primary)]" aria-hidden="true">
+            upload_file
+          </span>
+          <h2 className="headline-md text-[var(--on-surface)]">New batch</h2>
         </div>
+        <BatchUploadDropzone />
+      </section>
 
-        <div className="flex flex-col rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-5 lg:col-span-1">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[20px] text-[var(--primary)]" aria-hidden="true">upload_file</span>
-            <h2 className="headline-md text-[var(--on-surface)]">Quick Upload</h2>
-          </div>
-          <div className="group flex flex-1 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--outline-variant)] bg-[var(--surface-canvas)] p-6 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--surface-container-low)]">
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--surface-container)] transition-colors group-hover:bg-[var(--primary)]/10">
-              <span className="material-symbols-outlined text-[var(--outline)] group-hover:text-[var(--primary)]" aria-hidden="true">description</span>
-            </div>
-            <p className="body-sm text-[var(--on-surface)]">Drag &amp; drop CSV or JSON file</p>
-            <p className="label-caps text-[var(--outline)]">or click to browse</p>
-            <div className="mt-4 w-full border-t border-[var(--outline-variant)]/30 pt-4">
-              <a href="#" className="body-sm flex items-center justify-center gap-1 text-[var(--primary)] hover:underline">
-                Download Template
-                <span className="material-symbols-outlined text-[14px]" aria-hidden="true">open_in_new</span>
-              </a>
-            </div>
-          </div>
+      <section className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)]">
+        <div className="flex items-center justify-between px-4 py-3">
+          <h2 className="headline-md text-[var(--on-surface)]">Recent batches</h2>
+          <Link href="/payouts" className="body-sm text-[var(--primary)] hover:underline">
+            View all payouts
+          </Link>
         </div>
-      </div>
+        <BatchesTable data={recent} />
+      </section>
     </main>
   );
 }
