@@ -2,6 +2,7 @@ import { Link } from "@/i18n/navigation";
 import { MetricCard } from "@/components/layout/metric-card";
 import { DataTable, DataTableContent, TableHeadCell, TableCellMono } from "@/components/layout/data-table";
 import { Hero3DWrapper } from "@/components/three/hero-wrapper";
+import { AnalyticsChart } from "@/components/dashboard/analytics-chart";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -115,6 +116,9 @@ export default function DashboardPage() {
       </div>
 
       <Hero3DWrapper />
+
+      {/* Transaction Analytics — Area chart with gradient, IDR scale, tooltips, loading/empty states */}
+      <AnalyticsChart />
 
       {/* DataTable — label-caps sticky, data-mono right-aligned — fixed AMOUNTSTATUS merge */}
       <DataTable className="mt-6">
