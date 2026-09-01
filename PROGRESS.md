@@ -13,6 +13,7 @@ Build-status tracker for the payment-gateway dashboard. Prototype screens are do
 | 4 i18n/Animation | `next-intl` `app/[locale]` + `motion` | ✅ | 0002 |  | 2026-08-31 |
 | 5 3D/Polish | `three` + R3F + drei behind `dynamic(ssr:false)` + `Hero3D` | ✅ | — |  | 2026-08-31 |
 | 6 Testing/CI | Vitest + RTL + Playwright + GitHub Actions + `prisma migrate deploy` | ✅ | 0001 |  | 2026-08-31 |
+| 7 Flow completeness | Server Actions (create/refund/retry) + URL filter state + toasts/skeletons/empty states + `transactions/[id]` | 🟡 | 0006 |  | 2026-09-01 |
 
 > Flip one row per PR that touches `apps/web`. See `AGENTS.md` and `docs/adr/`.
 
@@ -52,7 +53,8 @@ Build-status tracker for the payment-gateway dashboard. Prototype screens are do
 | Support & Documentation Hub | `screens/desktop/support_documentation_hub_desktop/` | `app/[locale]/support/page.tsx` | ✅ | shadcn 100+ — 2026-08-31 ADR-0002 | Static |
 | System Health & Webhooks | `screens/desktop/system_health_monitoring_desktop/` | `app/[locale]/system/page.tsx` | ✅ | shadcn 100+ — 2026-08-31 ADR-0002 | Webhooks |
 | Team & Permissions | `screens/desktop/team_permissions_desktop/` | `app/[locale]/team/page.tsx` | ✅ | shadcn 100+ — 2026-08-31 ADR-0002 | Shared |
-| Transaction Ledger | `screens/desktop/transaction_ledger_desktop/` | `app/[locale]/transactions/page.tsx` | ✅ | Shared — 2026-08-31 |
+| Transaction Ledger | `screens/desktop/transaction_ledger_desktop/` | `app/[locale]/transactions/page.tsx` | ✅ | Shared — 2026-08-31; URL filters + pagination + row links — 2026-09-01 ADR-0006 |
+| Transaction Detail | _new (follows ledger rows)_ | `app/[locale]/transactions/[id]/page.tsx` | ✅ | Summary + timeline + refund/retry + not-found — 2026-09-01 ADR-0006 |
 
 Full manifest in `SCREENS.md`.
 
@@ -71,11 +73,15 @@ Full manifest in `SCREENS.md`.
 | [0003](docs/adr/0003-postgres-prisma.md) | PostgreSQL + Prisma | Accepted |
 | [0004](docs/adr/0004-auth-clerk-vs-betterauth.md) | Auth — Clerk vs Better Auth | Accepted |
 | [0005](docs/adr/0005-observability-sentry-otel.md) | Observability — Sentry + OTEL | Accepted |
+| [0006](docs/adr/0006-server-actions-transaction-flows.md) | Server Actions + URL state for the transaction journey | Accepted |
+| [0007](docs/adr/0007-customer-directory-and-proxy-activation.md) | Customer directory (derived data seam, deep links) + proxy activation | Accepted |
 
 Template: `docs/adr/TEMPLATE.md`
 
 ## Change Log (newest top)
 
+- **2026-09-01** — Customers pass of the flow audit: real directory at `/[locale]/customers` (URL-driven `q`/`status`/`sort`/`page`, selection + bulk actions, formatted LTV) and the new profile route `/[locale]/customers/[id]`; `server/data/customers.ts` derives customers from the ledger (prototype rows seeded, not deleted) with `createCustomer`/`updateCustomer`; Server Actions `create`/`update`/`archive`; `<CreateCustomerDialog/>` (`?new=1`), `<EditCustomerDialog/>` (`?edit=1`), `<CustomerFilters/>` (`?q=`), `<CustomersTable/>`, `<CustomerRowActions/>`, `<CustomerHeader/>`, `<CustomerStatusMenu/>`, `<CustomerLifetimeStats/>`, `<CustomerPaymentMethods/>`, `<CustomerTransactionsPanel/>`, `<CustomerEmptyState/>`, `<CustomerAvatar/>`, loading/not-found for both routes, CSV route `/api/exports/customers`. Proxy finally executes via `src/middleware.ts` (Next ignores a root `middleware.ts` when `src/` exists): `/` and `/api/*` pass through, bare `/sign-in`/`/sign-up` and `/id` are rewritten, unmatched paths render the in-shell 404, auth redirect gated behind `AUTH_ENFORCED=1`. Tests: `src/server/data/customers.test.ts`, `customer-status-pill.test.tsx`, `e2e/customers.spec.ts`, `e2e/routing.spec.ts`; manual procedure in `docs/audit/customers-test-procedure-2026-09-01.md`; ADR-0007.
+- **2026-09-01** — Flow completeness pass on `dashboard` → `transactions` → `transactions/[id]`: `<CreateTransactionDialog/>`, `<RefundDialog/>`, retry/row-action menus, URL-driven filters + pagination, clickable rows, CSV export route `/api/exports/transactions`, cookie-backed Setup Progress checklist, sonner toasts, `<Suspense>` skeletons, filter-aware empty states, `error.tsx`/`not-found.tsx`, sidebar active state — gap analysis in `docs/audit/user-flow-audit-2026-09-01.md`, ADR-0006.
 - **2026-08-31** — Milestones 3-6: Observability Sentry+OTEL `instrumentation.ts`+`instrumentation-client.ts`+`sentry.*.config.ts` + `WebVitals` pino `track()`; i18n `next-intl` `routing.ts`+`request.ts` `messages/en, id` `withNextIntl`+`NextIntlClientProvider`; 3D `three@0.185`+`@react-three/fiber`+`@react-three/drei` `Hero3D` `dynamic(ssr:false)`; Testing Vitest+RTL+Playwright `vitest.config.ts`+`e2e/smoke.spec.ts`+`ci.yml` `pnpm test` 3 passed — ADR-0005/0002/0001.
 - **2026-08-31** — Migrate `fraud` (`table+tabs+switch+badge` `fraud_prevention_desktop`), `fraud/blocklist` (`table+badge`), `kyc` (`card+progress+accordion+input` `identity_verification_kyc`) — shadcn `AGENTS.md:20` `switch/tabs/calendar`, 13 routes, codegraph 145 files wal — 2026-08-31 ADR-0002.
 - **2026-08-31** — Migrate remaining 14 routes (17 rows) `settings/api-keys`, `reports/builder`, `settings/developer`, `payments/links`, `payouts/settings`, `subscriptions`, `team`, `webhooks`, `settings/merchant`, `settings/notifications`, `risk`, `onboarding`, `support`, `system` — shadcn 100+ (`table, avatar, badge, select, tabs, calendar` etc.) per `AGENTS.md:20`, 27 routes, codegraph 162 files wal — 2026-08-31 ADR-0002.

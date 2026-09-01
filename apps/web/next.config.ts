@@ -40,10 +40,15 @@ const nextConfig: NextConfig = {
       "/support",
       "/risk",
     ];
-    return appRoutes.map((source) => ({
-      source,
-      destination: `/id${source}`,
-    }));
+    const dynamicRoutes = [
+      // Detail routes reached from ledger rows / row actions
+      { source: "/transactions/:id", destination: "/id/transactions/:id" },
+      { source: "/customers/:id", destination: "/id/customers/:id" },
+    ];
+    return [
+      ...appRoutes.map((source) => ({ source, destination: `/id${source}` })),
+      ...dynamicRoutes,
+    ];
   },
   async headers() {
     // Reusable security headers — docs/ARCHITECTURE.md:36 + NEXTJS_CONCEPTS.md #154 ESLint, #36 instrumentation

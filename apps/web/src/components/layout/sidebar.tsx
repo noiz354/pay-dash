@@ -1,4 +1,6 @@
-import { Link } from "@/i18n/navigation";
+"use client";
+
+import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 
 // Reusable Sidebar — w-sidebar-width fixed left-0, bg-inverse-surface (transaction_ledger_desktop:122, DESIGN.md:14)
@@ -30,6 +32,9 @@ const navItems = [
 ];
 
 export function Sidebar({ activeHref }: { activeHref?: string }) {
+  // Active state was never wired (no caller passed activeHref), so every screen
+  // rendered an identical, state-less nav. Derive it from the pathname instead.
+  const pathname = usePathname();
   return (
     <aside className="hidden h-screen w-sidebar-width shrink-0 flex-col border-r border-[var(--outline-variant)] bg-[var(--inverse-surface)] py-4 md:flex fixed left-0 top-0 z-20">
       <div className="px-4 pb-4">
@@ -37,11 +42,13 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3">
         {navItems.map((item) => {
-          const active = activeHref === item.href;
+          const current = activeHref ?? pathname;
+          const active = current === item.href || current.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 body-sm",
                 active

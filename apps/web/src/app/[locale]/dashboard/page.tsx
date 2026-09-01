@@ -1,104 +1,175 @@
+import { Suspense } from "react";
 import { Link } from "@/i18n/navigation";
-import { MetricCard } from "@/components/layout/metric-card";
-import { DataTable, DataTableContent, TableHeadCell, TableCellMono } from "@/components/layout/data-table";
-import { Hero3DWrapper } from "@/components/three/hero-wrapper";
 import { AnalyticsChart } from "@/components/dashboard/analytics-chart";
+import { SetupProgress } from "@/components/dashboard/setup-progress";
+import { Hero3DWrapper } from "@/components/three/hero-wrapper";
+import { CreateTransactionDialog } from "@/components/transactions/create-transaction-dialog";
+import { ExportCsvButton } from "@/components/transactions/export-csv-button";
+import { TransactionsTable } from "@/components/transactions/transactions-table";
+import { TableSkeleton } from "@/components/common/table-skeleton";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatCompactMoney, formatNumber, formatPercent } from "@/lib/format";
+import { getAnalyticsSeries, getLedgerMetrics, listTransactions } from "@/server/data/transactions";
+
+// Dashboard — screens/desktop/dashboard_home_desktop:228-349
+// Every interactive element on this page now resolves to a real destination or
+// mutation: New Transaction -> <CreateTransactionDialog/>, Download report ->
+// /api/exports/transactions, checklist -> Server Action, table rows ->
+// /[locale]/transactions/[id].
+
+export const dynamic = "force-dynamic";
+
+function MetricTile({
+  label,
+  value,
+  delta,
+  deltaTone,
+  hint,
+  href,
+}: {
+  label: string;
+  value: string;
+  delta: string;
+  deltaTone: "positive" | "negative";
+  hint: string;
+  href: string;
+}) {
+  const tone =
+    deltaTone === "positive"
+      ? "text-[var(--success-status)] bg-[var(--success-status)]/10"
+      : "text-[var(--failed-status)] bg-[var(--failed-status)]/10";
+  return (
+    <Link href={href} className="group focus-visible:outline-none">
+      <Card className="h-full bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm flex flex-col justify-between transition-colors group-hover:border-[var(--primary)]/50 group-focus-visible:border-[var(--primary)]">
+        <div>
+          <p className="label-caps text-[var(--on-surface-variant)] mb-1">{label}</p>
+          <h4 className="data-mono text-[28px] font-bold text-[var(--on-surface)] leading-none">{value}</h4>
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded data-mono text-[11px] whitespace-nowrap ${tone}`}>
+            <span className="material-symbols-outlined text-[14px] shrink-0" aria-hidden="true">
+              {deltaTone === "positive" ? "trending_up" : "trending_down"}
+            </span>
+            {delta}
+          </span>
+          <span className="body-sm text-[12px] text-[var(--on-surface-variant)]">{hint}</span>
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+async function MetricsGroup() {
+  const m = await getLedgerMetrics();
+  return (
+    <>
+      <MetricTile
+        label="Total Volume"
+        value={formatCompactMoney(m.totalVolume, m.currency)}
+        delta={formatPercent(m.volumeDelta)}
+        deltaTone={m.volumeDelta >= 0 ? "positive" : "negative"}
+        hint="vs last week"
+        href="/transactions?range=7d"
+      />
+      <MetricTile
+        label="Successful Payments"
+        value={formatNumber(m.succeededCount)}
+        delta={formatPercent(m.succeededDelta)}
+        deltaTone={m.succeededDelta >= 0 ? "positive" : "negative"}
+        hint="vs last week"
+        href="/transactions?status=SUCCEEDED&range=7d"
+      />
+      <MetricTile
+        label="Failure Rate"
+        value={`${m.failedRate.toFixed(1)}%`}
+        delta={formatPercent(m.failedRateDelta)}
+        deltaTone={m.failedRateDelta <= 0 ? "positive" : "negative"}
+        hint="vs last week"
+        href="/transactions?status=FAILED&range=7d"
+      />
+    </>
+  );
+}
+
+async function AnalyticsSection() {
+  const series = await getAnalyticsSeries(7);
+  const hasData = series.some((p) => p.total > 0);
+  return <AnalyticsChart data={hasData ? series : []} />;
+}
+
+async function RecentTransactions() {
+  const { rows } = await listTransactions({ pageSize: 5, page: 1 });
+  return (
+    <TransactionsTable
+      rows={rows}
+      variant="compact"
+      toolbar={
+        <div className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] p-4">
+          <div>
+            <h3 className="headline-md text-[var(--on-surface)]">Recent Transactions</h3>
+            <p className="body-sm text-[var(--on-surface-variant)]">Latest 5 payments across all channels.</p>
+          </div>
+          <Link href="/transactions">
+            <Button variant="outline" className="border-[var(--border-subtle)] gap-1">
+              View all
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                arrow_forward
+              </span>
+            </Button>
+          </Link>
+        </div>
+      }
+    />
+  );
+}
 
 export default function DashboardPage() {
   return (
     <main className="mx-auto max-w-container-max p-gutter space-y-6 pb-12">
-      {/* Welcome Section — screens/desktop/dashboard_home_desktop:228-240 */}
+      {/* Welcome Section */}
       <section className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-[var(--border-subtle)] pb-4">
         <div>
           <h1 className="headline-xl text-[var(--on-surface)]">Welcome back, Sarah</h1>
-          <p className="body-md text-[var(--on-surface-variant)] mt-1">Here&apos;s what&apos;s happening with your accounts today.</p>
+          <p className="body-md text-[var(--on-surface-variant)] mt-1">
+            Here&apos;s what&apos;s happening with your accounts today.
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="border-[var(--border-subtle)] bg-[var(--surface)] hover:bg-[var(--surface-container-low)]">Download Report</Button>
-          <Link href="/transactions">
-            <Button className="bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--on-primary-fixed-variant)] flex items-center gap-2 whitespace-nowrap">
-              <span className="material-symbols-outlined text-[18px] shrink-0" aria-hidden="true">add</span> <span>New Transaction</span>
-            </Button>
-          </Link>
+          <ExportCsvButton label="Download Report" respectFilters={false} />
+          <CreateTransactionDialog />
         </div>
       </section>
 
-      {/* Bento Grid — screens/desktop/dashboard_home_desktop:242-349 */}
+      {/* Bento Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Setup Progress — lg:col-span-4 */}
-        <Card className="lg:col-span-4 bg-[var(--surface)] border-[var(--border-subtle)] p-5 flex flex-col shadow-sm min-w-0 overflow-hidden">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="headline-md text-[var(--on-surface)]">Setup Progress</h3>
-            <span className="label-caps text-[var(--primary)] bg-[var(--primary-container)]/10 px-2 py-0.5 rounded">60%</span>
-          </div>
-          <div className="w-full bg-[var(--surface-container-high)] rounded-full h-1.5 mb-6">
-            <div className="bg-[var(--primary)] h-1.5 rounded-full" style={{ width: "60%" }} aria-valuenow={60} aria-valuemin={0} aria-valuemax={100} role="progressbar" />
-          </div>
-          <div className="space-y-4 flex-1 min-w-0">
-            <div className="flex gap-3 items-start min-w-0">
-              <span className="material-symbols-outlined text-[var(--success-status)] text-[20px] mt-0.5 shrink-0" aria-hidden="true">check_circle</span>
-              <p className="body-sm font-medium text-[var(--on-surface-variant)] line-through break-words min-w-0">Verify Business Details</p>
-            </div>
-            <div className="flex gap-3 items-start min-w-0">
-              <span className="material-symbols-outlined text-[var(--success-status)] text-[20px] mt-0.5 shrink-0" aria-hidden="true">check_circle</span>
-              <p className="body-sm font-medium text-[var(--on-surface-variant)] line-through break-words min-w-0">Connect Bank Account</p>
-            </div>
-            <div className="flex gap-3 items-start bg-[var(--surface-container-low)] p-2 rounded -mx-2 border border-[var(--primary)]/20 min-w-0 overflow-hidden">
-              <span className="material-symbols-outlined text-[var(--primary)] text-[20px] mt-0.5 shrink-0" aria-hidden="true">radio_button_unchecked</span>
-              <div className="min-w-0 flex-1">
-                <p className="body-sm font-medium text-[var(--on-surface)] break-words">Configure Routing Rules</p>
-                <p className="body-sm text-[var(--on-surface-variant)] text-[12px] mt-0.5 break-words">Set up intelligent payment routing to optimize costs.</p>
-              </div>
-            </div>
-            <div className="flex gap-3 items-start min-w-0">
-              <span className="material-symbols-outlined text-[var(--outline)] text-[20px] mt-0.5 shrink-0" aria-hidden="true">radio_button_unchecked</span>
-              <p className="body-sm font-medium text-[var(--on-surface)] break-words min-w-0">Enable Webhooks</p>
-            </div>
-          </div>
-        </Card>
+        <Suspense
+          fallback={
+            <Card className="lg:col-span-4 p-5 space-y-4">
+              <Skeleton className="h-5 w-32 bg-[var(--surface-container-high)]" />
+              <Skeleton className="h-1.5 w-full bg-[var(--surface-container-high)]" />
+              <Skeleton className="h-40 w-full bg-[var(--surface-container-low)]" />
+            </Card>
+          }
+        >
+          <SetupProgress />
+        </Suspense>
 
-        {/* Metrics Group — lg:col-span-8 */}
         <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm flex flex-col justify-between">
-            <div>
-              <p className="label-caps text-[var(--on-surface-variant)] mb-1">Total Volume</p>
-              <h4 className="data-mono text-[28px] font-bold text-[var(--on-surface)] leading-none">$1.24M</h4>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <span className="flex items-center gap-1 text-[var(--success-status)] bg-[var(--success-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px] whitespace-nowrap">
-                <span className="material-symbols-outlined text-[14px] shrink-0" aria-hidden="true">trending_up</span> +12.5%
-              </span>
-              <span className="body-sm text-[12px] text-[var(--on-surface-variant)]">vs last month</span>
-            </div>
-          </Card>
-          <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm flex flex-col justify-between">
-            <div>
-              <p className="label-caps text-[var(--on-surface-variant)] mb-1">Active Subscriptions</p>
-              <h4 className="data-mono text-[28px] font-bold text-[var(--on-surface)] leading-none">8,402</h4>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <span className="flex items-center gap-1 text-[var(--success-status)] bg-[var(--success-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px] whitespace-nowrap">
-                <span className="material-symbols-outlined text-[14px] shrink-0" aria-hidden="true">trending_up</span> +4.2%
-              </span>
-              <span className="body-sm text-[12px] text-[var(--on-surface-variant)]">vs last month</span>
-            </div>
-          </Card>
-          <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm flex flex-col justify-between">
-            <div>
-              <p className="label-caps text-[var(--on-surface-variant)] mb-1">Failed Transactions</p>
-              <h4 className="data-mono text-[28px] font-bold text-[var(--on-surface)] leading-none">0.8%</h4>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <span className="flex items-center gap-1 text-[var(--failed-status)] bg-[var(--failed-status)]/10 px-1.5 py-0.5 rounded data-mono text-[11px] whitespace-nowrap">
-                <span className="material-symbols-outlined text-[14px] shrink-0" aria-hidden="true">trending_up</span> +0.1%
-              </span>
-              <span className="body-sm text-[12px] text-[var(--on-surface-variant)]">vs last month</span>
-            </div>
-          </Card>
+          <Suspense
+            fallback={
+              <>
+                <Skeleton className="h-32 w-full bg-[var(--surface-container-low)] rounded-xl" />
+                <Skeleton className="h-32 w-full bg-[var(--surface-container-low)] rounded-xl" />
+                <Skeleton className="h-32 w-full bg-[var(--surface-container-low)] rounded-xl" />
+              </>
+            }
+          >
+            <MetricsGroup />
+          </Suspense>
 
-          {/* Quick Actions Grid — spans 8 col area */}
+          {/* Quick Actions */}
           <div className="sm:col-span-3 grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
             {[
               { label: "Create Invoice", icon: "receipt_long", href: "/billing" },
@@ -106,8 +177,17 @@ export default function DashboardPage() {
               { label: "Payouts", icon: "account_balance", href: "/payouts/bulk" },
               { label: "API Keys", icon: "api", href: "/settings/api-keys" },
             ].map((a) => (
-              <Link key={a.label} href={a.href} className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-lg p-4 flex flex-col items-center justify-center gap-2 hover:bg-[var(--surface-container-low)] hover:border-[var(--primary)]/50 group transition-colors min-w-0">
-                <span className="material-symbols-outlined text-[var(--on-surface-variant)] group-hover:text-[var(--primary)] shrink-0" aria-hidden="true">{a.icon}</span>
+              <Link
+                key={a.label}
+                href={a.href}
+                className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-lg p-4 flex flex-col items-center justify-center gap-2 hover:bg-[var(--surface-container-low)] hover:border-[var(--primary)]/50 group transition-colors min-w-0"
+              >
+                <span
+                  className="material-symbols-outlined text-[var(--on-surface-variant)] group-hover:text-[var(--primary)] shrink-0"
+                  aria-hidden="true"
+                >
+                  {a.icon}
+                </span>
                 <span className="body-sm font-medium text-[var(--on-surface)] text-center break-words">{a.label}</span>
               </Link>
             ))}
@@ -117,27 +197,13 @@ export default function DashboardPage() {
 
       <Hero3DWrapper />
 
-      {/* Transaction Analytics — Area chart with gradient, IDR scale, tooltips, loading/empty states */}
-      <AnalyticsChart />
+      <Suspense fallback={<AnalyticsChart isLoading />}>
+        <AnalyticsSection />
+      </Suspense>
 
-      {/* DataTable — label-caps sticky, data-mono right-aligned — fixed AMOUNTSTATUS merge */}
-      <DataTable className="mt-6">
-        <DataTableContent>
-          <table className="w-full text-sm table-fixed min-w-[480px]">
-            <thead className="sticky top-0 bg-[var(--surface-container-low)]">
-              <tr className="label-caps text-[var(--on-surface-variant)]">
-                <TableHeadCell className="w-[160px]">ID</TableHeadCell>
-                <TableHeadCell className="w-[140px] text-right">Amount</TableHeadCell>
-                <TableHeadCell className="w-[120px]">Status</TableHeadCell>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--border-subtle)]">
-              <tr><TableCellMono>txn_001</TableCellMono><TableCellMono className="text-right">IDR 1,000,000.00</TableCellMono><td className="px-[var(--cell-x)] py-[var(--cell-y)]"><span className="rounded-full bg-[var(--success-status)]/10 px-2 py-1 text-xs font-semibold text-[var(--success-status)]">Succeeded</span></td></tr>
-              <tr><TableCellMono>txn_002</TableCellMono><TableCellMono className="text-right">IDR 250,000.00</TableCellMono><td className="px-[var(--cell-x)] py-[var(--cell-y)]"><span className="rounded-full bg-[var(--pending-status)]/10 px-2 py-1 text-xs font-semibold text-[var(--pending-status)]">Pending</span></td></tr>
-            </tbody>
-          </table>
-        </DataTableContent>
-      </DataTable>
+      <Suspense fallback={<TableSkeleton rows={5} columns={5} />}>
+        <RecentTransactions />
+      </Suspense>
     </main>
   );
 }
