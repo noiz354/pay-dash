@@ -25,6 +25,7 @@ const navItems = [
   { href: "/onboarding", label: "Onboarding", icon: "checklist" },
   { href: "/support", label: "Support", icon: "help" },
   { href: "/risk", label: "Risk", icon: "warning" },
+  { href: "/settings", label: "Settings", icon: "tune" },
   { href: "/settings/merchant", label: "Merchant", icon: "store" },
   { href: "/settings/notifications", label: "Notifications", icon: "notifications" },
   { href: "/settings/api-keys", label: "API Keys", icon: "key" },

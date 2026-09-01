@@ -215,3 +215,58 @@ not-found.
 `getInvoiceTransactions`, `getInvoiceLineItems`, `getInvoiceTimeline`,
 `getBillingSummary`, `payInvoice`, `invoicesToCsv`, `invoiceStatementCsv`.
 Client-safe vocabulary in `src/lib/invoice-status.ts`. See ADR-0008.
+
+---
+
+## Page 5 — `/[locale]/settings` (+ merchant, notifications, api-keys, developer)
+
+### User Capabilities (intended action → expected outcome)
+
+| Element | Intended action | Expected outcome |
+| --- | --- | --- |
+| Sidebar "Merchant / Notifications / API Keys / Developer" | Enter the settings cluster | Land on the section, know where you are |
+| Settings hub | See what is configured | Status per section, one click into each |
+| Legal name / DBA / address / tax ID / support email | Edit business identity | Values validate and persist |
+| Brand logo + brand colour | Restyle checkout & receipts | Live preview, hex validation |
+| Statement descriptor | Control the cardholder statement | Uppercased, capped at 22 chars |
+| Cancel / Save Changes | Discard or commit edits | Disabled until dirty; Save reports success |
+| Global channel switches (email/SMS/dashboard) | Mute a delivery channel | Flip persists immediately |
+| Per-topic frequency select | Instant / daily / weekly / off | Persists; critical topics locked |
+| Per-topic dashboard + SMS switches | Route a topic to a channel | Persist per topic |
+| Copy key button | Copy a secret key | Clipboard + confirmation |
+| `more_vert` on a key row | Copy / roll / revoke | Menu with confirmed destructive actions |
+| Generate New Key | Issue a credential | Named, scoped, secret revealed once |
+| IP field + Add | Restrict API access | Validated, listed, removable |
+| Docs card | Read the API reference | Navigates somewhere real |
+
+### Missing UI Components (built this pass)
+
+- **`/settings` did not exist at all** — new hub page + `<SettingsNav/>` tab strip mounted on all five routes.
+- `<MerchantProfileForm/>` — the first actual `<form>` on the page: controlled values, dirty tracking,
+  disabled-until-dirty Save, Cancel-restores-baseline, inline field errors, live colour swatch + native
+  picker, logo fallback, statement descriptor counter, auto-debit switch.
+- `<NotificationPreferencesForm/>` — global channel rows and a per-topic matrix with optimistic writes.
+- `<ApiKeysTable/>`, `<CreateApiKeyDialog/>`, `<ApiKeyRowActions/>`, `<SecretReveal/>` — data-driven key
+  tables, a two-step create flow, reveal-once secrets, confirmed roll/revoke, revoked-row styling.
+- `<IpAllowlistManager/>` — validated add, listed rules with labels and dates, per-row remove.
+- `<DeveloperToggle/>` — optimistic sandbox-mode / webhook-retry switches.
+- Empty states: no keys in an environment, no IP rules.
+- `loading.tsx` for all five routes.
+
+### State & Feedback Gaps (closed)
+
+- Nothing on any settings screen persisted; there were no pending, success or error states anywhere.
+  Every control now writes through a Server Action and reports via sonner.
+- Two deliberate idioms: **transactional** (merchant form — explicit Save, dirty guard, `beforeunload`)
+  and **ambient** (switches/selects — optimistic flip with rollback on failure).
+- Destructive key actions gate on an explicit checkbox and show a working spinner.
+- Critical topics are disabled in the UI *and* rejected in the data layer, so the lock cannot drift.
+
+### Routing Dead-Ends (fixed)
+
+- `/settings` 404 → hub page; also added to the sidebar.
+- Notifications breadcrumb `<a href="#">` → locale-aware `Link` to `/settings`; the same breadcrumb
+  added to merchant, api-keys and developer.
+- Developer docs card `<a href="#">` → `/support`.
+- Developer webhook card → `/webhooks` console; developer API-keys card → `/settings/api-keys`.
+- Hub "Related settings" surfaces `/payouts/settings`, `/webhooks`, `/billing`.
