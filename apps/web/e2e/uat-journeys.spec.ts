@@ -401,15 +401,15 @@ test.describe("E. Risk, Fraud, Compliance (orphaned)", () => {
     await expect(page.getByLabel("Full name")).toBeVisible();
   });
 
-  test("E4 risk slider and switch revert on refresh", async ({ page }) => {
+  test("E4 risk serves the derived ruleset with a real draft workflow", async ({ page }) => {
+    // Rebuilt in ADR-0023 — the old slider/#block iteration and the
+    // prototype's invented alert counts are gone; the page now serves the
+    // app's own ruleset with derived, deep-linked alerts.
     await page.goto("/en/risk");
     await expect(page.getByRole("heading", { name: /Risk/ })).toBeVisible();
-    await expect(page.getByText("Dashboard-only config")).toBeVisible();
-    await expect(page.getByText("5 transactions/min")).toBeVisible();
-    const sw = page.locator("#block");
-    await expect(sw).toBeVisible();
-    await page.reload();
-    await expect(page.getByText("5 transactions/min")).toBeVisible();
+    await expect(page.getByText("12% vs yesterday")).toHaveCount(0);
+    await expect(page.getByText("Card velocity")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Deploy Changes" })).toBeVisible();
   });
 });
 
