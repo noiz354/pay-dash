@@ -16,8 +16,8 @@ export const SETUP_STEPS = [
   },
   {
     id: "routing",
-    title: "Configure Routing Rules",
-    description: "Set up intelligent payment routing to optimize costs.",
+    title: "Create a Payment Link",
+    description: "Send a customer a link they can pay — every payment on it lands in your ledger.",
     href: "/payments/links",
   },
   {
