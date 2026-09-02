@@ -1,8 +1,19 @@
+import * as React from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { IntlProvider } from "next-intl";
 import { CustomerStatusPill } from "@/components/customers/customer-status-pill";
 import { CustomerAvatar, paletteFor } from "@/components/customers/customer-avatar";
 import { CustomerEmptyState } from "@/components/customers/customer-empty-state";
+
+// The empty state renders the next-intl Link, which needs an intl context.
+function renderWithIntl(ui: React.ReactElement) {
+  return render(
+    <IntlProvider locale="en" messages={{}}>
+      {ui}
+    </IntlProvider>
+  );
+}
 
 describe("CustomerStatusPill", () => {
   it("renders a human label for every status", () => {
@@ -33,13 +44,21 @@ describe("CustomerAvatar", () => {
 
 describe("CustomerEmptyState", () => {
   it("distinguishes no-data from no-match", () => {
-    const { rerender } = render(<CustomerEmptyState variant="no-data" />);
+    const { rerender } = renderWithIntl(<CustomerEmptyState variant="no-data" />);
     expect(screen.getByText("No customers yet")).toBeInTheDocument();
 
-    rerender(<CustomerEmptyState variant="no-match" />);
+    rerender(
+      <IntlProvider locale="en" messages={{}}>
+        <CustomerEmptyState variant="no-match" />
+      </IntlProvider>
+    );
     expect(screen.getByText("No customers match these filters")).toBeInTheDocument();
 
-    rerender(<CustomerEmptyState variant="no-payments" />);
+    rerender(
+      <IntlProvider locale="en" messages={{}}>
+        <CustomerEmptyState variant="no-payments" />
+      </IntlProvider>
+    );
     expect(screen.getByText("No payments yet")).toBeInTheDocument();
   });
 });

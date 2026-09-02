@@ -73,6 +73,40 @@ export const WEEKDAYS = [
 export type Weekday = (typeof WEEKDAYS)[number];
 
 /**
+ * Next automatic payout run for a schedule, or null for a manual schedule.
+ * The partner's batch window opens 02:00 UTC, so every cadence lands there.
+ * Deterministic and client-safe: the balance card and the settings page must
+ * quote the same "next run" from the same settings.
+ */
+export function nextRunForCadence(
+  cadence: PayoutCadence,
+  weekday: Weekday,
+  monthDay: number,
+  now: Date = new Date()
+): string | null {
+  if (cadence === "manual") return null;
+
+  const d = new Date(now);
+  d.setUTCHours(2, 0, 0, 0);
+
+  if (cadence === "daily") {
+    if (d.getTime() <= now.getTime()) d.setUTCDate(d.getUTCDate() + 1);
+  } else if (cadence === "weekly") {
+    const target = WEEKDAYS.indexOf(weekday);
+    const mondayIndex = (d.getUTCDay() + 6) % 7; // JS: 0 = Sunday
+    let delta = (target - mondayIndex + 7) % 7;
+    if (delta === 0 && d.getTime() <= now.getTime()) delta = 7;
+    d.setUTCDate(d.getUTCDate() + delta);
+  } else {
+    const day = Math.min(28, Math.max(1, monthDay));
+    d.setUTCDate(day);
+    if (d.getTime() <= now.getTime()) d.setUTCMonth(d.getUTCMonth() + 1, day);
+  }
+
+  return d.toISOString();
+}
+
+/**
  * Accepts "50,000", "Rp 50.000", "50000" → 50000. Returns null when the string
  * holds no digits, so the form can distinguish "empty" from "zero".
  */

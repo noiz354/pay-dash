@@ -9,6 +9,7 @@ import {
   approveBatch,
   cancelBatch,
   createBatch,
+  getPayoutSettings,
   retryBatchFailures,
   retryRecipient,
   updatePayoutSettings,
@@ -30,6 +31,9 @@ function revalidatePayouts(id?: string) {
   revalidatePath("/[locale]/payouts/bulk", "page");
   revalidatePath("/payouts/bulk");
   revalidatePath("/[locale]/payouts/settings", "page");
+  // Payout state changes move the reserved/available figures on /balance (ADR-0011).
+  revalidatePath("/[locale]/balance", "page");
+  revalidatePath("/balance");
   if (id) {
     revalidatePath("/[locale]/payouts/[id]", "page");
     revalidatePath(`/payouts/${id}`);
@@ -260,6 +264,33 @@ export async function setDestinationAccountAction(
     return { status: "success", message: "Destination account updated." };
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Update failed." };
+  }
+}
+
+/**
+ * The balance page's Auto-Withdrawal switch. Flips `automated` without
+ * re-collecting the whole schedule; a manual cadence is promoted to daily
+ * because an automated payout cannot run "never" (ADR-0010's refine).
+ */
+export async function toggleAutoWithdrawalAction(
+  _prev: ActionState<{ automated: boolean }> | undefined,
+  formData: FormData
+): Promise<ActionState<{ automated: boolean }>> {
+  const enabled = formData.get("automated") === "on";
+  try {
+    const current = await getPayoutSettings();
+    const cadence = enabled && current.cadence === "manual" ? "daily" : current.cadence;
+    await updatePayoutSettings({ automated: enabled, cadence });
+    revalidatePayouts();
+    return {
+      status: "success",
+      message: enabled
+        ? `Auto-withdrawal is on — ${cadence === "daily" ? "daily" : current.cadence}.`
+        : "Auto-withdrawal is off.",
+      data: { automated: enabled },
+    };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Toggle failed." };
   }
 }
 
