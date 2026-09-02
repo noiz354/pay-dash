@@ -425,14 +425,19 @@ test.describe("F. Team / Admin / System (orphaned + RBAC gap)", () => {
     await expect(page.getByText("Full access to the dashboard, including team and merchant settings.")).toBeVisible();
   });
 
-  test("F2 audit log tabs and calendar and unchecked unauth @known-gap", async ({ page }) => {
+  test("F2 audit log serves the derived event history", async ({ page }) => {
+    // Rebuilt in ADR-0026 — the prototype's five 2023-10-24 rows, "1 of
+    // 12,042 events" and the User/IP columns are gone; rows derive from the
+    // stores that record them, and the ⌘K hint is real (focuses search).
     await page.goto("/en/audit");
     await expect(page.getByRole("heading", { name: /Audit Log/ })).toBeVisible();
-    await page.getByRole("tab", { name: "Footer" }).click();
-    await expect(page.getByText("Footer logs")).toBeVisible();
-    await page.getByRole("tab", { name: "Main" }).click();
-    await expect(page.getByText("log_001")).toBeVisible();
+    await expect(page.getByText("177 events")).toBeVisible();
+    await expect(page.getByText("12,042")).toHaveCount(0);
+    await expect(page.getByText("2023")).toHaveCount(0);
     await expect(page.locator("text=⌘").first()).toBeVisible();
+    await page.getByLabel("Filter events by status").click();
+    await page.getByRole("option", { name: "Status: Failed" }).click();
+    await expect(page.getByText("4 events")).toBeVisible();
   });
 
   test("F3 reports builder runs real queries over the ledger", async ({ page }) => {
