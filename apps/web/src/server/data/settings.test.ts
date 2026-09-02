@@ -128,11 +128,10 @@ describe("api keys", () => {
 });
 
 describe("developer settings", () => {
-  it("toggles sandbox mode and webhook retries independently", async () => {
+  it("toggles sandbox mode", async () => {
     await setDeveloperToggle("sandboxMode", false);
     const dev = await getDeveloperSettings();
     expect(dev.sandboxMode).toBe(false);
-    expect(dev.webhookRetries).toBe(true);
   });
 
   it("adds and removes allowlist entries", async () => {

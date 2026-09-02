@@ -79,7 +79,6 @@ export type IpAllowEntry = {
 
 export type DeveloperSettings = {
   sandboxMode: boolean;
-  webhookRetries: boolean;
   ipAllowlist: IpAllowEntry[];
   updatedAt: string | null;
 };
@@ -201,7 +200,6 @@ function defaultStore(): Store {
     ],
     developer: {
       sandboxMode: true,
-      webhookRetries: true,
       ipAllowlist: [
         { id: "ip_office", value: "203.0.113.24", label: "HQ office", createdAt: "2024-02-11T09:00:00.000Z" },
         { id: "ip_ci", value: "198.51.100.0/24", label: "CI runners", createdAt: "2024-05-02T09:00:00.000Z" },
@@ -348,7 +346,7 @@ export async function getDeveloperSettings(): Promise<DeveloperSettings> {
 }
 
 export async function setDeveloperToggle(
-  field: "sandboxMode" | "webhookRetries",
+  field: "sandboxMode",
   enabled: boolean
 ): Promise<DeveloperSettings> {
   const s = store();

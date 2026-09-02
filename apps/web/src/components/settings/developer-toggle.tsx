@@ -15,7 +15,7 @@ export function DeveloperToggle({
   icon,
   enabled,
 }: {
-  field: "sandboxMode" | "webhookRetries";
+  field: "sandboxMode";
   label: string;
   description: string;
   icon: string;
