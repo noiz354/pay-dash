@@ -417,25 +417,18 @@ test.describe("E. Risk, Fraud, Compliance (orphaned)", () => {
 // F. Team / Admin / System
 // ──────────────────────────────────────────────────────────
 test.describe("F. Team / Admin / System (orphaned + RBAC gap)", () => {
-  test("F1 team controls inert and no RBAC denial @known-gap", async ({ page }) => {
+  test("F1 team serves the real member store", async ({ page }) => {
+    // Rebuilt in ADR-0022 — the prototype's hard-coded @ledger.com directory,
+    // its unreachable "0 selected" bar and its placeholder tabs are gone; the
+    // page now serves the app's own member store with real RBAC catalog.
     await page.goto("/en/team");
     await expect(page.getByRole("heading", { name: /Team/ })).toBeVisible();
-    await page.getByRole("button", { name: "Invite" }).click();
-    await expect(page).toHaveURL(/team/);
-    await page.getByRole("combobox").click();
-    await expect(page.getByText("Admin")).toBeVisible();
-    await page.keyboard.press("Escape");
-    // 2FA switch
-    const sw = page.locator('button[role="switch"]').first();
-    await expect(sw).toBeVisible();
-    // Dropdown Remove
-    const more = page.locator('button:has-text("⋯")').first();
-    if (await more.isVisible()) {
-      await more.click();
-      await expect(page.getByText("Remove")).toBeVisible();
-      await page.keyboard.press("Escape");
-    }
-    // No RBAC denial for member — gap documented
+    await expect(page.getByText("ledger.com")).toHaveCount(0);
+    await expect(page.getByText("Daniel Wirawan")).toBeVisible();
+    await page.getByRole("tab", { name: "Pending Invites" }).click();
+    await expect(page.getByRole("button", { name: "Revoke" })).toBeVisible();
+    await page.getByRole("tab", { name: "Roles" }).click();
+    await expect(page.getByText("Full access to the dashboard, including team and merchant settings.")).toBeVisible();
   });
 
   test("F2 audit log tabs and calendar and unchecked unauth @known-gap", async ({ page }) => {
