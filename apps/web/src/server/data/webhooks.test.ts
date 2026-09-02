@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  getSystemWebhookSummary,
   getWebhookEvent,
   listWebhooks,
   recordInbound,
@@ -165,6 +166,31 @@ describe("recordInbound (shared pipeline)", () => {
     expect(deduped).toBe(true);
     const rows = listWebhooks({ q: "evt_a1b2c3d4", pageSize: 100 });
     expect(rows.rows.filter((r) => r.status === "DUPLICATED")).toHaveLength(2);
+  });
+});
+
+describe("getSystemWebhookSummary (the /system page)", () => {
+  it("counts the last 24h by outcome — deterministically", () => {
+    // The seeds are now-relative offsets: seed_1 (2h) and seed_2 (1h59m)
+    // are inside the window, seed_3 (27h) is not — independent of the
+    // wall clock at run time.
+    const s = getSystemWebhookSummary();
+    expect(s.last24h).toEqual({ total: 2, received: 1, duplicated: 1, rejected: 0 });
+  });
+
+  it("lists the five most recent callbacks and the newest timestamp", () => {
+    const s = getSystemWebhookSummary();
+    expect(s.recent).toHaveLength(5);
+    expect(s.recent[0]?.id).toBe("whk_seed_2"); // the retry is the newest row
+    expect(s.lastReceivedAt).toBe(getWebhookEvent("whk_seed_2")?.receivedAt);
+  });
+
+  it("tracks live callbacks — a new rejection appears in both views", () => {
+    rejectInbound({ reason: "Invalid x-callback-token", raw: "{}" });
+    const s = getSystemWebhookSummary();
+    expect(s.last24h.total).toBe(3);
+    expect(s.last24h.rejected).toBe(1);
+    expect(s.recent[0]?.status).toBe("REJECTED");
   });
 });
 

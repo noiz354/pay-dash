@@ -231,6 +231,37 @@ export function getWebhookEvent(id: string): WebhookEvent | null {
   return store().events.find((e) => e.id === id.trim()) ?? null;
 }
 
+export type SystemWebhookSummary = {
+  /** Inbound callbacks in the last 24 hours, by outcome. */
+  last24h: { total: number; received: number; duplicated: number; rejected: number };
+  /** The five most recent callbacks (any age), newest first. */
+  recent: WebhookEvent[];
+  /** When the newest callback arrived — the "last callback" chip. */
+  lastReceivedAt: string | null;
+};
+
+// The /system status page states only what the app measures (ADR-0017):
+// inbound webhook flow. The seeds are now-relative offsets, so the 24h
+// window membership is deterministic — whk_seed_1 (2h) and whk_seed_2
+// (1h59m) are inside; everything else (27h+) is outside.
+export function getSystemWebhookSummary(): SystemWebhookSummary {
+  const all = [...store().events].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const inWindow = all.filter((e) => new Date(e.receivedAt).getTime() >= cutoff);
+
+  const count = (status: WebhookStatus) => inWindow.filter((e) => e.status === status).length;
+  return {
+    last24h: {
+      total: inWindow.length,
+      received: count("RECEIVED"),
+      duplicated: count("DUPLICATED"),
+      rejected: count("REJECTED"),
+    },
+    recent: all.slice(0, 5),
+    lastReceivedAt: all[0]?.receivedAt ?? null,
+  };
+}
+
 export type RecordInboundInput = {
   eventId: string;
   type: string;
