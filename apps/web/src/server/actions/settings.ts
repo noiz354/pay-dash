@@ -285,7 +285,7 @@ export async function removeIpAllowAction(
 }
 
 const DevToggleSchema = z.object({
-  field: z.enum(["sandboxMode", "webhookRetries"]),
+  field: z.enum(["sandboxMode"]),
   enabled: z.boolean(),
 });
 
@@ -302,9 +302,6 @@ export async function updateDeveloperToggleAction(
   revalidateSettings("developer");
   return {
     status: "success",
-    message:
-      parsed.data.field === "sandboxMode"
-        ? `Sandbox mode ${parsed.data.enabled ? "on" : "off"}.`
-        : `Webhook retries ${parsed.data.enabled ? "enabled" : "disabled"}.`,
+    message: `Sandbox mode ${parsed.data.enabled ? "on" : "off"}.`,
   };
 }

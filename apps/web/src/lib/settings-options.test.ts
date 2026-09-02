@@ -1,9 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { DIGEST_LABELS, DIGEST_OPTIONS, isValidHexColor, isValidIpOrCidr } from "./settings-options";
+import {
+  DIGEST_LABELS,
+  DIGEST_OPTIONS,
+  isValidHexColor,
+  isValidIpOrCidr,
+  merchantGreeting,
+} from "./settings-options";
 
 describe("settings vocabulary", () => {
   it("labels every digest option", () => {
     for (const option of DIGEST_OPTIONS) expect(DIGEST_LABELS[option]).toBeTruthy();
+  });
+});
+
+describe("merchantGreeting", () => {
+  it("prefers the trading name (dba) over the legal name", () => {
+    expect(merchantGreeting({ dba: "Acme", legalName: "Acme Corporation LLC" })).toBe("Acme");
+  });
+
+  it("falls back to the legal name when there is no trading name", () => {
+    expect(merchantGreeting({ dba: "  ", legalName: "Kinetic Ledger Ltd" })).toBe("Kinetic Ledger Ltd");
+  });
+
+  it("never invents a person's name — only profile data is returned", () => {
+    const profile = { dba: "Globex", legalName: "Globex Corporation" };
+    expect(merchantGreeting(profile)).toBe("Globex");
+    // Guard against regressing to the prototype's hard-coded "Sarah".
+    expect(merchantGreeting(profile)).not.toBe("Sarah");
   });
 });
 

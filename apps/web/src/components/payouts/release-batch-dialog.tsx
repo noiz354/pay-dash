@@ -84,8 +84,9 @@ export function ReleaseBatchDialog({
   const param = mode === "send" ? "send" : "cancel";
   const wantsOpen = searchParams.get(param) === "1" || searchParams.get(param) === batchId;
   const [open, setOpen] = React.useState(wantsOpen);
+  // Both actions share the useActionState shape; cancel simply never fills `data`.
   const [state, formAction] = useActionState(
-    mode === "send" ? approveBatchAction : (cancelBatchAction as typeof approveBatchAction),
+    (mode === "send" ? approveBatchAction : cancelBatchAction) as typeof approveBatchAction,
     initialState
   );
   const handled = React.useRef<typeof state | null>(null);

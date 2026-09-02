@@ -1,10 +1,11 @@
 import { Suspense } from "react";
 import { Link } from "@/i18n/navigation";
 import { AnalyticsChart } from "@/components/dashboard/analytics-chart";
+import { BalanceStrip } from "@/components/dashboard/balance-strip";
+import { ChartRangeTabs, type ChartRange } from "@/components/dashboard/chart-range-tabs";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { SetupProgress } from "@/components/dashboard/setup-progress";
 import { Hero3DWrapper } from "@/components/three/hero-wrapper";
-import { CreateTransactionDialog } from "@/components/transactions/create-transaction-dialog";
-import { ExportCsvButton } from "@/components/transactions/export-csv-button";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { TableSkeleton } from "@/components/common/table-skeleton";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,24 @@ import { formatCompactMoney, formatNumber, formatPercent } from "@/lib/format";
 import { getAnalyticsSeries, getLedgerMetrics, listTransactions } from "@/server/data/transactions";
 
 // Dashboard — screens/desktop/dashboard_home_desktop:228-349
-// Every interactive element on this page now resolves to a real destination or
-// mutation: New Transaction -> <CreateTransactionDialog/>, Download report ->
-// /api/exports/transactions, checklist -> Server Action, table rows ->
-// /[locale]/transactions/[id].
+// Every interactive element on this page resolves to a real destination or
+// mutation: header actions -> dialog/export, metric tiles -> filtered
+// ledger, quick actions -> real routes (customer create via ?new=1),
+// checklist -> Server Action (bank step derived from the verified account),
+// chart -> URL range, table rows -> /[locale]/transactions/[id].
+// The home page also carries the balance position (ADR-0012) — derived from
+// the same overview as /balance, so the two cannot disagree.
 
 export const dynamic = "force-dynamic";
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const CHART_RANGE_DAYS: Record<ChartRange, number> = { "7d": 7, "30d": 30, "90d": 90 };
+
+function chartRangeOf(searchParams: Record<string, string | string[] | undefined>): ChartRange {
+  const v = searchParams.range;
+  return v === "30d" || v === "90d" ? v : "7d";
+}
 
 function MetricTile({
   label,
@@ -93,10 +106,19 @@ async function MetricsGroup() {
   );
 }
 
-async function AnalyticsSection() {
-  const series = await getAnalyticsSeries(7);
+async function AnalyticsSection({ range }: { range: ChartRange }) {
+  const [series, metrics] = await Promise.all([
+    getAnalyticsSeries(CHART_RANGE_DAYS[range]),
+    getLedgerMetrics(),
+  ]);
   const hasData = series.some((p) => p.total > 0);
-  return <AnalyticsChart data={hasData ? series : []} />;
+  return (
+    <AnalyticsChart
+      data={hasData ? series : []}
+      currency={metrics.currency}
+      rangeLabel={range === "7d" ? "Last 7 days" : range === "30d" ? "Last 30 days" : "Last 90 days"}
+    />
+  );
 }
 
 async function RecentTransactions() {
@@ -125,22 +147,14 @@ async function RecentTransactions() {
   );
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
+  const sp = await searchParams;
+  const range = chartRangeOf(sp);
+
   return (
     <main className="mx-auto max-w-container-max p-gutter space-y-6 pb-12">
-      {/* Welcome Section */}
-      <section className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-[var(--border-subtle)] pb-4">
-        <div>
-          <h1 className="headline-xl text-[var(--on-surface)]">Welcome back, Sarah</h1>
-          <p className="body-md text-[var(--on-surface-variant)] mt-1">
-            Here&apos;s what&apos;s happening with your accounts today.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <ExportCsvButton label="Download Report" respectFilters={false} />
-          <CreateTransactionDialog />
-        </div>
-      </section>
+      {/* Welcome Section — greeting derived from the merchant profile */}
+      <DashboardHeader />
 
       {/* Bento Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -169,11 +183,11 @@ export default function DashboardPage() {
             <MetricsGroup />
           </Suspense>
 
-          {/* Quick Actions */}
+          {/* Quick Actions — every label matches an intent the target route can fulfil */}
           <div className="sm:col-span-3 grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
             {[
-              { label: "Create Invoice", icon: "receipt_long", href: "/billing" },
-              { label: "Add Customer", icon: "person_add", href: "/customers" },
+              { label: "Invoices", icon: "receipt_long", href: "/billing" },
+              { label: "Add Customer", icon: "person_add", href: "/customers?new=1" },
               { label: "Payouts", icon: "account_balance", href: "/payouts/bulk" },
               { label: "API Keys", icon: "api", href: "/settings/api-keys" },
             ].map((a) => (
@@ -183,7 +197,7 @@ export default function DashboardPage() {
                 className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-lg p-4 flex flex-col items-center justify-center gap-2 hover:bg-[var(--surface-container-low)] hover:border-[var(--primary)]/50 group transition-colors min-w-0"
               >
                 <span
-                  className="material-symbols-outlined text-[var(--on-surface-variant)] group-hover:text-[var(--primary)] shrink-0"
+                  className="material-symbols-outlined text-[18px] text-[var(--on-surface-variant)] group-hover:text-[var(--primary)] shrink-0"
                   aria-hidden="true"
                 >
                   {a.icon}
@@ -195,10 +209,29 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Balance position — same derivation as /balance (ADR-0011/0012) */}
+      <Suspense
+        fallback={
+          <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm">
+            <Skeleton className="h-4 w-40 bg-[var(--surface-container-high)]" />
+            <Skeleton className="h-8 w-56 bg-[var(--surface-container-low)] mt-2" />
+            <Skeleton className="h-4 w-full max-w-md bg-[var(--surface-container-low)] mt-6" />
+          </Card>
+        }
+      >
+        <BalanceStrip />
+      </Suspense>
+
       <Hero3DWrapper />
 
-      <Suspense fallback={<AnalyticsChart isLoading />}>
-        <AnalyticsSection />
+      {/* Analytics — range in the URL; keyed Suspense so the skeleton
+          reappears on every range round-trip */}
+      <div className="flex items-center justify-between">
+        <p className="sr-only">Transaction analytics range</p>
+        <ChartRangeTabs range={range} />
+      </div>
+      <Suspense key={range} fallback={<AnalyticsChart data={[]} isLoading />}>
+        <AnalyticsSection range={range} />
       </Suspense>
 
       <Suspense fallback={<TableSkeleton rows={5} columns={5} />}>

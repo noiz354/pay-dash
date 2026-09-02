@@ -352,37 +352,31 @@ test.describe("D. CRM & Commerce", () => {
 // E. Risk, Fraud, Compliance
 // ──────────────────────────────────────────────────────────
 test.describe("E. Risk, Fraud, Compliance (orphaned)", () => {
-  test("E1 fraud console switch resets on refresh and blocklist link missing", async ({ page }) => {
+  test("E1 fraud console is derived from the blocklist store", async ({ page }) => {
+    // Rebuilt in ADR-0024 — the prototype's two contradictory hard-coded
+    // lists and its invented 14,209/8,432/3,194 metrics are gone; /fraud
+    // and /fraud/blocklist run on one seeded store.
     await page.goto("/en/fraud");
     await expect(page.getByRole("heading", { name: /Fraud Prevention/ })).toBeVisible();
-    await expect(page.getByPlaceholder("Search rules…")).toBeVisible();
-    await expect(page.getByText("Blocklist — see /fraud/blocklist")).toBeVisible();
-    // plain text not linked
-    await expect(page.locator('a[href="/fraud/blocklist"]')).toHaveCount(0);
-    await expect(page.locator('a[href*="fraud/blocklist"]')).toHaveCount(0);
-    // Switch toggles but resets
-    const sw = page.locator('button[role="switch"]').first();
-    await expect(sw).toBeVisible();
-    const before = await sw.getAttribute("aria-checked");
-    await sw.click();
-    await expect(sw).not.toHaveAttribute("aria-checked", before ?? "");
-    await page.reload();
-    const afterReload = page.locator('button[role="switch"]').first();
-    await expect(afterReload).toHaveAttribute("aria-checked", "true"); // defaultChecked true
-    // Tabs
-    await page.getByRole("tab", { name: "Blocklist" }).click();
-    await expect(page.getByText("Blocklist — see /fraud/blocklist")).toBeVisible();
+    await expect(page.getByText("14,209")).toHaveCount(0);
+    await expect(page.getByText("+12% this week")).toHaveCount(0);
+    await expect(page.getByText("10 blocked entities")).toBeVisible();
+    await page.getByRole("tab", { name: /Card Numbers/ }).click();
+    await expect(page.getByText("453322 •••• 0110")).toBeVisible();
   });
 
-  test("E2 fraud blocklist add button inert", async ({ page }) => {
+  test("E2 blocklist page runs on the same store with real controls", async ({ page }) => {
     await page.goto("/en/fraud/blocklist");
     await expect(page.getByRole("heading", { name: /Blocklist/ })).toBeVisible();
-    await expect(page.getByPlaceholder("Search blocklist…")).toBeVisible();
-    await expect(page.getByText("4111 1111 1111 1111")).toBeVisible();
-    await expect(page.getByText("Blocked")).toBeVisible();
-    await page.getByRole("button", { name: "Add to blocklist" }).click();
-    await expect(page).toHaveURL(/fraud\/blocklist/);
-    await expect(page.getByText("4111 1111 1111 1111")).toBeVisible(); // still there
+    await expect(page.getByText("of 124")).toHaveCount(0);
+    await expect(page.getByText("10 entities blocked")).toBeVisible();
+    // Add dialog opens and validates server-side
+    await page.getByRole("button", { name: "Add to Blocklist" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByLabel("IP address").fill("999.1.1.1");
+    await page.getByRole("button", { name: "Add" }).click();
+    await expect(page.getByText("Enter a valid IPv4 or IPv6 address.")).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 
   test("E3 kyc form clears on refresh and submit inert", async ({ page }) => {
@@ -401,15 +395,15 @@ test.describe("E. Risk, Fraud, Compliance (orphaned)", () => {
     await expect(page.getByLabel("Full name")).toBeVisible();
   });
 
-  test("E4 risk slider and switch revert on refresh", async ({ page }) => {
+  test("E4 risk serves the derived ruleset with a real draft workflow", async ({ page }) => {
+    // Rebuilt in ADR-0023 — the old slider/#block iteration and the
+    // prototype's invented alert counts are gone; the page now serves the
+    // app's own ruleset with derived, deep-linked alerts.
     await page.goto("/en/risk");
     await expect(page.getByRole("heading", { name: /Risk/ })).toBeVisible();
-    await expect(page.getByText("Dashboard-only config")).toBeVisible();
-    await expect(page.getByText("5 transactions/min")).toBeVisible();
-    const sw = page.locator("#block");
-    await expect(sw).toBeVisible();
-    await page.reload();
-    await expect(page.getByText("5 transactions/min")).toBeVisible();
+    await expect(page.getByText("12% vs yesterday")).toHaveCount(0);
+    await expect(page.getByText("Card velocity")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Deploy Changes" })).toBeVisible();
   });
 });
 
@@ -417,48 +411,47 @@ test.describe("E. Risk, Fraud, Compliance (orphaned)", () => {
 // F. Team / Admin / System
 // ──────────────────────────────────────────────────────────
 test.describe("F. Team / Admin / System (orphaned + RBAC gap)", () => {
-  test("F1 team controls inert and no RBAC denial @known-gap", async ({ page }) => {
+  test("F1 team serves the real member store", async ({ page }) => {
+    // Rebuilt in ADR-0022 — the prototype's hard-coded @ledger.com directory,
+    // its unreachable "0 selected" bar and its placeholder tabs are gone; the
+    // page now serves the app's own member store with real RBAC catalog.
     await page.goto("/en/team");
     await expect(page.getByRole("heading", { name: /Team/ })).toBeVisible();
-    await page.getByRole("button", { name: "Invite" }).click();
-    await expect(page).toHaveURL(/team/);
-    await page.getByRole("combobox").click();
-    await expect(page.getByText("Admin")).toBeVisible();
-    await page.keyboard.press("Escape");
-    // 2FA switch
-    const sw = page.locator('button[role="switch"]').first();
-    await expect(sw).toBeVisible();
-    // Dropdown Remove
-    const more = page.locator('button:has-text("⋯")').first();
-    if (await more.isVisible()) {
-      await more.click();
-      await expect(page.getByText("Remove")).toBeVisible();
-      await page.keyboard.press("Escape");
-    }
-    // No RBAC denial for member — gap documented
+    await expect(page.getByText("ledger.com")).toHaveCount(0);
+    await expect(page.getByText("Daniel Wirawan")).toBeVisible();
+    await page.getByRole("tab", { name: "Pending Invites" }).click();
+    await expect(page.getByRole("button", { name: "Revoke" })).toBeVisible();
+    await page.getByRole("tab", { name: "Roles" }).click();
+    await expect(page.getByText("Full access to the dashboard, including team and merchant settings.")).toBeVisible();
   });
 
-  test("F2 audit log tabs and calendar and unchecked unauth @known-gap", async ({ page }) => {
+  test("F2 audit log serves the derived event history", async ({ page }) => {
+    // Rebuilt in ADR-0026 — the prototype's five 2023-10-24 rows, "1 of
+    // 12,042 events" and the User/IP columns are gone; rows derive from the
+    // stores that record them, and the ⌘K hint is real (focuses search).
     await page.goto("/en/audit");
     await expect(page.getByRole("heading", { name: /Audit Log/ })).toBeVisible();
-    await page.getByRole("tab", { name: "Footer" }).click();
-    await expect(page.getByText("Footer logs")).toBeVisible();
-    await page.getByRole("tab", { name: "Main" }).click();
-    await expect(page.getByText("log_001")).toBeVisible();
+    await expect(page.getByText("177 events")).toBeVisible();
+    await expect(page.getByText("12,042")).toHaveCount(0);
+    await expect(page.getByText("2023")).toHaveCount(0);
     await expect(page.locator("text=⌘").first()).toBeVisible();
+    await page.getByLabel("Filter events by status").click();
+    await page.getByRole("option", { name: "Status: Failed" }).click();
+    await expect(page.getByText("4 events")).toBeVisible();
   });
 
-  test("F3 reports builder filters inert no generate", async ({ page }) => {
+  test("F3 reports builder runs real queries over the ledger", async ({ page }) => {
+    // Rebuilt in ADR-0020 — the prototype's inert controls and invented
+    // 1,248-row preview are gone; the page now serves real store rows.
     await page.goto("/en/reports/builder");
     await expect(page.getByRole("heading", { name: /Custom Reports/ })).toBeVisible();
-    await page.getByRole("combobox").click();
-    await expect(page.getByText("Success")).toBeVisible();
-    await page.keyboard.press("Escape");
-    await page.getByLabel("QRIS").check();
-    await expect(page.getByLabel("QRIS")).toBeChecked();
-    await page.reload();
-    await expect(page.getByLabel("QRIS")).not.toBeChecked();
-    await expectDataMonoRight(page, /IDR 1,000,000\.00/);
+    await expect(page.getByText("1,248")).toHaveCount(0);
+    await expect(page.getByText("46 of 46 rows")).toBeVisible();
+    await page.getByLabel("Customers").check();
+    await expect(page.getByText("Lifetime Value")).toBeVisible();
+    await expect(page.getByText("11 of 11 rows")).toBeVisible();
+    await page.getByLabel("Transactions").check();
+    await expect(page.getByText("46 of 46 rows")).toBeVisible();
   });
 
   test("F4 system health static gauges", async ({ page }) => {
@@ -491,27 +484,31 @@ test.describe("F. Team / Admin / System (orphaned + RBAC gap)", () => {
     await expect(page.getByText("xendit-node#31")).toBeVisible();
   });
 
-  test("F7 subscriptions tabs switch", async ({ page }) => {
+  test("F7 subscriptions serves the real plan store", async ({ page }) => {
+    // Rebuilt in ADR-0021 — the prototype's invented cards/rows and dead
+    // controls are gone; the page now serves the app's own plan store.
     await page.goto("/en/subscriptions");
     await expect(page.getByRole("heading", { name: /Subscription/ })).toBeVisible();
-    await expect(page.getByText("Budi")).toBeVisible();
-    await page.getByRole("tab", { name: "Calendar" }).click();
-    await expect(page.locator(".rdp").or(page.locator("[data-slot='calendar']")).first()).toBeVisible({ timeout: 3000 }).catch(async () => {
-      await expect(page.getByRole("tab", { name: "Calendar" })).toBeVisible();
-    });
-    await page.getByRole("tab", { name: "Subscriptions" }).click();
-    await expect(page.getByText("Budi")).toBeVisible();
+    await expect(page.getByText("1,248")).toHaveCount(0);
+    await expect(page.getByText("TechFlow Solutions")).toHaveCount(0);
+    // No absolute count — an earlier spec may have created a plan in the
+    // shared in-memory store.
+    await expect(page.getByText("Initech BV").first()).toBeVisible();
+    await page.getByLabel("Filter subscriptions by status").selectOption("PAST_DUE");
+    await expect(page.getByText("Kevin Tan")).toBeVisible();
   });
 
-  test("F8 onboarding checklist collapsible revert", async ({ page }) => {
+  test("F8 onboarding progress is derived, not hard-coded", async ({ page }) => {
     await page.goto("/en/onboarding");
-    await expect(page.getByRole("heading", { name: /Onboarding/ })).toBeVisible();
-    await expect(page.getByText("2 of 3 completed")).toBeVisible();
-    await page.getByText("Details").click();
-    await expect(page.getByText("Add directors")).toBeVisible();
-    await page.getByLabel("Documents").check();
-    await page.reload();
-    await expect(page.getByLabel("Documents")).not.toBeChecked();
+    await expect(page.getByRole("heading", { name: /Sub-Merchant Onboarding/ })).toBeVisible();
+    // ADR-0025: 3 app-owned sections, all complete in the seeded world;
+    // the compliance review is shown but never counted.
+    await expect(page.getByText("3 of 3 sections completed")).toBeVisible();
+    await expect(page.getByText("100%")).toBeVisible();
+    await expect(page.getByText("Acme Corporation LLC").first()).toBeVisible();
+    // The prototype's hard-coded progress and invented account are gone.
+    await expect(page.getByText("75%")).toHaveCount(0);
+    await expect(page.getByText(/4592/)).toHaveCount(0);
   });
 });
 
@@ -726,14 +723,15 @@ test.describe("J. Standard Failures & A11y", () => {
     await expect(banners).toHaveCount(1);
   });
 
-  test("J4 checkbox label linkage in team/onboarding", async ({ page }) => {
+  test("J4 onboarding card CTAs navigate to the owning pages", async ({ page }) => {
+    // ADR-0025: the prototype's dead buttons are real links now — each CTA
+    // lands on the page that owns the facts behind its card.
     await page.goto("/en/onboarding");
-    // clicking label toggles checkbox
-    await page.getByText("Documents").click();
-    await expect(page.getByLabel("Documents")).toBeChecked();
-    await page.goto("/en/team");
-    // team page has label association too
-    await expect(page.getByText("Team & Permissions")).toBeVisible();
+    await page.getByRole("link", { name: "Review Details" }).click();
+    await expect(page).toHaveURL(/settings\/merchant/);
+    await page.goto("/en/onboarding");
+    await page.getByRole("link", { name: "Go to Developer Dashboard" }).click();
+    await expect(page).toHaveURL(/settings\/developer/);
   });
 });
 

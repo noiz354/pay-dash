@@ -1,8 +1,19 @@
+import * as React from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { IntlProvider } from "next-intl";
 import { InvoiceStatusPill } from "@/components/billing/invoice-status-pill";
 import { InvoicesEmptyState } from "@/components/billing/invoices-empty-state";
 import { isPayable, INVOICE_STATUSES } from "@/lib/invoice-status";
+
+// The empty state renders the next-intl Link, which needs an intl context.
+function renderWithIntl(ui: React.ReactElement) {
+  return render(
+    <IntlProvider locale="en" messages={{}}>
+      {ui}
+    </IntlProvider>
+  );
+}
 
 describe("InvoiceStatusPill", () => {
   it("renders a label + icon for every status", () => {
@@ -39,13 +50,21 @@ describe("isPayable", () => {
 
 describe("InvoicesEmptyState", () => {
   it("phrases each void differently", () => {
-    const { rerender } = render(<InvoicesEmptyState variant="no-data" />);
+    const { rerender } = renderWithIntl(<InvoicesEmptyState variant="no-data" />);
     expect(screen.getByText("No invoices yet")).toBeInTheDocument();
 
-    rerender(<InvoicesEmptyState variant="no-match" />);
+    rerender(
+      <IntlProvider locale="en" messages={{}}>
+        <InvoicesEmptyState variant="no-match" />
+      </IntlProvider>
+    );
     expect(screen.getByText("No invoices match these filters")).toBeInTheDocument();
 
-    rerender(<InvoicesEmptyState variant="no-outstanding" />);
+    rerender(
+      <IntlProvider locale="en" messages={{}}>
+        <InvoicesEmptyState variant="no-outstanding" />
+      </IntlProvider>
+    );
     expect(screen.getByText("No outstanding invoices")).toBeInTheDocument();
   });
 });

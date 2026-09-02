@@ -1,6 +1,7 @@
 import "server-only";
 
 import { listTransactions, type Transaction } from "./transactions";
+import { getMerchantProfile } from "./settings";
 import { INVOICE_STATUSES, isPayable, type InvoiceStatus } from "@/lib/invoice-status";
 
 export { INVOICE_STATUSES };
@@ -444,6 +445,7 @@ export type BillingSummary = {
 
 export async function getBillingSummary(): Promise<BillingSummary> {
   const rows = billableRows(await allLedgerRows());
+  const profile = await getMerchantProfile();
   const now = new Date();
   const thisKey = monthKey(now.toISOString());
   const prevKey = monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15)).toISOString());
@@ -468,7 +470,7 @@ export async function getBillingSummary(): Promise<BillingSummary> {
     accruedDelta,
     currency: "IDR",
     nextInvoiceDate: nextInvoice.toISOString(),
-    autoDebitEnabled: true,
+    autoDebitEnabled: profile.autoDebit,
     outstandingAmount: outstanding.reduce((a, i) => a + i.amount, 0),
     outstandingCount: outstanding.length,
     overdueCount: invoices.filter((i) => i.status === "OVERDUE").length,

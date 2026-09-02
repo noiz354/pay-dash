@@ -1,177 +1,150 @@
+import type { Metadata } from "next";
+import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Kbd } from "@/components/ui/kbd";
+import { supportMailto } from "@/lib/support";
 
-export default function SupportPage() {
+// Support & Documentation (ADR-0016). Static by design (INTEGRATION.md:
+// "Static content; no API") — so every affordance on the page is either a
+// real link into the app or a real mailto. The prototype's four href="#"
+// topic cards, the invented "all subsystems Operational" rows, the dead
+// Cmd+K search and the no-op Live Chat / Ticket History buttons are gone.
+// ?ref is honoured: transaction rows and the transaction detail page
+// deep-link here ("Report issue"), and the reference lands in the email
+// subject so the report arrives with its context.
+export const metadata: Metadata = {
+  title: "Support — Kinetic Ledger",
+  description: "Where to go: topic pages, platform status and a support email that carries the context of what you're reporting.",
+};
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const TOPICS = [
+  {
+    href: "/settings/api-keys",
+    icon: "api",
+    title: "API Reference",
+    description: "Credentials, scopes, and the webhook endpoint for your integrations.",
+  },
+  {
+    href: "/payouts",
+    icon: "account_balance",
+    title: "Settlement Guide",
+    description: "Payout batches, settlement failures and per-recipient retry.",
+  },
+  {
+    href: "/kyc",
+    icon: "verified_user",
+    title: "KYC Requirements",
+    description: "Identity verification status, documents and compliance.",
+  },
+  {
+    href: "/reports/builder",
+    icon: "receipt_long",
+    title: "Reporting & Export",
+    description: "Statements and custom data exports from the ledger.",
+  },
+];
+
+export default async function SupportPage({ searchParams }: { searchParams: SearchParams }) {
+  const sp = await searchParams;
+  const rawRef = Array.isArray(sp.ref) ? sp.ref[0] : sp.ref;
+  const ref = rawRef?.trim() ? rawRef.trim() : undefined;
+
   return (
-    <main className="mx-auto max-w-5xl p-gutter space-y-8">
-      {/* Header & Search — screens/desktop/support_documentation_hub_desktop:122-131 */}
-      <header className="space-y-4">
-        <div className="flex items-center space-x-2 text-[var(--primary)]">
-          <span className="material-symbols-outlined" aria-hidden="true" style={{ fontVariationSettings: "'FILL' 1" }}>
-            help
-          </span>
-          <h1 className="headline-xl text-[var(--on-surface)]">Support &amp; Documentation</h1>
-        </div>
+    <main className="mx-auto max-w-container-max p-gutter space-y-8">
+      <header className="space-y-3">
+        <h1 className="headline-xl text-[var(--on-surface)]">Support &amp; Documentation</h1>
         <p className="body-lg max-w-2xl text-[var(--on-surface-variant)]">
-          Search the knowledge base, view API references, or contact our support team for specialized assistance.
+          Go directly to the page that answers your question, check platform status, or email support —
+          with the thing you’re reporting on already in the subject line.
         </p>
-        <div className="relative w-full max-w-2xl pt-4">
-          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 pt-4 text-[var(--on-surface-variant)]" aria-hidden="true">
-            <span className="material-symbols-outlined">search</span>
-          </span>
-          <Input
-            placeholder="Search for 'Settlement limits'..."
-            aria-label="Search knowledge base"
-            className="block h-12 w-full border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] py-3 pl-10 pr-12 shadow-sm body-md focus-visible:ring-[var(--primary)] focus-visible:border-[var(--primary)]"
-          />
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 pt-4">
-            <Kbd className="hidden sm:inline-flex border border-[var(--outline-variant)] bg-[var(--surface-container)] px-2 py-0.5 data-mono text-[var(--on-surface-variant)]">Cmd+K</Kbd>
-          </div>
-        </div>
       </header>
 
-      {/* Content Grid — 127-247 */}
+      {ref ? (
+        <Card className="border-[var(--border-subtle)] bg-[var(--surface-container-low)]/40 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="material-symbols-outlined text-[22px] text-[var(--on-surface-variant)]" aria-hidden="true">
+              flag
+            </span>
+            <div>
+              <h2 className="label-caps text-[11px] text-[var(--on-surface-variant)]">You’re reporting on</h2>
+              <div className="data-mono text-sm text-[var(--on-surface)] break-all">{ref}</div>
+            </div>
+            <p className="body-sm text-[var(--on-surface-variant)] sm:ml-auto">
+              The email below is pre-filled with it — send it and the context travels with the report.
+            </p>
+          </div>
+        </Card>
+      ) : null}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Column: Popular Topics */}
-        <div className="lg:col-span-2 space-y-6">
-          <h2 className="label-caps uppercase tracking-wider text-[var(--on-surface-variant)]">Popular Topics</h2>
+        <div className="lg:col-span-2 space-y-4">
+          <h2 className="label-caps text-[var(--on-surface-variant)]">Popular Topics</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <a
-              href="#"
-              className="block rounded border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-4 transition-colors hover:bg-[var(--surface-container-low)] group"
-            >
-              <div className="flex items-start space-x-3">
-                <div className="rounded bg-[var(--secondary-container)] p-2 text-[var(--primary)]">
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    api
-                  </span>
+            {TOPICS.map((topic) => (
+              <Link
+                key={topic.href}
+                href={topic.href}
+                className="block rounded border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-4 transition-colors hover:bg-[var(--surface-container-low)] group"
+              >
+                <div className="flex items-start space-x-3">
+                  <div className="rounded bg-[var(--secondary-container)] p-2 text-[var(--primary)]">
+                    <span className="material-symbols-outlined" aria-hidden="true">
+                      {topic.icon}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="headline-md text-[var(--on-surface)] group-hover:text-[var(--primary)] transition-colors flex items-center gap-1.5">
+                      {topic.title}
+                      <span
+                        className="material-symbols-outlined text-[16px] opacity-0 transition-opacity group-hover:opacity-100"
+                        aria-hidden="true"
+                      >
+                        arrow_forward
+                      </span>
+                    </h3>
+                    <p className="body-sm mt-1 text-[var(--on-surface-variant)]">{topic.description}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="headline-md text-[var(--on-surface)] group-hover:text-[var(--primary)] transition-colors">API Reference</h3>
-                  <p className="body-sm mt-1 text-[var(--on-surface-variant)]">Endpoints, authentication, and webhooks for developers.</p>
-                </div>
-              </div>
-            </a>
-            <a
-              href="#"
-              className="block rounded border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-4 transition-colors hover:bg-[var(--surface-container-low)] group"
-            >
-              <div className="flex items-start space-x-3">
-                <div className="rounded bg-[var(--secondary-container)] p-2 text-[var(--primary)]">
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    account_balance
-                  </span>
-                </div>
-                <div>
-                  <h3 className="headline-md text-[var(--on-surface)] group-hover:text-[var(--primary)] transition-colors">Settlement Guide</h3>
-                  <p className="body-sm mt-1 text-[var(--on-surface-variant)]">Timelines, batch processes, and resolving failures.</p>
-                </div>
-              </div>
-            </a>
-            <a
-              href="#"
-              className="block rounded border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-4 transition-colors hover:bg-[var(--surface-container-low)] group"
-            >
-              <div className="flex items-start space-x-3">
-                <div className="rounded bg-[var(--secondary-container)] p-2 text-[var(--primary)]">
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    verified_user
-                  </span>
-                </div>
-                <div>
-                  <h3 className="headline-md text-[var(--on-surface)] group-hover:text-[var(--primary)] transition-colors">KYC Requirements</h3>
-                  <p className="body-sm mt-1 text-[var(--on-surface-variant)]">Documentation, verification flows, and compliance.</p>
-                </div>
-              </div>
-            </a>
-            <a
-              href="#"
-              className="block rounded border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-4 transition-colors hover:bg-[var(--surface-container-low)] group"
-            >
-              <div className="flex items-start space-x-3">
-                <div className="rounded bg-[var(--secondary-container)] p-2 text-[var(--primary)]">
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    receipt_long
-                  </span>
-                </div>
-                <div>
-                  <h3 className="headline-md text-[var(--on-surface)] group-hover:text-[var(--primary)] transition-colors">Reporting &amp; Export</h3>
-                  <p className="body-sm mt-1 text-[var(--on-surface-variant)]">Generating statements and custom data extracts.</p>
-                </div>
-              </div>
-            </a>
+              </Link>
+            ))}
           </div>
         </div>
 
-        {/* Side Column: Status & Contact */}
         <div className="space-y-6">
-          {/* System Status Widget */}
           <Card className="rounded border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-4 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="label-caps uppercase tracking-wider text-[var(--on-surface-variant)]">System Status</h2>
-              <span className="relative flex h-3 w-3" aria-hidden="true">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--success-status)] opacity-75" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-[var(--success-status)]" />
-              </span>
-              <span className="sr-only">Operational</span>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-[var(--border-subtle)] py-2">
-                <span className="body-sm text-[var(--on-surface)]">API Gateway</span>
-                <span className="body-sm text-[var(--success-status)]">Operational</span>
-              </div>
-              <div className="flex items-center justify-between border-b border-[var(--border-subtle)] py-2">
-                <span className="body-sm text-[var(--on-surface)]">Settlement Engine</span>
-                <span className="body-sm text-[var(--success-status)]">Operational</span>
-              </div>
-              <div className="flex items-center justify-between py-2">
-                <span className="body-sm text-[var(--on-surface)]">Webhooks</span>
-                <span className="body-sm text-[var(--success-status)]">Operational</span>
-              </div>
-            </div>
-            <a href="#" className="body-sm mt-4 block text-center text-[var(--primary)] hover:underline">
+            <h2 className="label-caps text-[var(--on-surface-variant)] mb-3">System Status</h2>
+            <p className="body-sm text-[var(--on-surface-variant)]">
+              Platform health is monitored on the System Status page — live from the app, not a static banner.
+            </p>
+            <Link
+              href="/system"
+              className="body-sm mt-4 block text-center text-[var(--primary)] hover:underline"
+            >
               View detailed status
-            </a>
+            </Link>
           </Card>
 
-          {/* Contact Support Widget */}
           <Card className="rounded border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-4 shadow-sm">
-            <h2 className="label-caps mb-4 uppercase tracking-wider text-[var(--on-surface-variant)]">Contact Support</h2>
-            <div className="space-y-2">
-              <Button className="flex w-full items-center justify-between rounded bg-[var(--primary)] p-3 text-[var(--on-primary)] hover:bg-[var(--surface-tint)]">
-                <span className="flex items-center space-x-2">
-                  <span className="material-symbols-outlined text-sm" aria-hidden="true">
-                    chat
-                  </span>
-                  <span className="body-sm font-medium">Live Chat</span>
+            <h2 className="label-caps text-[var(--on-surface-variant)] mb-4">Contact Support</h2>
+            <Button
+              render={<a href={supportMailto(ref)} />}
+              className="flex w-full items-center justify-between rounded bg-[var(--primary)] p-3 text-[var(--on-primary)] hover:bg-[var(--on-primary-fixed-variant)]"
+            >
+              <span className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]" aria-hidden="true">
+                  mail
                 </span>
-                <span className="label-caps opacity-80">Available</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="flex w-full items-center justify-between rounded border border-[var(--border-subtle)] bg-[var(--surface-container)] p-3 text-[var(--on-surface)] hover:bg-[var(--surface-variant)]"
-              >
-                <span className="flex items-center space-x-2">
-                  <span className="material-symbols-outlined text-sm" aria-hidden="true">
-                    mail
-                  </span>
-                  <span className="body-sm font-medium">Email Support</span>
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                className="flex w-full items-center justify-between rounded border border-[var(--border-subtle)] bg-[var(--surface-container)] p-3 text-[var(--on-surface)] hover:bg-[var(--surface-variant)]"
-              >
-                <span className="flex items-center space-x-2">
-                  <span className="material-symbols-outlined text-sm" aria-hidden="true">
-                    history
-                  </span>
-                  <span className="body-sm font-medium">Ticket History</span>
-                </span>
-              </Button>
-            </div>
+                <span className="body-sm font-medium">Email support</span>
+              </span>
+              <span className="material-symbols-outlined text-[16px] opacity-80" aria-hidden="true">
+                open_in_new
+              </span>
+            </Button>
+            <p className="body-sm text-[var(--on-surface-variant)] text-xs mt-3">
+              support@kinetic.test — {ref ? "subject pre-filled with your reference" : "tell us what you were doing when it happened"}.
+            </p>
           </Card>
         </div>
       </div>

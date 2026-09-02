@@ -5,6 +5,8 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatCompactMoney, formatMoney } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export type AnalyticsPoint = {
   date: string;
@@ -13,16 +15,7 @@ export type AnalyticsPoint = {
   failed?: number;
 };
 
-// Mock data — last 7 days, IDR scale matching DataTable below
-const defaultData: AnalyticsPoint[] = [
-  { date: "Oct 18", total: 18500000, succeeded: 15200000, failed: 800000 },
-  { date: "Oct 19", total: 22400000, succeeded: 20100000, failed: 600000 },
-  { date: "Oct 20", total: 19800000, succeeded: 17500000, failed: 1200000 },
-  { date: "Oct 21", total: 26700000, succeeded: 24500000, failed: 400000 },
-  { date: "Oct 22", total: 31200000, succeeded: 29800000, failed: 900000 },
-  { date: "Oct 23", total: 27800000, succeeded: 26000000, failed: 700000 },
-  { date: "Oct 24", total: 34500000, succeeded: 32200000, failed: 1100000 },
-];
+type SeriesKey = "total" | "succeeded" | "failed";
 
 const chartConfig = {
   total: {
@@ -37,33 +30,44 @@ const chartConfig = {
     label: "Failed",
     color: "var(--failed-status)",
   },
-} satisfies Record<string, { label: string; color: string }>;
+} satisfies Record<SeriesKey, { label: string; color: string }>;
 
-function formatIDR(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-    notation: "compact",
-  }).format(value);
-}
+const SERIES_KEYS = Object.keys(chartConfig) as SeriesKey[];
 
-function formatIDRFull(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
+/**
+ * Volume-over-time for the dashboard home. `data` is always the real series
+ * (or an explicit empty list) — the prototype's static "Oct 18–24" mock is
+ * gone, so there is no way to render invented figures. The range label comes
+ * from the server (ADR-0012); series chips are local view state.
+ */
 export function AnalyticsChart({
-  data = defaultData,
+  data,
+  currency = "IDR",
+  rangeLabel = "Last 7 days",
   isLoading = false,
 }: {
-  data?: AnalyticsPoint[];
+  data: AnalyticsPoint[];
+  currency?: string;
+  rangeLabel?: string;
   isLoading?: boolean;
 }) {
-  const isEmpty = !isLoading && (!data || data.length === 0);
+  const [active, setActive] = React.useState<Record<SeriesKey, boolean>>({
+    total: true,
+    succeeded: true,
+    failed: true,
+  });
+
+  const isEmpty = !isLoading && data.length === 0;
+  const visible = SERIES_KEYS.filter((k) => active[k]);
+
+  const toggle = (key: SeriesKey) => {
+    setActive((prev) => {
+      // Keep at least one series visible — an empty chart with tooltips is
+      // worse than a disabled toggle.
+      if (prev[key] && Object.values(prev).filter(Boolean).length === 1) return prev;
+      return { ...prev, [key]: !prev[key] };
+    });
+  };
 
   if (isLoading) {
     return (
@@ -86,7 +90,7 @@ export function AnalyticsChart({
       <Card className="bg-[var(--surface)] border-[var(--border-subtle)] rounded-lg shadow-sm">
         <CardHeader>
           <CardTitle className="headline-md text-[var(--on-surface)]">Transaction Analytics</CardTitle>
-          <p className="body-sm text-[var(--on-surface-variant)]">Volume over time (IDR)</p>
+          <p className="body-sm text-[var(--on-surface-variant)]">Volume over time ({currency})</p>
         </CardHeader>
         <CardContent>
           <div
@@ -108,21 +112,45 @@ export function AnalyticsChart({
   return (
     <Card className="bg-[var(--surface)] border-[var(--border-subtle)] rounded-lg shadow-sm">
       <CardHeader className="pb-2">
-        <div className="flex justify-between items-start gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-start">
           <div>
             <CardTitle className="headline-md text-[var(--on-surface)]">Transaction Analytics</CardTitle>
-            <p className="body-sm text-[var(--on-surface-variant)] mt-1">Daily volume — last 7 days (IDR)</p>
+            <p className="body-sm text-[var(--on-surface-variant)] mt-1">
+              Daily volume — {rangeLabel.toLowerCase()} ({currency})
+            </p>
           </div>
-          <span className="label-caps text-[var(--on-surface-variant)] bg-[var(--surface-container-low)] px-2 py-1 rounded whitespace-nowrap">
-            Last 7 days
-          </span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1" role="group" aria-label="Chart series">
+              {SERIES_KEYS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggle(key)}
+                  aria-pressed={active[key]}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 py-1 rounded border text-[12px] body-sm transition-colors",
+                    active[key]
+                      ? "border-[var(--primary)]/40 bg-[var(--primary-container)]/10 text-[var(--on-surface)]"
+                      : "border-[var(--border-subtle)] text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)]"
+                  )}
+                >
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ background: active[key] ? chartConfig[key].color : "var(--outline)" }}
+                    aria-hidden="true"
+                  />
+                  {chartConfig[key].label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="pt-2">
         <ChartContainer config={chartConfig} className="h-[280px] w-full" aria-label="Transaction volume over time">
           <AreaChart data={data} margin={{ left: 12, right: 12, top: 12, bottom: 0 }} accessibilityLayer>
             <defs>
-              <linearGradient id="fill-primary" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="fill-total" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="var(--primary)" stopOpacity={0.3} />
                 <stop offset="100%" stopColor="var(--primary)" stopOpacity={0} />
               </linearGradient>
@@ -134,13 +162,14 @@ export function AnalyticsChart({
               axisLine={{ stroke: "var(--border-subtle)" }}
               tick={{ fill: "var(--on-surface-variant)", fontSize: 11, fontFamily: "var(--font-inter)" }}
               tickMargin={8}
+              minTickGap={28}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               width={72}
               tick={{ fill: "var(--on-surface-variant)", fontSize: 11, fontFamily: "var(--font-jetbrains)" }}
-              tickFormatter={(v: number) => formatIDR(v)}
+              tickFormatter={(v: number) => formatCompactMoney(v, currency)}
               tickCount={4}
             />
             <ChartTooltip
@@ -152,29 +181,39 @@ export function AnalyticsChart({
                   labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ""}
                   formatter={(value, name) => (
                     <div className="flex w-full justify-between gap-4">
-                      <span className="text-[var(--on-surface-variant)]">{chartConfig[name as keyof typeof chartConfig]?.label ?? name}</span>
-                      <span className="data-mono font-medium tabular-nums text-[var(--on-surface)]">{formatIDRFull(value as number)}</span>
+                      <span className="text-[var(--on-surface-variant)]">
+                        {chartConfig[name as SeriesKey]?.label ?? name}
+                      </span>
+                      <span className="data-mono font-medium tabular-nums text-[var(--on-surface)]">
+                        {formatMoney(value as number, currency)}
+                      </span>
                     </div>
                   )}
                 />
               }
             />
-            <Area
-              type="monotone"
-              dataKey="total"
-              stroke="var(--primary)"
-              strokeWidth={2}
-              fill="url(#fill-primary)"
-              dot={false}
-              activeDot={{ r: 4, stroke: "var(--primary)", strokeWidth: 2, fill: "var(--surface)" }}
-            />
+            {visible.map((key) => (
+              <Area
+                key={key}
+                type="monotone"
+                dataKey={key}
+                stroke={chartConfig[key].color}
+                strokeWidth={key === "total" ? 2 : 1.5}
+                fill={key === "total" ? "url(#fill-total)" : "none"}
+                dot={false}
+                activeDot={{ r: 4, stroke: chartConfig[key].color, strokeWidth: 2, fill: "var(--surface)" }}
+              />
+            ))}
           </AreaChart>
         </ChartContainer>
         <div className="mt-2 flex items-center justify-between body-sm text-[var(--on-surface-variant)]">
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-[var(--primary)]" aria-hidden="true" /> Total volume
+            <span className="h-2 w-2 rounded-full bg-[var(--primary)]" aria-hidden="true" /> {visible.length} of{" "}
+            {SERIES_KEYS.length} series shown
           </span>
-          <span className="data-mono text-xs tabular-nums">{formatIDRFull(data[data.length - 1]?.total ?? 0)} today</span>
+          <span className="data-mono text-xs tabular-nums">
+            {formatMoney(data[data.length - 1]?.total ?? 0, currency)} today
+          </span>
         </div>
       </CardContent>
     </Card>

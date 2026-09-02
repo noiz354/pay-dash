@@ -485,6 +485,19 @@ export async function getBatch(id: string): Promise<PayoutBatch | null> {
   return { ...batch, status: deriveStatus(batch), recipients: batch.recipients.map((r) => ({ ...r })) };
 }
 
+/**
+ * Read-only view of every batch (recipients included) for derived data
+ * sources — the balance module (ADR-0011) reconciles its available figure
+ * against recipients that are still in flight. Copies only; do not mutate.
+ */
+export function getPayoutBatches(): PayoutBatch[] {
+  return store().batches.map((b) => ({
+    ...b,
+    status: deriveStatus(b),
+    recipients: b.recipients.map((r) => ({ ...r })),
+  }));
+}
+
 export type PayoutsOverview = {
   pendingAmount: number;
   pendingBatches: number;

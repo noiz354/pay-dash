@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { updateMerchantProfile } from "@/server/data/settings";
 import {
   getBillingSummary,
   getInvoice,
@@ -139,5 +140,19 @@ describe("exports", () => {
     expect(csv!).toContain("invoice");
     expect(csv!).toContain("line_item");
     expect(await invoiceStatementCsv("INV-NOPE")).toBeNull();
+  });
+});
+
+describe("billing summary auto-debit (ADR-0018 — profile-driven, not a constant)", () => {
+  it("follows the merchant profile switch", async () => {
+    // Fresh settings store → seed value (autoDebit: true).
+    delete (globalThis as Record<string, unknown>).__kineticSettingsStore;
+    expect((await getBillingSummary()).autoDebitEnabled).toBe(true);
+
+    await updateMerchantProfile({ autoDebit: false });
+    expect((await getBillingSummary()).autoDebitEnabled).toBe(false);
+
+    await updateMerchantProfile({ autoDebit: true });
+    expect((await getBillingSummary()).autoDebitEnabled).toBe(true);
   });
 });

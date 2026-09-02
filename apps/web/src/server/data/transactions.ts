@@ -268,6 +268,14 @@ export async function getTransaction(id: string): Promise<Transaction | null> {
   return store().rows.find((t) => t.id === id || t.referenceId === id) ?? null;
 }
 
+/**
+ * Read-only view of the whole ledger for derived data sources (the balance
+ * module, ADR-0011). Rows are copies; callers must not mutate them.
+ */
+export function getLedgerRows(): Transaction[] {
+  return store().rows.map((t) => ({ ...t }));
+}
+
 export type LedgerMetrics = {
   totalVolume: number;
   volumeDelta: number;

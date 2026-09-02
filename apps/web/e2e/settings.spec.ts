@@ -99,4 +99,20 @@ test.describe("Settings", () => {
     await page.getByRole("link", { name: /API Documentation/ }).click();
     await expect(page).toHaveURL(/\/en\/support/);
   });
+
+  test("the webhook section states the receive-side truth (ADR-0015)", async ({ page }) => {
+    await page.goto("/en/settings/developer");
+    // The outbound-delivery fiction is gone: no merchant target URLs, and no
+    // "retry failed deliveries" toggle (there are no deliveries to retry).
+    await expect(page.getByText("api.acme.com")).toHaveCount(0);
+    await expect(page.getByText("staging.acme.com")).toHaveCount(0);
+    await expect(page.getByRole("switch", { name: "Webhook retries" })).toHaveCount(0);
+
+    // The real endpoint, the token's presence (never its value), and the
+    // handled event types — the same truth as the /webhooks config card.
+    await expect(page.getByText("/api/webhooks/xendit")).toBeVisible();
+    await expect(page.getByText(/No token set|Token configured/i)).toHaveCount(1);
+    await expect(page.getByText("payment.succeeded", { exact: true })).toBeVisible();
+    await expect(page.getByText("Open webhook log")).toHaveAttribute("href", /\/en\/webhooks/);
+  });
 });

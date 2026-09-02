@@ -38,7 +38,7 @@ function one(v: string | string[] | undefined) {
 // longer rendered as fake data — they are seeded into the customer store (see
 // `server/data/customers.ts`) so Acme, Global Logistics and Stark still appear
 // in the directory, now clickable, searchable and with real currency on LTV.
-export const PROTOTYPE_CUSTOMERS = [
+const PROTOTYPE_CUSTOMERS = [
   {
     name: "Acme Corporation",
     email: "contact@acmecorp.com",
@@ -72,7 +72,7 @@ export const PROTOTYPE_CUSTOMERS = [
 ];
 
 /** Kept from the prototype so any existing import keeps compiling. */
-export function StatusPill({ status }: { status: "Active" | "Review" | string }) {
+function StatusPill({ status }: { status: "Active" | "Review" | string }) {
   if (status === "Active") {
     return (
       <Badge className="rounded-full border-transparent bg-[var(--success-status)]/10 px-2 py-0.5 text-[10px] font-bold label-caps text-[var(--success-status)] hover:bg-[var(--success-status)]/10">
@@ -99,7 +99,7 @@ export function StatusPill({ status }: { status: "Active" | "Review" | string })
  * table, checkboxes and all). Nothing renders it by default; pass `rows` to
  * reuse the exact original layout without duplicating styles.
  */
-export function StaticCustomersPreview({ rows = PROTOTYPE_CUSTOMERS }: { rows?: typeof PROTOTYPE_CUSTOMERS }) {
+function StaticCustomersPreview({ rows = PROTOTYPE_CUSTOMERS }: { rows?: typeof PROTOTYPE_CUSTOMERS }) {
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] shadow-sm">
       <div className="flex flex-col items-center justify-between gap-4 border-b border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] px-4 py-3 sm:flex-row">

@@ -1,27 +1,36 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { CopyButton } from "@/components/common/copy-button";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { DeveloperToggle } from "@/components/settings/developer-toggle";
 import { IpAllowlistManager } from "@/components/settings/ip-allowlist-manager";
 import { CreateApiKeyDialog } from "@/components/settings/create-api-key-dialog";
 import { getDeveloperSettings, listApiKeys } from "@/server/data/settings";
+import { KNOWN_WEBHOOK_EVENTS } from "@/lib/webhook-status";
+import { env } from "@/lib/env";
 import { formatRelative } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "Developer · Settings",
-  description: "Sandbox mode, webhook retries and the IP allowlist.",
+  description: "Sandbox mode, the webhook endpoint and the IP allowlist.",
 };
 
-const WEBHOOKS = [
-  { url: "https://api.acme.com/webhooks/ledger", events: "payment.*", status: "Active" as const },
-  { url: "https://staging.acme.com/hooks/sync", events: "customer.*", status: "Failing" as const },
-];
-
+// Developer settings. The webhook section states the receive-side truth
+// (ADR-0015): this app RECEIVES callbacks (INTEGRATION.md §7) — the card
+// shows the real endpoint, whether its token is configured (presence only,
+// never the value, same rule as the /webhooks config card) and how retries
+// actually work. The prototype's two hard-coded delivery endpoints
+// (api.acme.com "Active" / staging.acme.com "Failing") are gone: there is
+// nothing in this app that delivers webhooks.
 export default async function DeveloperSettingsPage() {
   const [developer, keys] = await Promise.all([getDeveloperSettings(), listApiKeys()]);
   const activeKeys = keys.filter((k) => k.status === "ACTIVE");
+  const host = (await headers()).get("host") ?? "localhost:3000";
+  const endpointUrl = `https://${host}/api/webhooks/xendit`;
+  const tokenConfigured = !!env.XENDIT_WEBHOOK_TOKEN;
 
   return (
     <main className="mx-auto w-full max-w-container-max p-gutter space-y-6">
@@ -39,7 +48,7 @@ export default async function DeveloperSettingsPage() {
         <div>
           <h1 className="headline-xl text-[var(--on-surface)]">Developer Settings</h1>
           <p className="body-sm text-[var(--on-surface-variant)] mt-1">
-            Manage API keys, webhooks, and access controls.
+            Manage API keys, the webhook endpoint, and access controls.
           </p>
         </div>
       </div>
@@ -63,18 +72,11 @@ export default async function DeveloperSettingsPage() {
                 description="Route dashboard requests to test data instead of live money."
                 enabled={developer.sandboxMode}
               />
-              <DeveloperToggle
-                field="webhookRetries"
-                icon="replay"
-                label="Webhook retries"
-                description="Retry failed deliveries with exponential backoff for 24 hours."
-                enabled={developer.webhookRetries}
-              />
             </div>
           </Card>
 
           <Card className="overflow-hidden p-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-4">
+            <div className="flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-4 flex">
               <div>
                 <h2 className="headline-md text-[var(--on-surface)]">API Keys</h2>
                 <p className="body-sm text-[var(--on-surface-variant)] mt-1">
@@ -121,60 +123,79 @@ export default async function DeveloperSettingsPage() {
           </Card>
 
           <Card className="overflow-hidden p-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-4">
+            <div className="flex-wrap items-center justify-between gap-3 border-b border-[var(--border-subtle)] bg-[var(--surface)] px-6 py-4 flex">
               <div>
-                <h2 className="headline-md text-[var(--on-surface)]">Webhook Endpoints</h2>
+                <h2 className="headline-md text-[var(--on-surface)]">Webhook Endpoint</h2>
                 <p className="body-sm text-[var(--on-surface-variant)] mt-1">
-                  Receive real-time event notifications.
+                  Where the provider sends callbacks to, and how this app verifies them.
                 </p>
               </div>
               <Link
                 href="/webhooks"
                 className="label-md rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-[var(--on-surface)] hover:bg-[var(--surface-container-low)]"
               >
-                Open webhook console
+                Open webhook log
               </Link>
             </div>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader className="label-caps bg-[var(--surface-container-low)]">
-                  <TableRow>
-                    <TableHead className="label-caps text-[var(--on-surface-variant)]">Status</TableHead>
-                    <TableHead className="label-caps text-[var(--on-surface-variant)]">URL</TableHead>
-                    <TableHead className="label-caps text-right text-[var(--on-surface-variant)]">Events</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {WEBHOOKS.map((hook) => (
-                    <TableRow key={hook.url} className="hover:bg-[var(--surface-container)]/50">
-                      <TableCell>
-                        <span
-                          className={
-                            hook.status === "Active"
-                              ? "label-caps inline-flex items-center gap-1.5 rounded-full border border-[var(--success-status)]/20 bg-[var(--status-success-bg)] px-2 py-0.5 text-[10px] text-[var(--success-status)]"
-                              : "label-caps inline-flex items-center gap-1.5 rounded-full border border-[var(--failed-status)]/20 bg-[var(--status-error-bg)] px-2 py-0.5 text-[10px] text-[var(--failed-status)]"
-                          }
-                        >
-                          <span
-                            className={
-                              hook.status === "Active"
-                                ? "h-1.5 w-1.5 rounded-full bg-[var(--success-status)]"
-                                : "h-1.5 w-1.5 rounded-full bg-[var(--failed-status)]"
-                            }
-                          />
-                          {hook.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="data-mono max-w-[240px] truncate text-[var(--on-surface)]">
-                        {hook.url}
-                      </TableCell>
-                      <TableCell className="body-sm text-right text-[var(--on-surface-variant)]">
-                        {hook.events}
-                      </TableCell>
-                    </TableRow>
+            <div className="divide-y divide-[var(--border-subtle)]">
+              <div className="px-6 py-4">
+                <p className="label-caps text-[11px] text-[var(--on-surface-variant)]">Endpoint</p>
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="data-mono text-sm text-[var(--on-surface)] break-all">{endpointUrl}</span>
+                  <CopyButton value={endpointUrl} label="Copy URL" />
+                </div>
+              </div>
+
+              <div className="px-6 py-4">
+                <p className="label-caps text-[11px] text-[var(--on-surface-variant)]">Callback token</p>
+                <div className="mt-1.5 flex items-start gap-3">
+                  <span
+                    className={
+                      "label-caps inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] " +
+                      (tokenConfigured
+                        ? "border-[var(--success-status)]/20 bg-[var(--status-success-bg)] text-[var(--success-status)]"
+                        : "border-[var(--pending-status)]/20 bg-[var(--pending-status)]/10 text-[var(--pending-status)]")
+                    }
+                  >
+                    <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
+                      {tokenConfigured ? "verified_user" : "warning"}
+                    </span>
+                    {tokenConfigured ? "Token configured (value hidden)" : "No token set — dev accepts without verification"}
+                  </span>
+                  <p className="body-sm text-[var(--on-surface-variant)]">
+                    {tokenConfigured
+                      ? "Every callback must carry the matching x-callback-token; others are rejected with 401 and logged."
+                      : "Set XENDIT_WEBHOOK_TOKEN in the environment — the endpoint then rejects any callback that doesn't carry it (401, logged). In production an unset token is a hard failure (500)."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="px-6 py-4">
+                <p className="label-caps text-[11px] text-[var(--on-surface-variant)]">Handled event types</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {KNOWN_WEBHOOK_EVENTS.map((t) => (
+                    <span
+                      key={t}
+                      className="data-mono text-[11px] rounded bg-[var(--surface-container-high)] px-1.5 py-0.5 text-[var(--on-surface-variant)]"
+                    >
+                      {t}
+                    </span>
                   ))}
-                </TableBody>
-              </Table>
+                  <span className="data-mono text-[11px] rounded bg-[var(--surface-container-high)] px-1.5 py-0.5 text-[var(--on-surface-variant)] italic">
+                    …stored as unhandled
+                  </span>
+                </div>
+              </div>
+
+              <div className="px-6 py-4">
+                <p className="label-caps text-[11px] text-[var(--on-surface-variant)]">Retries</p>
+                <p className="body-sm text-[var(--on-surface-variant)] mt-1">
+                  The provider re-delivers on non-2xx responses (INTEGRATION.md §7). This endpoint answers 200
+                  fast and dedupes by event id, so a re-delivery is logged as{" "}
+                  <span className="text-[var(--pending-status)] font-medium">Duplicated</span> — never processed
+                  twice (ADR-0014).
+                </p>
+              </div>
             </div>
           </Card>
         </div>
