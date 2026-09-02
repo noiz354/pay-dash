@@ -22,8 +22,8 @@ export const SETUP_STEPS = [
   },
   {
     id: "webhooks",
-    title: "Enable Webhooks",
-    description: "Receive payment events on your endpoint in real time.",
+    title: "Monitor Webhooks",
+    description: "Track the payment callbacks arriving at /api/webhooks/xendit — and simulate them in TEST MODE.",
     href: "/webhooks",
   },
 ] as const;
