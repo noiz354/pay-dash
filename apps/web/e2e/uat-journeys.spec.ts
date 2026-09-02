@@ -493,15 +493,17 @@ test.describe("F. Team / Admin / System (orphaned + RBAC gap)", () => {
     await expect(page.getByText("Kevin Tan")).toBeVisible();
   });
 
-  test("F8 onboarding checklist collapsible revert", async ({ page }) => {
+  test("F8 onboarding progress is derived, not hard-coded", async ({ page }) => {
     await page.goto("/en/onboarding");
-    await expect(page.getByRole("heading", { name: /Onboarding/ })).toBeVisible();
-    await expect(page.getByText("2 of 3 completed")).toBeVisible();
-    await page.getByText("Details").click();
-    await expect(page.getByText("Add directors")).toBeVisible();
-    await page.getByLabel("Documents").check();
-    await page.reload();
-    await expect(page.getByLabel("Documents")).not.toBeChecked();
+    await expect(page.getByRole("heading", { name: /Sub-Merchant Onboarding/ })).toBeVisible();
+    // ADR-0025: 3 app-owned sections, all complete in the seeded world;
+    // the compliance review is shown but never counted.
+    await expect(page.getByText("3 of 3 sections completed")).toBeVisible();
+    await expect(page.getByText("100%")).toBeVisible();
+    await expect(page.getByText("Acme Corporation LLC").first()).toBeVisible();
+    // The prototype's hard-coded progress and invented account are gone.
+    await expect(page.getByText("75%")).toHaveCount(0);
+    await expect(page.getByText(/4592/)).toHaveCount(0);
   });
 });
 
@@ -716,14 +718,15 @@ test.describe("J. Standard Failures & A11y", () => {
     await expect(banners).toHaveCount(1);
   });
 
-  test("J4 checkbox label linkage in team/onboarding", async ({ page }) => {
+  test("J4 onboarding card CTAs navigate to the owning pages", async ({ page }) => {
+    // ADR-0025: the prototype's dead buttons are real links now — each CTA
+    // lands on the page that owns the facts behind its card.
     await page.goto("/en/onboarding");
-    // clicking label toggles checkbox
-    await page.getByText("Documents").click();
-    await expect(page.getByLabel("Documents")).toBeChecked();
-    await page.goto("/en/team");
-    // team page has label association too
-    await expect(page.getByText("Team & Permissions")).toBeVisible();
+    await page.getByRole("link", { name: "Review Details" }).click();
+    await expect(page).toHaveURL(/settings\/merchant/);
+    await page.goto("/en/onboarding");
+    await page.getByRole("link", { name: "Go to Developer Dashboard" }).click();
+    await expect(page).toHaveURL(/settings\/developer/);
   });
 });
 
