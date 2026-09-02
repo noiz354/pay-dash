@@ -1,0 +1,59 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { submitKycDocument, removeKycDocument, type KycDocumentType } from "@/server/data/kyc";
+import { KYC_DOC_TYPES } from "@/lib/kyc-options";
+import type { ActionState } from "./payouts";
+
+export type { ActionState };
+
+function revalidateKyc() {
+  revalidatePath("/[locale]/kyc", "page");
+  revalidatePath("/kyc");
+}
+
+// Persist (or replace) the submitted KYC document. The file itself is not
+// uploaded anywhere in this prototype store — the record (name, size, type,
+// jurisdiction, timestamp) is the app's own fact (ADR-0019).
+export async function submitKycDocumentAction(
+  _prev: ActionState<{ fileName: string }> | undefined,
+  formData: FormData
+): Promise<ActionState<{ fileName: string }>> {
+  const fileName = String(formData.get("fileName") ?? "").trim();
+  const sizeBytes = Number(formData.get("sizeBytes") ?? 0);
+  const docType = String(formData.get("docType") ?? "");
+  const jurisdiction = String(formData.get("jurisdiction") ?? "").trim();
+
+  if (!fileName || !Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return { status: "error", message: "Attach a document first." };
+  }
+  if (!(KYC_DOC_TYPES.map((t) => t.value) as string[]).includes(docType)) {
+    return { status: "error", message: "Pick a document type." };
+  }
+  if (jurisdiction.length < 2) {
+    return { status: "error", message: "Enter the issuing jurisdiction." };
+  }
+
+  const submission = submitKycDocument({
+    fileName,
+    sizeBytes,
+    docType: docType as KycDocumentType,
+    jurisdiction,
+  });
+  revalidateKyc();
+  return {
+    status: "success",
+    message: `${submission.fileName} submitted for review.`,
+    data: { fileName: submission.fileName },
+  };
+}
+
+export async function removeKycDocumentAction(
+  _prev: ActionState | undefined,
+  formData: FormData
+): Promise<ActionState> {
+  const removed = removeKycDocument();
+  if (!removed) return { status: "error", message: "There is no submitted document to remove." };
+  revalidateKyc();
+  return { status: "success", message: "Submission removed — you can start over." };
+}
