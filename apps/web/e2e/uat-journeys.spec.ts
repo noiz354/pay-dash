@@ -352,37 +352,31 @@ test.describe("D. CRM & Commerce", () => {
 // E. Risk, Fraud, Compliance
 // ──────────────────────────────────────────────────────────
 test.describe("E. Risk, Fraud, Compliance (orphaned)", () => {
-  test("E1 fraud console switch resets on refresh and blocklist link missing", async ({ page }) => {
+  test("E1 fraud console is derived from the blocklist store", async ({ page }) => {
+    // Rebuilt in ADR-0024 — the prototype's two contradictory hard-coded
+    // lists and its invented 14,209/8,432/3,194 metrics are gone; /fraud
+    // and /fraud/blocklist run on one seeded store.
     await page.goto("/en/fraud");
     await expect(page.getByRole("heading", { name: /Fraud Prevention/ })).toBeVisible();
-    await expect(page.getByPlaceholder("Search rules…")).toBeVisible();
-    await expect(page.getByText("Blocklist — see /fraud/blocklist")).toBeVisible();
-    // plain text not linked
-    await expect(page.locator('a[href="/fraud/blocklist"]')).toHaveCount(0);
-    await expect(page.locator('a[href*="fraud/blocklist"]')).toHaveCount(0);
-    // Switch toggles but resets
-    const sw = page.locator('button[role="switch"]').first();
-    await expect(sw).toBeVisible();
-    const before = await sw.getAttribute("aria-checked");
-    await sw.click();
-    await expect(sw).not.toHaveAttribute("aria-checked", before ?? "");
-    await page.reload();
-    const afterReload = page.locator('button[role="switch"]').first();
-    await expect(afterReload).toHaveAttribute("aria-checked", "true"); // defaultChecked true
-    // Tabs
-    await page.getByRole("tab", { name: "Blocklist" }).click();
-    await expect(page.getByText("Blocklist — see /fraud/blocklist")).toBeVisible();
+    await expect(page.getByText("14,209")).toHaveCount(0);
+    await expect(page.getByText("+12% this week")).toHaveCount(0);
+    await expect(page.getByText("10 blocked entities")).toBeVisible();
+    await page.getByRole("tab", { name: /Card Numbers/ }).click();
+    await expect(page.getByText("453322 •••• 0110")).toBeVisible();
   });
 
-  test("E2 fraud blocklist add button inert", async ({ page }) => {
+  test("E2 blocklist page runs on the same store with real controls", async ({ page }) => {
     await page.goto("/en/fraud/blocklist");
     await expect(page.getByRole("heading", { name: /Blocklist/ })).toBeVisible();
-    await expect(page.getByPlaceholder("Search blocklist…")).toBeVisible();
-    await expect(page.getByText("4111 1111 1111 1111")).toBeVisible();
-    await expect(page.getByText("Blocked")).toBeVisible();
-    await page.getByRole("button", { name: "Add to blocklist" }).click();
-    await expect(page).toHaveURL(/fraud\/blocklist/);
-    await expect(page.getByText("4111 1111 1111 1111")).toBeVisible(); // still there
+    await expect(page.getByText("of 124")).toHaveCount(0);
+    await expect(page.getByText("10 entities blocked")).toBeVisible();
+    // Add dialog opens and validates server-side
+    await page.getByRole("button", { name: "Add to Blocklist" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByLabel("IP address").fill("999.1.1.1");
+    await page.getByRole("button", { name: "Add" }).click();
+    await expect(page.getByText("Enter a valid IPv4 or IPv6 address.")).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 
   test("E3 kyc form clears on refresh and submit inert", async ({ page }) => {
