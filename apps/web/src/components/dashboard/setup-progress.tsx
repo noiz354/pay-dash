@@ -1,17 +1,23 @@
 import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { getCompletedSteps, toggleSetupStepAction } from "@/server/actions/setup";
-import { SETUP_STEPS } from "@/lib/setup-steps";
+import { nextSetupStep, resolveSetupSteps, SETUP_STEPS } from "@/lib/setup-steps";
+import { getDestinationAccount } from "@/server/data/payouts";
 import { SetupStepToggle } from "./setup-step-toggle";
 
-// Setup Progress checklist — each row is now actionable: the checkbox posts a
+// Setup Progress checklist — each row is actionable: the checkbox posts a
 // Server Action (optimistic on the client), and the label deep-links to the
-// screen where the step is actually completed.
+// screen where the step is actually completed. The "Connect Bank Account"
+// step additionally derives from real state (ADR-0012): a verified
+// destination payout account marks it done and locks the tick, so the ring
+// can no longer be inflated by a self-attested check.
 export async function SetupProgress() {
-  const done = await getCompletedSteps();
-  const completed = SETUP_STEPS.filter((s) => done.includes(s.id)).length;
+  const [done, destination] = await Promise.all([getCompletedSteps(), getDestinationAccount()]);
+  const bankLinked = destination?.verified ?? false;
+  const states = resolveSetupSteps(done, bankLinked);
+  const completed = states.filter((s) => s.done).length;
   const pct = Math.round((completed / SETUP_STEPS.length) * 100);
-  const nextStep = SETUP_STEPS.find((s) => !done.includes(s.id));
+  const nextStep = nextSetupStep(done, bankLinked);
 
   return (
     <Card className="lg:col-span-4 bg-[var(--surface)] border-[var(--border-subtle)] p-5 flex flex-col shadow-sm min-w-0 overflow-hidden">
@@ -34,8 +40,8 @@ export async function SetupProgress() {
       </div>
 
       <ul className="space-y-2 flex-1 min-w-0">
-        {SETUP_STEPS.map((step) => {
-          const isDone = done.includes(step.id);
+        {states.map((state) => {
+          const step = SETUP_STEPS.find((s) => s.id === state.id)!;
           const isNext = nextStep?.id === step.id;
           return (
             <li key={step.id}>
@@ -44,9 +50,11 @@ export async function SetupProgress() {
                 title={step.title}
                 description={step.description}
                 href={step.href}
-                done={isDone}
+                done={state.done}
                 highlighted={isNext}
                 action={toggleSetupStepAction}
+                locked={state.derived}
+                lockNote={state.derived && destination ? `Linked · ${destination.masked}` : undefined}
               />
             </li>
           );

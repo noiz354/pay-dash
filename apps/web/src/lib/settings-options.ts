@@ -25,6 +25,15 @@ export type KeyScope = (typeof KEY_SCOPES)[number];
 export const NOTIFICATION_CHANNELS = ["email", "sms", "dashboard"] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 
+/**
+ * The merchant's display name for greetings. The data model holds the
+ * business (dba / legalName) — never a person's name, so the dashboard must
+ * not invent one (the prototype's "Sarah" had no source in any store).
+ */
+export function merchantGreeting(profile: { dba: string; legalName: string }) {
+  return profile.dba.trim() || profile.legalName.trim();
+}
+
 /** Shared by the client form and the server action so validation cannot drift. */
 export function isValidHexColor(value: string) {
   return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
