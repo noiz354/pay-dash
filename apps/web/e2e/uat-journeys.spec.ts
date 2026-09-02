@@ -492,16 +492,18 @@ test.describe("F. Team / Admin / System (orphaned + RBAC gap)", () => {
     await expect(page.getByText("xendit-node#31")).toBeVisible();
   });
 
-  test("F7 subscriptions tabs switch", async ({ page }) => {
+  test("F7 subscriptions serves the real plan store", async ({ page }) => {
+    // Rebuilt in ADR-0021 — the prototype's invented cards/rows and dead
+    // controls are gone; the page now serves the app's own plan store.
     await page.goto("/en/subscriptions");
     await expect(page.getByRole("heading", { name: /Subscription/ })).toBeVisible();
-    await expect(page.getByText("Budi")).toBeVisible();
-    await page.getByRole("tab", { name: "Calendar" }).click();
-    await expect(page.locator(".rdp").or(page.locator("[data-slot='calendar']")).first()).toBeVisible({ timeout: 3000 }).catch(async () => {
-      await expect(page.getByRole("tab", { name: "Calendar" })).toBeVisible();
-    });
-    await page.getByRole("tab", { name: "Subscriptions" }).click();
-    await expect(page.getByText("Budi")).toBeVisible();
+    await expect(page.getByText("1,248")).toHaveCount(0);
+    await expect(page.getByText("TechFlow Solutions")).toHaveCount(0);
+    // No absolute count — an earlier spec may have created a plan in the
+    // shared in-memory store.
+    await expect(page.getByText("Initech BV").first()).toBeVisible();
+    await page.getByLabel("Filter subscriptions by status").selectOption("PAST_DUE");
+    await expect(page.getByText("Kevin Tan")).toBeVisible();
   });
 
   test("F8 onboarding checklist collapsible revert", async ({ page }) => {
