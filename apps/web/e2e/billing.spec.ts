@@ -78,3 +78,32 @@ test.describe("invoice detail", () => {
     await expect(page.getByText("Invoice not found")).toBeVisible();
   });
 });
+
+test.describe("auto-debit (ADR-0018 — the profile switch is real)", () => {
+  test("the billing card follows the merchant profile switch", async ({ page }) => {
+    // Seed: autoDebit on → the card links to the profile with "scheduled".
+    await page.goto("/en/billing");
+    await expect(page.getByRole("link", { name: "Auto-debit scheduled" })).toHaveAttribute(
+      "href",
+      /\/en\/settings\/merchant/
+    );
+
+    // Flip the switch off, save…
+    await page.goto("/en/settings/merchant");
+    await page.getByLabel("Auto-debit platform invoices").click();
+    await expect(page.getByText("Unsaved changes")).toBeVisible();
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await expect(page.getByText("Merchant profile saved.")).toBeVisible();
+
+    // …and the billing card follows (the branch that used to be dead code).
+    await page.goto("/en/billing");
+    await expect(page.getByRole("link", { name: "Auto-debit off — set it up" })).toBeVisible();
+
+    // Restore for the rest of the suite (shared in-memory store).
+    await page.goto("/en/settings/merchant");
+    await page.getByLabel("Auto-debit platform invoices").click();
+    await page.getByRole("button", { name: "Save Changes" }).click();
+    await page.goto("/en/billing");
+    await expect(page.getByRole("link", { name: "Auto-debit scheduled" })).toBeVisible();
+  });
+});
