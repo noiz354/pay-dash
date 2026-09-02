@@ -448,17 +448,18 @@ test.describe("F. Team / Admin / System (orphaned + RBAC gap)", () => {
     await expect(page.locator("text=⌘").first()).toBeVisible();
   });
 
-  test("F3 reports builder filters inert no generate", async ({ page }) => {
+  test("F3 reports builder runs real queries over the ledger", async ({ page }) => {
+    // Rebuilt in ADR-0020 — the prototype's inert controls and invented
+    // 1,248-row preview are gone; the page now serves real store rows.
     await page.goto("/en/reports/builder");
     await expect(page.getByRole("heading", { name: /Custom Reports/ })).toBeVisible();
-    await page.getByRole("combobox").click();
-    await expect(page.getByText("Success")).toBeVisible();
-    await page.keyboard.press("Escape");
-    await page.getByLabel("QRIS").check();
-    await expect(page.getByLabel("QRIS")).toBeChecked();
-    await page.reload();
-    await expect(page.getByLabel("QRIS")).not.toBeChecked();
-    await expectDataMonoRight(page, /IDR 1,000,000\.00/);
+    await expect(page.getByText("1,248")).toHaveCount(0);
+    await expect(page.getByText("46 of 46 rows")).toBeVisible();
+    await page.getByLabel("Customers").check();
+    await expect(page.getByText("Lifetime Value")).toBeVisible();
+    await expect(page.getByText("11 of 11 rows")).toBeVisible();
+    await page.getByLabel("Transactions").check();
+    await expect(page.getByText("46 of 46 rows")).toBeVisible();
   });
 
   test("F4 system health static gauges", async ({ page }) => {
