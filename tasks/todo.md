@@ -382,14 +382,14 @@
 **Description:** Add app-owned split rules, immutable versions, routes, and provider materialization mapping without activating or applying rules to payments.
 
 **Acceptance criteria:**
-- [ ] Approved versions cannot be mutated through the repository contract.
-- [ ] Exactly one allocation kind—flat or percentage—is present per route.
-- [ ] Route destinations and provider materializations use compatible provider account/connection context.
+- [x] Approved versions cannot be mutated through the repository contract.
+- [x] Exactly one allocation kind—flat or percentage—is present per route.
+- [x] Route destinations and provider materializations use compatible provider account/connection context.
 
 **Verification:**
-- [ ] Tests reject both/neither allocation fields, duplicate route references, and provider topology mismatches.
-- [ ] Version replacement preserves prior approved versions.
-- [ ] Provider split-rule IDs are unique per connection.
+- [x] Tests reject both/neither allocation fields, duplicate route references, and provider topology mismatches.
+- [x] Version replacement preserves prior approved versions.
+- [x] Provider split-rule IDs are unique per connection.
 
 **Dependencies:** Checkpoint D
 
@@ -400,6 +400,17 @@
 - focused integration tests
 
 **Estimated scope:** M (4–5 files)
+
+---
+
+## Checkpoint E: Split-routing identity
+
+- [x] Task 13 acceptance criteria are complete.
+- [x] Prisma validates/generates and all eight migrations apply from baseline.
+- [x] Split allocation, topology, uniqueness, version, and Decimal constraints pass on isolated PostgreSQL.
+- [x] Focused tests (51/51), typecheck, touched-dir lint, and build pass.
+- [x] Regression assessment records two known balance failures and one unrelated UI test that passes in isolation.
+- [ ] Human reviews split-routing identity before repository hardening.
 
 ---
 
