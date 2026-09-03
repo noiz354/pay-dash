@@ -280,7 +280,7 @@
 - [x] Customer/payment/refund/payment-method invariant tests pass.
 - [x] Secret/PCI scan finds no forbidden fixture or field.
 - [x] Regression gate passes: focused tests, typecheck, touched-dir lint, and build pass; full suite remains 324/326 due to two independently reproduced pre-existing `getBalanceTrend` failures.
-- [ ] Human reviews provider-origin routing before money-out identities.
+- [x] Human reviews provider-origin routing before money-out identities.
 
 ---
 

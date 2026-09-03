@@ -99,6 +99,9 @@ model Organization {
   payments            CanonicalPayment[]
   refunds             CanonicalRefund[]
   paymentMethods      CanonicalPaymentMethod[]
+  subscriptions       LocalSubscription[]
+  payoutBatches       PayoutBatch[]
+  platformTransfers   PlatformTransfer[]
 }
 
 // Identity shell only: credentials, capabilities, default selection, and the
@@ -118,6 +121,10 @@ model PaymentProviderConnection {
   providerPayments       ProviderPayment[]
   providerRefunds        ProviderRefund[]
   providerPaymentMethods ProviderPaymentMethod[]
+  providerRecurringPlans ProviderRecurringPlan[]
+  providerPayoutAttempts ProviderPayoutAttempt[]
+  platformTransfers      PlatformTransfer[]
+  providerTransfers      ProviderTransfer[]
 
   @@unique([id, organizationId])
   @@index([organizationId, provider, mode])
@@ -138,7 +145,10 @@ model ProviderAccount {
   lastSyncedAt        DateTime?
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
+  outgoingTransfers   PlatformTransfer[]        @relation("TransferSource")
+  incomingTransfers   PlatformTransfer[]        @relation("TransferDestination")
 
+  @@unique([id, connectionId])
   @@unique([connectionId, providerAccountId])
   @@index([organizationId])
 }
@@ -156,6 +166,7 @@ model CanonicalCustomer {
   providerCustomers ProviderCustomer[]
   payments          CanonicalPayment[]
   paymentMethods    CanonicalPaymentMethod[]
+  subscriptions     LocalSubscription[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, merchantReference])
@@ -307,7 +318,157 @@ model ProviderPaymentMethod {
   maskedDetails             Json
   providerUpdatedAt         DateTime?
   lastSyncedAt              DateTime
+  recurringPlans            ProviderRecurringPlan[]
 
   @@unique([connectionId, providerPaymentMethodId])
   @@unique([canonicalPaymentMethodId, organizationId])
+  @@unique([canonicalPaymentMethodId, connectionId])
+}
+
+model LocalSubscription {
+  id                     String                  @id @default(cuid())
+  organizationId         String
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customerId             String
+  customer               CanonicalCustomer       @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  merchantReference      String                  @db.VarChar(255)
+  planKey                String                  @db.VarChar(255)
+  entitlementStatus      String                  @db.VarChar(30)
+  commercialStatus       String                  @db.VarChar(30)
+  amount                 Decimal                 @db.Decimal(20, 4)
+  currency               String                  @db.Char(3)
+  intervalDefinition     Json
+  startedAt              DateTime
+  cancelledAt            DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  providerRecurringPlans ProviderRecurringPlan[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, merchantReference])
+  @@index([organizationId, commercialStatus])
+}
+
+model ProviderRecurringPlan {
+  id                       String                    @id @default(cuid())
+  organizationId           String
+  localSubscriptionId      String
+  localSubscription        LocalSubscription         @relation(fields: [localSubscriptionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  connectionId             String
+  connection               PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  canonicalPaymentMethodId String
+  providerPaymentMethod    ProviderPaymentMethod     @relation(fields: [canonicalPaymentMethodId, connectionId], references: [canonicalPaymentMethodId, connectionId], onDelete: Restrict)
+  providerPlanId           String                    @db.VarChar(255)
+  providerReference        String?                   @db.VarChar(255)
+  providerStatus           String                    @db.VarChar(100)
+  scheduleSummary          Json
+  version                  Int
+  effectiveFrom            DateTime
+  effectiveTo              DateTime?
+  providerUpdatedAt        DateTime?
+  lastSyncedAt             DateTime
+
+  @@unique([connectionId, providerPlanId])
+  @@unique([localSubscriptionId, version])
+}
+
+model PayoutBatch {
+  id                String            @id @default(cuid())
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  merchantReference String            @db.VarChar(255)
+  name              String            @db.VarChar(255)
+  currency          String            @db.Char(3)
+  canonicalStatus   String            @default("DRAFT") @db.VarChar(30)
+  scheduledFor      DateTime?
+  version           Int               @default(1)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  recipients        PayoutRecipient[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, merchantReference])
+  @@index([organizationId, canonicalStatus, createdAt])
+}
+
+model PayoutRecipient {
+  id                 String                  @id @default(cuid())
+  organizationId     String
+  batchId            String
+  batch              PayoutBatch             @relation(fields: [batchId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  recipientReference String                  @db.VarChar(255)
+  name               String                  @db.VarChar(255)
+  destinationRef     String                  @db.VarChar(255)
+  amount             Decimal                 @db.Decimal(20, 4)
+  currency           String                  @db.Char(3)
+  canonicalStatus    String                  @default("PENDING") @db.VarChar(30)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  attempts           ProviderPayoutAttempt[]
+
+  @@unique([id, organizationId])
+  @@unique([batchId, recipientReference])
+}
+
+model ProviderPayoutAttempt {
+  id                 String                    @id @default(cuid())
+  organizationId     String
+  recipientId        String
+  recipient          PayoutRecipient           @relation(fields: [recipientId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  connectionId       String
+  connection         PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  attemptNumber      Int
+  providerPayoutId   String?                   @db.VarChar(255)
+  providerReference  String?                   @db.VarChar(255)
+  providerStatus     String                    @db.VarChar(100)
+  failureCode        String?                   @db.VarChar(100)
+  estimatedArrivalAt DateTime?
+  lastSyncedAt       DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@unique([recipientId, attemptNumber])
+  @@unique([connectionId, providerPayoutId])
+}
+
+model PlatformTransfer {
+  id                           String             @id @default(cuid())
+  organizationId               String
+  organization                 Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  merchantReference            String             @db.VarChar(255)
+  connectionId                 String
+  connection                   PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  sourceProviderAccountId      String
+  sourceProviderAccount        ProviderAccount    @relation("TransferSource", fields: [sourceProviderAccountId, connectionId], references: [id, connectionId], onDelete: Restrict)
+  destinationProviderAccountId String
+  destinationProviderAccount   ProviderAccount    @relation("TransferDestination", fields: [destinationProviderAccountId, connectionId], references: [id, connectionId], onDelete: Restrict)
+  amount                       Decimal            @db.Decimal(20, 4)
+  currency                     String             @db.Char(3)
+  canonicalStatus              String             @default("PENDING") @db.VarChar(30)
+  version                      Int                @default(1)
+  createdAt                    DateTime           @default(now())
+  updatedAt                    DateTime           @updatedAt
+  attempts                     ProviderTransfer[]
+
+  @@unique([id, connectionId])
+  @@unique([organizationId, merchantReference])
+}
+
+model ProviderTransfer {
+  id                 String                    @id @default(cuid())
+  organizationId     String
+  platformTransferId String
+  platformTransfer   PlatformTransfer          @relation(fields: [platformTransferId, connectionId], references: [id, connectionId], onDelete: Restrict)
+  connectionId       String
+  connection         PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  attemptNumber      Int
+  providerTransferId String?                   @db.VarChar(255)
+  providerReference  String?                   @db.VarChar(255)
+  providerStatus     String                    @db.VarChar(100)
+  lastSyncedAt       DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@unique([platformTransferId, attemptNumber])
+  @@unique([connectionId, providerTransferId])
 }
