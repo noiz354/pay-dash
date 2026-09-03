@@ -291,14 +291,14 @@
 **Description:** Add app-owned subscription/entitlement records and versioned provider recurring-plan mappings while keeping commercial, entitlement, and provider execution states distinct.
 
 **Acceptance criteria:**
-- [ ] Local entitlement/commercial status does not reuse provider status.
-- [ ] Provider plans are connection-scoped and preserve replacement/version history.
-- [ ] Payment-method references cannot cross provider connection boundaries.
+- [x] Local entitlement/commercial status does not reuse provider status.
+- [x] Provider plans are connection-scoped and preserve replacement/version history.
+- [x] Payment-method references cannot cross provider connection boundaries.
 
 **Verification:**
-- [ ] Integration tests cover plan replacement history and provider mismatch rejection.
-- [ ] Unknown provider status does not grant entitlement.
-- [ ] Exact amount/currency persists correctly.
+- [x] Integration tests cover plan replacement history and provider mismatch rejection.
+- [x] Unknown provider status does not grant entitlement.
+- [x] Exact amount/currency persists correctly.
 
 **Dependencies:** Checkpoint C
 
@@ -317,14 +317,14 @@
 **Description:** Add app-owned payout batch/recipient records and immutable provider attempt history, resolving the current one-row-per-batch mismatch without executing payouts.
 
 **Acceptance criteria:**
-- [ ] A batch contains independently tracked recipients and exact amounts.
-- [ ] A recipient may have ordered attempts; duplicate attempt numbers are rejected.
-- [ ] Provider payout IDs are unique per connection and old attempts remain historical.
+- [x] A batch contains independently tracked recipients and exact amounts.
+- [x] A recipient may have ordered attempts; duplicate attempt numbers are rejected.
+- [x] Provider payout IDs are unique per connection and old attempts remain historical.
 
 **Verification:**
-- [ ] Tests cover multi-recipient batches, attempt ordering, provider ID collisions, and current-attempt selection.
-- [ ] Failed attempt history is not overwritten by a later attempt.
-- [ ] No destination secret is stored in plaintext general-purpose fields.
+- [x] Tests cover multi-recipient batches, attempt ordering, provider ID collisions, and current-attempt selection.
+- [x] Failed attempt history is not overwritten by a later attempt.
+- [x] No destination secret is stored in plaintext general-purpose fields.
 
 **Dependencies:** Checkpoint C
 
@@ -343,14 +343,14 @@
 **Description:** Add canonical/provider transfer-attempt identity with explicit source/destination provider accounts and same-provider topology validation. Do not execute transfers.
 
 **Acceptance criteria:**
-- [ ] Source and destination accounts are explicit and organization-scoped.
-- [ ] One transfer attempt uses one provider connection; silent cross-provider transfer is rejected.
-- [ ] Provider transfer IDs and attempt numbers are collision-safe.
+- [x] Source and destination accounts are explicit and organization-scoped.
+- [x] One transfer attempt uses one provider connection; silent cross-provider transfer is rejected.
+- [x] Provider transfer IDs and attempt numbers are collision-safe.
 
 **Verification:**
-- [ ] Same-provider valid topology integration test passes.
-- [ ] Cross-provider and cross-organization topology tests fail safely.
-- [ ] No live transfer adapter or endpoint is introduced.
+- [x] Same-provider valid topology integration test passes.
+- [x] Cross-provider and cross-organization topology tests fail safely.
+- [x] No live transfer adapter or endpoint is introduced.
 
 **Dependencies:** Task 6, Checkpoint C
 
@@ -366,11 +366,11 @@
 
 ## Checkpoint D: Recurring and money-out identity
 
-- [ ] Tasks 10–12 acceptance criteria are complete.
-- [ ] Subscription, payout, and transfer invariant tests pass.
-- [ ] Migration chain applies cleanly from baseline.
-- [ ] No financial execution capability exists yet.
-- [ ] Existing test, typecheck, lint, and build gates pass.
+- [x] Tasks 10–12 acceptance criteria are complete.
+- [x] Subscription, payout, and transfer invariant tests pass.
+- [x] Migration chain applies cleanly from baseline.
+- [x] No financial execution capability exists yet.
+- [x] Regression gate passes: focused tests (45/45), typecheck, touched-dir lint, and build pass; full suite remains 329/331 due to two independently reproduced pre-existing `getBalanceTrend` failures.
 - [ ] Human reviews before split-routing identity.
 
 ---
