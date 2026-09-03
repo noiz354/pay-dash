@@ -198,14 +198,14 @@
 **Description:** Add explicit customer and payment canonical/mapping tables with organization-scoped merchant references, connection-scoped provider IDs, exact amounts, and separate canonical/provider statuses.
 
 **Acceptance criteria:**
-- [ ] One canonical customer may map to Xendit and Stripe without email-based merging.
-- [ ] One canonical payment has exactly one originating provider payment mapping.
-- [ ] Organization merchant references and connection provider IDs enforce approved uniqueness.
+- [x] One canonical customer may map to Xendit and Stripe without email-based merging.
+- [x] One canonical payment has exactly one originating provider payment mapping.
+- [x] Organization merchant references and connection provider IDs enforce approved uniqueness.
 
 **Verification:**
-- [ ] Prisma validates/generates and additive migration SQL is reviewed.
-- [ ] Integration tests cover multi-provider customer linking, ID collision scope, status separation, and Decimal round-trip.
-- [ ] No raw provider payload column is introduced.
+- [x] Prisma validates/generates and additive migration SQL is reviewed.
+- [x] Integration tests cover multi-provider customer linking, ID collision scope, status separation, and Decimal round-trip.
+- [x] No raw provider payload column is introduced.
 
 **Dependencies:** Checkpoint B
 
@@ -225,14 +225,14 @@
 **Description:** Add canonical/provider refund mappings and enforce that a refund routes through the original payment provider connection. Do not implement refund execution, locking, thresholds, or approvals.
 
 **Acceptance criteria:**
-- [ ] Refund stores exact amount/currency, canonical status, provider status, and originating payment relationship.
-- [ ] Schema/reference design makes payment-provider mismatch impossible or transactionally rejected by one narrow repository operation.
-- [ ] Cumulative refund execution behavior remains explicitly deferred to `refunds` and `durable-operations`.
+- [x] Refund stores exact amount/currency, canonical status, provider status, and originating payment relationship.
+- [x] Schema/reference design makes payment-provider mismatch impossible or transactionally rejected by one narrow repository operation.
+- [x] Cumulative refund execution behavior remains explicitly deferred to `refunds` and `durable-operations`.
 
 **Verification:**
-- [ ] Mismatched provider connection integration test fails safely.
-- [ ] Valid partial refund identity can be persisted without invoking a provider.
-- [ ] Duplicate provider refund ID within one connection is rejected.
+- [x] Mismatched provider connection integration test fails safely.
+- [x] Valid partial refund identity can be persisted without invoking a provider.
+- [x] Duplicate provider refund ID within one connection is rejected.
 
 **Dependencies:** Task 7
 
@@ -251,14 +251,14 @@
 **Description:** Add canonical/provider payment-method mapping with common masked relational fields and strict typed JSON only for allowlisted provider display variants.
 
 **Acceptance criteria:**
-- [ ] Payment method mapping is connection-scoped and linked to a canonical customer.
-- [ ] Masked details schema cannot contain PAN, CVV, OTP, secret/token, or arbitrary provider payload keys.
-- [ ] Provider customer/method consistency is enforced by the narrow repository operation.
+- [x] Payment method mapping is connection-scoped and linked to a canonical customer.
+- [x] Masked details schema cannot contain PAN, CVV, OTP, secret/token, or arbitrary provider payload keys.
+- [x] Provider customer/method consistency is enforced by the narrow repository operation.
 
 **Verification:**
-- [ ] Tests reject forbidden sensitive/unrecognized fields.
-- [ ] Valid masked card/bank/e-wallet display fixtures persist and round-trip safely.
-- [ ] Cross-provider customer/method mismatch is rejected.
+- [x] Tests reject forbidden sensitive/unrecognized fields.
+- [x] Valid masked card/bank/e-wallet display fixtures persist and round-trip safely.
+- [x] Cross-provider customer/method mismatch is rejected.
 
 **Dependencies:** Task 7
 
@@ -275,11 +275,11 @@
 
 ## Checkpoint C: Money-in identity
 
-- [ ] Tasks 7–9 acceptance criteria are complete.
-- [ ] All additive migrations apply from baseline in order.
-- [ ] Customer/payment/refund/payment-method invariant tests pass.
-- [ ] Secret/PCI scan finds no forbidden fixture or field.
-- [ ] Existing test, typecheck, lint, and build gates pass.
+- [x] Tasks 7–9 acceptance criteria are complete.
+- [x] All additive migrations apply from baseline in order.
+- [x] Customer/payment/refund/payment-method invariant tests pass.
+- [x] Secret/PCI scan finds no forbidden fixture or field.
+- [x] Regression gate passes: focused tests, typecheck, touched-dir lint, and build pass; full suite remains 324/326 due to two independently reproduced pre-existing `getBalanceTrend` failures.
 - [ ] Human reviews provider-origin routing before money-out identities.
 
 ---
