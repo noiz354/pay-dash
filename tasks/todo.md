@@ -142,7 +142,7 @@
 - [x] Delete behavior preserves referenced provider/financial identity and no existing model is repurposed.
 
 **Verification:**
-- [ ] Prisma schema validates and client generates.
+- [x] Prisma schema validates and client generates.
 - [x] Generated migration SQL is manually reviewed for destructive changes and unintended cascades.
 - [x] Existing Better Auth and `LedgerEntry` definitions are unchanged except unavoidable relation formatting, if any.
 
@@ -161,14 +161,14 @@
 **Description:** Add PostgreSQL integration tests and minimal persistence helpers needed to prove organization scoping, mode separation, connection-scoped provider IDs, and restrictive deletion.
 
 **Acceptance criteria:**
-- [ ] Identical provider account IDs under different valid connections do not collide, while duplicates inside one connection do.
-- [ ] TEST and LIVE connections remain distinguishable and organization-scoped.
-- [ ] Referenced connection/account identity cannot be accidentally hard-deleted.
+- [x] Identical provider account IDs under different valid connections do not collide, while duplicates inside one connection do.
+- [x] TEST and LIVE connections remain distinguishable and organization-scoped.
+- [x] Referenced connection/account identity cannot be accidentally hard-deleted.
 
 **Verification:**
-- [ ] Focused PostgreSQL integration tests pass against an isolated test database.
-- [ ] Migration applies cleanly from the repository baseline.
-- [ ] Existing test suite remains green.
+- [x] Focused PostgreSQL integration tests pass against an isolated test database.
+- [x] Migration applies cleanly from the repository baseline.
+- [x] Existing test suite remains green.
 
 **Dependencies:** Task 5
 
@@ -183,11 +183,11 @@
 
 ## Checkpoint B: Foundational persistence
 
-- [ ] Tasks 5–6 acceptance criteria are complete.
-- [ ] Prisma validate/generate succeeds.
-- [ ] Migration SQL has no destructive change to existing data/tables.
-- [ ] Foundation integration tests and existing tests pass.
-- [ ] Human reviews the first migration before money-in tables are added.
+- [x] Tasks 5–6 acceptance criteria are complete.
+- [x] Prisma validate/generate succeeds.
+- [x] Migration SQL has no destructive change to existing data/tables.
+- [x] Foundation integration tests and existing tests pass.
+- [x] Human reviews the first migration before money-in tables are added.
 
 ---
 

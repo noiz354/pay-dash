@@ -95,6 +95,10 @@ model Organization {
   updatedAt           DateTime                    @updatedAt
   providerConnections PaymentProviderConnection[]
   providerAccounts    ProviderAccount[]
+  customers           CanonicalCustomer[]
+  payments            CanonicalPayment[]
+  refunds             CanonicalRefund[]
+  paymentMethods      CanonicalPaymentMethod[]
 }
 
 // Identity shell only: credentials, capabilities, default selection, and the
@@ -109,7 +113,11 @@ model PaymentProviderConnection {
   providerAccountId String?           @db.VarChar(255)
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
-  providerAccounts  ProviderAccount[]
+  providerAccounts       ProviderAccount[]
+  providerCustomers      ProviderCustomer[]
+  providerPayments       ProviderPayment[]
+  providerRefunds        ProviderRefund[]
+  providerPaymentMethods ProviderPaymentMethod[]
 
   @@unique([id, organizationId])
   @@index([organizationId, provider, mode])
@@ -133,4 +141,170 @@ model ProviderAccount {
 
   @@unique([connectionId, providerAccountId])
   @@index([organizationId])
+}
+
+model CanonicalCustomer {
+  id                String                  @id @default(cuid())
+  organizationId    String
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  merchantReference String                  @db.VarChar(255)
+  displayName       String                  @db.VarChar(255)
+  emailNormalized   String?                 @db.VarChar(320)
+  appStatus         String                  @default("ACTIVE") @db.VarChar(30)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  providerCustomers ProviderCustomer[]
+  payments          CanonicalPayment[]
+  paymentMethods    CanonicalPaymentMethod[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, merchantReference])
+  @@index([organizationId, emailNormalized])
+}
+
+model ProviderCustomer {
+  id                  String                    @id @default(cuid())
+  organizationId      String
+  canonicalCustomerId String
+  canonicalCustomer   CanonicalCustomer         @relation(fields: [canonicalCustomerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  connectionId        String
+  connection          PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  providerCustomerId  String                    @db.VarChar(255)
+  providerReference   String?                   @db.VarChar(255)
+  providerStatus      String?                   @db.VarChar(100)
+  lastSyncedAt        DateTime?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  paymentMethods      ProviderPaymentMethod[]
+
+  @@unique([id, connectionId])
+  @@unique([connectionId, providerCustomerId])
+  @@unique([canonicalCustomerId, connectionId])
+}
+
+model CanonicalPayment {
+  id                String             @id @default(cuid())
+  organizationId    String
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customerId        String?
+  customer          CanonicalCustomer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  merchantReference String             @db.VarChar(255)
+  amount            Decimal            @db.Decimal(20, 4)
+  currency          String             @db.Char(3)
+  canonicalStatus   String             @default("PENDING") @db.VarChar(30)
+  paymentKind       String             @db.VarChar(50)
+  version           Int                @default(1)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  providerPayment   ProviderPayment?
+  refunds           CanonicalRefund[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, merchantReference])
+  @@index([organizationId, canonicalStatus, createdAt])
+}
+
+model ProviderPayment {
+  id                 String                    @id @default(cuid())
+  organizationId     String
+  canonicalPaymentId String                    @unique
+  canonicalPayment   CanonicalPayment          @relation(fields: [canonicalPaymentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  connectionId       String
+  connection         PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  providerPaymentId  String                    @db.VarChar(255)
+  providerProductId  String?                   @db.VarChar(255)
+  providerReference  String?                   @db.VarChar(255)
+  providerStatus     String                    @db.VarChar(100)
+  channelCategory    String?                   @db.VarChar(100)
+  channelCode        String?                   @db.VarChar(100)
+  cashflow           String?                   @db.VarChar(30)
+  settlementStatus   String?                   @db.VarChar(100)
+  feeAmount          Decimal?                  @db.Decimal(20, 4)
+  netAmount          Decimal?                  @db.Decimal(20, 4)
+  occurredAt         DateTime?
+  providerUpdatedAt  DateTime?
+  lastSyncedAt       DateTime
+  refunds            ProviderRefund[]
+
+  @@unique([id, connectionId])
+  @@unique([connectionId, providerPaymentId])
+  @@index([connectionId, providerStatus])
+}
+
+model CanonicalRefund {
+  id                String            @id @default(cuid())
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  paymentId         String
+  payment           CanonicalPayment  @relation(fields: [paymentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  merchantReference String            @db.VarChar(255)
+  amount            Decimal           @db.Decimal(20, 4)
+  currency          String            @db.Char(3)
+  reasonCode        String?           @db.VarChar(100)
+  canonicalStatus   String            @default("PENDING") @db.VarChar(30)
+  version           Int               @default(1)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  providerRefund    ProviderRefund?
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, merchantReference])
+  @@index([paymentId, canonicalStatus])
+}
+
+model ProviderRefund {
+  id                String                    @id @default(cuid())
+  organizationId    String
+  canonicalRefundId String                    @unique
+  canonicalRefund   CanonicalRefund           @relation(fields: [canonicalRefundId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  providerPaymentId String
+  providerPayment   ProviderPayment           @relation(fields: [providerPaymentId, connectionId], references: [id, connectionId], onDelete: Restrict)
+  connectionId      String
+  connection        PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  providerRefundId  String                    @db.VarChar(255)
+  providerReference String?                   @db.VarChar(255)
+  providerStatus    String                    @db.VarChar(100)
+  failureCode       String?                   @db.VarChar(100)
+  providerUpdatedAt DateTime?
+  lastSyncedAt      DateTime
+
+  @@unique([connectionId, providerRefundId])
+}
+
+model CanonicalPaymentMethod {
+  id                    String                 @id @default(cuid())
+  organizationId        String
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customerId            String
+  customer              CanonicalCustomer      @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  displayType           String                 @db.VarChar(50)
+  displayLabel          String?                @db.VarChar(255)
+  canonicalStatus       String                 @default("PENDING") @db.VarChar(30)
+  reusability           String?                @db.VarChar(30)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  providerPaymentMethod ProviderPaymentMethod?
+
+  @@unique([id, organizationId])
+  @@index([organizationId, customerId])
+}
+
+model ProviderPaymentMethod {
+  id                       String                    @id @default(cuid())
+  organizationId           String
+  canonicalPaymentMethodId String                    @unique
+  canonicalPaymentMethod   CanonicalPaymentMethod    @relation(fields: [canonicalPaymentMethodId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  connectionId             String
+  connection               PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  providerCustomerMappingId String
+  providerCustomerMapping   ProviderCustomer          @relation(fields: [providerCustomerMappingId, connectionId], references: [id, connectionId], onDelete: Restrict)
+  providerPaymentMethodId   String                    @db.VarChar(255)
+  providerStatus            String                    @db.VarChar(100)
+  providerType              String                    @db.VarChar(100)
+  channelCode               String?                   @db.VarChar(100)
+  maskedDetails             Json
+  providerUpdatedAt         DateTime?
+  lastSyncedAt              DateTime
+
+  @@unique([connectionId, providerPaymentMethodId])
 }
