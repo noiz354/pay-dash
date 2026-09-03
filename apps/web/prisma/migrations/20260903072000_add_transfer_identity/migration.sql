@@ -34,6 +34,7 @@ CREATE TABLE "ProviderTransfer" (
     CONSTRAINT "ProviderTransfer_attemptNumber_check" CHECK ("attemptNumber" > 0)
 );
 
+CREATE UNIQUE INDEX "ProviderAccount_id_connectionId_key" ON "ProviderAccount"("id", "connectionId");
 CREATE UNIQUE INDEX "PlatformTransfer_id_connectionId_key" ON "PlatformTransfer"("id", "connectionId");
 CREATE UNIQUE INDEX "PlatformTransfer_organizationId_merchantReference_key" ON "PlatformTransfer"("organizationId", "merchantReference");
 CREATE UNIQUE INDEX "ProviderTransfer_platformTransferId_attemptNumber_key" ON "ProviderTransfer"("platformTransferId", "attemptNumber");
