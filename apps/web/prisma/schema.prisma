@@ -85,3 +85,52 @@ model LedgerEntry {
   description     String?
   metadata        String   @default("{}")
 }
+
+// Minimal tenant anchor. Memberships and authorization are owned by the
+// organization-access module and are intentionally absent here.
+model Organization {
+  id                  String                      @id @default(cuid())
+  name                String
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  providerConnections PaymentProviderConnection[]
+  providerAccounts    ProviderAccount[]
+}
+
+// Identity shell only: credentials, capabilities, default selection, and the
+// complete connection state machine belong to later modules.
+model PaymentProviderConnection {
+  id                String            @id @default(cuid())
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  provider          String            @db.VarChar(50)
+  mode              String            @db.VarChar(10)
+  status            String            @default("DRAFT") @db.VarChar(30)
+  providerAccountId String?           @db.VarChar(255)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  providerAccounts  ProviderAccount[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, provider, mode])
+  @@index([provider, providerAccountId])
+}
+
+model ProviderAccount {
+  id                  String                    @id @default(cuid())
+  organizationId      String
+  organization        Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connectionId        String
+  connection          PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  providerAccountId   String                    @db.VarChar(255)
+  providerAccountType String                    @db.VarChar(50)
+  canonicalStatus     String                    @default("UNKNOWN") @db.VarChar(30)
+  providerStatus      String?                   @db.VarChar(100)
+  capabilitiesSummary Json?
+  lastSyncedAt        DateTime?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@unique([connectionId, providerAccountId])
+  @@index([organizationId])
+}
