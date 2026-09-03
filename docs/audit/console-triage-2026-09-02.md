@@ -16,8 +16,20 @@ Source: `http://localhost:3000/en/dashboard` + `/en/billing` + `/en/customers` m
 | 8 | **P2 warn** | `THREE.Clock deprecated → THREE.Timer` | `src/components/dashboard/hero.tsx:75` via `three@0.185.1` | `THREE.Clock` constructor deprecated | Library warning |
 | 9 | **P2 warn** | `WebGL: loseContext: context already lost` | `three.module.js:16592` via `Hero3D` `Canvas` | No `gl.dispose()` on unmount | occasional |
 | 10 | **P3 info** | `Preload … but not used` ×40 + `Slow execution 276ms` / `TTFB 26s poor` | `src/app/layout.tsx` preloads fonts/media | Preloads for routes not visited; TTFB poor in dev (instrumentation overhead) | Perf noise in dev only |
+| 11 | **P3 404** | `GET /en/favicon.ico 404` | `apps/web/public/favicon.ico` missing + `proxy.ts` matcher | No favicon file; `proxy.ts:155` matcher excludes `favicon.ico` at root but browser requests `/en/favicon.ico` (locale-prefixed) → misses matcher, falls through to 404 | Console noise, no break; browsers auto-request favicon |
+| 12 | **P2 perf** | `FCP/LCP 24s / TTFB 23s poor` + `Slow execution 158ms` | `src/instrumentation-client.ts:54` `useReportWebVitals` in dev | Dev TTFB includes HMR + instrumentation overhead; `FCP/LCP` poor is expected in dev with `three` + `recharts`; prod will be lower. Track but don't block | Perf signal, dev-only; gate `console.log` behind `NEXT_PUBLIC_ENABLE_VITALS` |
 
 Prior static-asset 404 (`/en/_next/static/chunks/*.js` `text/html`) is **fixed** by `src/proxy.ts` locale-strip rewrite + `config.matcher` update and `eslint.config.mjs` `ignores`.
+
+## Update 2026-09-02 — second capture (`v=1788399606278`)
+
+**Raw:** `PAYMENT_METHODS.map` crash gone (P0 #1 fixed), `/api/vitals` 404 gone (POST now 204 via `src/app/api/vitals/route.ts`), `Sentry.init` duplicate gone, key warning patched in `customers/page.tsx:222`, `support` `nativeButton` fixed. Remaining:
+
+- **Errors (uncaught):** `VM* et.reportAllChanges startTime` still fires — our guard in `instrumentation-client.ts:22` prevents payload crash but library internal `reportAllChanges` (VM bundle `2:19429`) still accesses `metric.entries[0].startTime` on `undefined` during HMR `requestIdleCallback` (`n.timeout` path). Next: wrap `useReportWebVitals` callback in top-level `try/catch` + `window.addEventListener("error")` swallow for `startTime`, and/or pin `web-vitals@4` vs `v5`. Non-blocking but noisy.
+- **Warnings:** `THREE.Clock` still from `three@0.185.1` via `@react-three/drei` `Float` (`events-156d8d12.esm.js:1016` → `three.core.js:56272`). No `THREE.Clock` usage in `src/components/three/hero.tsx:27` — upstream drei. Fix: bump `drei` or suppress warn via `console.warn` filter; `WebGL loseContext` persists (HMR dispose race `fail` `forceContextLoss` already guarded in `hero.tsx:55`).
+- **Info:** `FCP 24196 / LCP 24196 / TTFB 23779 poor` — dev numbers with HMR; prod budget is `<2.5s` LCP; track via `/api/vitals` now that endpoint exists. `Slow execution 158ms` is client instrumentation hook (Next dev). `favicon.ico 404` — add `apps/web/public/favicon.ico` or extend `proxy.ts` matcher to handle `/(en|id)/favicon.ico` rewrite like `/_next`.
+
+**Action (Addy Osmani idle-until-urgent):** P0s done → ship; defer `startTime` library patch + `drei` bump to next hardening PR; add `public/favicon.ico` (copy from `apps/web/src/app/favicon.ico` if exists) and extend `proxy.ts` favicon rewrite to unblock prefetch.
 
 ## Verification
 

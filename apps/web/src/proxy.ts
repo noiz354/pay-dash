@@ -59,6 +59,12 @@ export default function proxy(request: NextRequest) {
         url.pathname = pathname.replace(/^\/(en|id)/, "");
         return NextResponse.rewrite(url);
     }
+    // Favicon is requested as /en/favicon.ico in dev (browser auto-request with locale prefix)
+    if (pathname.match(/^\/(en|id)\/favicon\.ico$/)) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/favicon.ico";
+        return NextResponse.rewrite(url);
+    }
 
   // `/id` is the default-locale root. next-intl's "as-needed" strategy would
   // redirect it to "/" (the chooser scaffold), which reads as a dead-end;
