@@ -228,6 +228,7 @@ model ProviderPayment {
 
   @@unique([id, connectionId])
   @@unique([connectionId, providerPaymentId])
+  @@unique([canonicalPaymentId, organizationId])
   @@index([connectionId, providerStatus])
 }
 
@@ -269,6 +270,7 @@ model ProviderRefund {
   lastSyncedAt      DateTime
 
   @@unique([connectionId, providerRefundId])
+  @@unique([canonicalRefundId, organizationId])
 }
 
 model CanonicalPaymentMethod {
@@ -307,4 +309,5 @@ model ProviderPaymentMethod {
   lastSyncedAt              DateTime
 
   @@unique([connectionId, providerPaymentMethodId])
+  @@unique([canonicalPaymentMethodId, organizationId])
 }

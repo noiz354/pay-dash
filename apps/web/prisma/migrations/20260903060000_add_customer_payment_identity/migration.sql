@@ -73,6 +73,7 @@ CREATE UNIQUE INDEX "CanonicalPayment_id_organizationId_key" ON "CanonicalPaymen
 CREATE UNIQUE INDEX "CanonicalPayment_organizationId_merchantReference_key" ON "CanonicalPayment"("organizationId", "merchantReference");
 CREATE INDEX "CanonicalPayment_organizationId_canonicalStatus_createdAt_idx" ON "CanonicalPayment"("organizationId", "canonicalStatus", "createdAt");
 CREATE UNIQUE INDEX "ProviderPayment_canonicalPaymentId_key" ON "ProviderPayment"("canonicalPaymentId");
+CREATE UNIQUE INDEX "ProviderPayment_canonicalPaymentId_organizationId_key" ON "ProviderPayment"("canonicalPaymentId", "organizationId");
 CREATE UNIQUE INDEX "ProviderPayment_id_connectionId_key" ON "ProviderPayment"("id", "connectionId");
 CREATE UNIQUE INDEX "ProviderPayment_connectionId_providerPaymentId_key" ON "ProviderPayment"("connectionId", "providerPaymentId");
 CREATE INDEX "ProviderPayment_connectionId_providerStatus_idx" ON "ProviderPayment"("connectionId", "providerStatus");

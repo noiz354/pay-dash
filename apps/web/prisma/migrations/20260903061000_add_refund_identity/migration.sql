@@ -35,6 +35,7 @@ CREATE UNIQUE INDEX "CanonicalRefund_id_organizationId_key" ON "CanonicalRefund"
 CREATE UNIQUE INDEX "CanonicalRefund_organizationId_merchantReference_key" ON "CanonicalRefund"("organizationId", "merchantReference");
 CREATE INDEX "CanonicalRefund_paymentId_canonicalStatus_idx" ON "CanonicalRefund"("paymentId", "canonicalStatus");
 CREATE UNIQUE INDEX "ProviderRefund_canonicalRefundId_key" ON "ProviderRefund"("canonicalRefundId");
+CREATE UNIQUE INDEX "ProviderRefund_canonicalRefundId_organizationId_key" ON "ProviderRefund"("canonicalRefundId", "organizationId");
 CREATE UNIQUE INDEX "ProviderRefund_connectionId_providerRefundId_key" ON "ProviderRefund"("connectionId", "providerRefundId");
 
 ALTER TABLE "CanonicalRefund" ADD CONSTRAINT "CanonicalRefund_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

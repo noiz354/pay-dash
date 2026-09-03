@@ -30,6 +30,7 @@ CREATE TABLE "ProviderPaymentMethod" (
 CREATE UNIQUE INDEX "CanonicalPaymentMethod_id_organizationId_key" ON "CanonicalPaymentMethod"("id", "organizationId");
 CREATE INDEX "CanonicalPaymentMethod_organizationId_customerId_idx" ON "CanonicalPaymentMethod"("organizationId", "customerId");
 CREATE UNIQUE INDEX "ProviderPaymentMethod_canonicalPaymentMethodId_key" ON "ProviderPaymentMethod"("canonicalPaymentMethodId");
+CREATE UNIQUE INDEX "ProviderPaymentMethod_canonicalPaymentMethodId_organizationId_key" ON "ProviderPaymentMethod"("canonicalPaymentMethodId", "organizationId");
 CREATE UNIQUE INDEX "ProviderPaymentMethod_connectionId_providerPaymentMethodId_key" ON "ProviderPaymentMethod"("connectionId", "providerPaymentMethodId");
 
 ALTER TABLE "CanonicalPaymentMethod" ADD CONSTRAINT "CanonicalPaymentMethod_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
