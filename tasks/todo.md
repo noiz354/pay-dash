@@ -371,7 +371,7 @@
 - [x] Migration chain applies cleanly from baseline.
 - [x] No financial execution capability exists yet.
 - [x] Regression gate passes: focused tests (45/45), typecheck, touched-dir lint, and build pass; full suite remains 329/331 due to two independently reproduced pre-existing `getBalanceTrend` failures.
-- [ ] Human reviews before split-routing identity.
+- [x] Human reviews before split-routing identity.
 
 ---
 

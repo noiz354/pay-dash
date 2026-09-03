@@ -102,6 +102,7 @@ model Organization {
   subscriptions       LocalSubscription[]
   payoutBatches       PayoutBatch[]
   platformTransfers   PlatformTransfer[]
+  splitRules          SplitRule[]
 }
 
 // Identity shell only: credentials, capabilities, default selection, and the
@@ -125,6 +126,8 @@ model PaymentProviderConnection {
   providerPayoutAttempts ProviderPayoutAttempt[]
   platformTransfers      PlatformTransfer[]
   providerTransfers      ProviderTransfer[]
+  splitRoutes            SplitRoute[]
+  providerSplitRules     ProviderSplitRule[]
 
   @@unique([id, organizationId])
   @@index([organizationId, provider, mode])
@@ -147,6 +150,7 @@ model ProviderAccount {
   updatedAt           DateTime                  @updatedAt
   outgoingTransfers   PlatformTransfer[]        @relation("TransferSource")
   incomingTransfers   PlatformTransfer[]        @relation("TransferDestination")
+  splitRoutes         SplitRoute[]
 
   @@unique([id, connectionId])
   @@unique([connectionId, providerAccountId])
@@ -471,4 +475,70 @@ model ProviderTransfer {
 
   @@unique([platformTransferId, attemptNumber])
   @@unique([connectionId, providerTransferId])
+}
+
+model SplitRule {
+  id              String             @id @default(cuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ruleKey         String             @db.VarChar(255)
+  name            String             @db.VarChar(255)
+  lifecycleStatus String             @default("DRAFT") @db.VarChar(30)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  versions        SplitRuleVersion[]
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, ruleKey])
+}
+
+model SplitRuleVersion {
+  id                 String              @id @default(cuid())
+  organizationId     String
+  splitRuleId        String
+  splitRule          SplitRule           @relation(fields: [splitRuleId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  version            Int
+  effectiveFrom      DateTime?
+  retiredAt          DateTime?
+  approvalStatus     String              @default("DRAFT") @db.VarChar(30)
+  createdAt          DateTime            @default(now())
+  routes             SplitRoute[]
+  providerSplitRules ProviderSplitRule[]
+
+  @@unique([id, organizationId])
+  @@unique([splitRuleId, version])
+}
+
+model SplitRoute {
+  id                           String                    @id @default(cuid())
+  organizationId               String
+  splitRuleVersionId           String
+  splitRuleVersion             SplitRuleVersion          @relation(fields: [splitRuleVersionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  routeReference               String                    @db.VarChar(255)
+  connectionId                 String
+  connection                   PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  destinationProviderAccountId String
+  destinationProviderAccount   ProviderAccount           @relation(fields: [destinationProviderAccountId, connectionId], references: [id, connectionId], onDelete: Restrict)
+  allocationType               String                    @db.VarChar(20)
+  flatAmount                   Decimal?                  @db.Decimal(20, 4)
+  percentAmount                Decimal?                  @db.Decimal(9, 6)
+  currency                     String?                   @db.Char(3)
+
+  @@unique([splitRuleVersionId, routeReference])
+  @@index([connectionId, destinationProviderAccountId])
+}
+
+model ProviderSplitRule {
+  id                  String                    @id @default(cuid())
+  organizationId      String
+  splitRuleVersionId  String
+  splitRuleVersion    SplitRuleVersion          @relation(fields: [splitRuleVersionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  connectionId        String
+  connection          PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  providerSplitRuleId String                    @db.VarChar(255)
+  providerStatus      String                    @db.VarChar(100)
+  lastSyncedAt        DateTime?
+
+  @@unique([connectionId, providerSplitRuleId])
+  @@unique([splitRuleVersionId, connectionId])
 }
