@@ -219,11 +219,12 @@ async function Directory({ searchParams }: { searchParams: SearchParams }) {
     <CustomersTable
       rows={result.rows}
       isFiltered={result.isFiltered}
-      toolbar={<CustomerFilters resultCount={result.total} />}
-      emptyAction={<CreateCustomerDialog triggerLabel="Add your first customer" />}
+      toolbar={<CustomerFilters key="customer-filters" resultCount={result.total} />}
+      emptyAction={<CreateCustomerDialog key="customer-empty" triggerLabel="Add your first customer" />}
       footer={
         result.total > 0 ? (
           <TablePagination
+            key="customer-pagination"
             page={result.page}
             pageCount={result.pageCount}
             total={result.total}
