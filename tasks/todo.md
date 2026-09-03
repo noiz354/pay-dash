@@ -410,7 +410,7 @@
 - [x] Split allocation, topology, uniqueness, version, and Decimal constraints pass on isolated PostgreSQL.
 - [x] Focused tests (51/51), typecheck, touched-dir lint, and build pass.
 - [x] Regression assessment records two known balance failures and one unrelated UI test that passes in isolation.
-- [ ] Human reviews split-routing identity before repository hardening.
+- [x] Human reviews split-routing identity before repository hardening.
 
 ---
 
@@ -421,14 +421,14 @@
 **Description:** Review all provider-domain repositories as one boundary, remove any accidental generic/unscoped CRUD, normalize identity conflict/not-found outcomes, and ensure Prisma types do not leak into adapter-facing contracts.
 
 **Acceptance criteria:**
-- [ ] Every application-facing lookup requires organization context or a trusted scoped context.
-- [ ] No generic unscoped `findById` or arbitrary Prisma-input write is exported.
-- [ ] Conflict, not-found, invalid-topology, and stale-version outcomes use typed provider-neutral errors.
+- [x] Every application-facing lookup requires organization context or a trusted scoped context.
+- [x] No generic unscoped `findById` or arbitrary Prisma-input write is exported.
+- [x] Conflict, not-found, invalid-topology, and stale-version outcomes use typed provider-neutral errors.
 
 **Verification:**
-- [ ] Repository contract tests pass for every entity group.
-- [ ] Static search finds no provider SDK imports in domain/repository files.
-- [ ] Typecheck/lint pass without broad unsafe casts or disabled rules.
+- [x] Repository contract tests pass for every entity group.
+- [x] Static search finds no provider SDK imports in domain/repository files.
+- [x] Typecheck/lint pass without broad unsafe casts or disabled rules.
 
 **Dependencies:** Task 13
 
@@ -446,14 +446,14 @@
 **Description:** Run the complete approved verification matrix against a clean database and existing application behavior, proving the provider-domain module is additive and implementation-ready for downstream modules.
 
 **Acceptance criteria:**
-- [ ] All migrations apply in order from repository baseline to a clean PostgreSQL database.
-- [ ] Existing Better Auth tables, `LedgerEntry`, mock facades, routes/actions, and UI behavior remain compatible.
-- [ ] Every `SPEC-provider-domain.md` success criterion is traced to a passing test or explicit reviewed constraint.
+- [x] All migrations apply in order from repository baseline to a clean PostgreSQL database.
+- [x] Existing Better Auth tables, `LedgerEntry`, mock facades, routes/actions, and UI behavior remain compatible.
+- [x] Every `SPEC-provider-domain.md` success criterion is traced to a passing test or explicit reviewed constraint.
 
 **Verification:**
 - [ ] Full unit/integration test suite passes.
 - [ ] Prisma validation/generation, typecheck, lint, and production build pass using verified repository commands.
-- [ ] Git diff confirms no provider dependency, secret, endpoint, UI, or live execution was added.
+- [x] Git diff confirms no provider dependency, secret, endpoint, UI, or live execution was added.
 
 **Dependencies:** Task 14
 
@@ -470,13 +470,13 @@
 **Description:** Write a concise ADR recording the implemented persistence decisions, constraint tradeoffs, migration policy, and contracts consumed by `provider-connections`. Update specification links without expanding scope.
 
 **Acceptance criteria:**
-- [ ] ADR records canonical/provider separation, explicit mapping tables, exact money, organization ownership, soft lifecycle, and staged migration decisions.
-- [ ] Any invariant enforced transactionally rather than directly by SQL is named with its test evidence.
-- [ ] Handoff lists only contracts needed by `provider-connections`; no downstream implementation begins.
+- [x] ADR records canonical/provider separation, explicit mapping tables, exact money, organization ownership, soft lifecycle, and staged migration decisions.
+- [x] Any invariant enforced transactionally rather than directly by SQL is named with its test evidence.
+- [x] Handoff lists only contracts needed by `provider-connections`; no downstream implementation begins.
 
 **Verification:**
-- [ ] ADR links the capability map, approved spec, plan, migration names, and verification evidence.
-- [ ] Documentation contains no secrets or production identifiers.
+- [x] ADR links the capability map, approved spec, plan, migration names, and verification evidence.
+- [x] Documentation contains no secrets or production identifiers.
 - [ ] Human review confirms `provider-domain` is complete before the next module starts.
 
 **Dependencies:** Task 15

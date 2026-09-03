@@ -3,8 +3,11 @@
 > Module ID: `provider-domain`  
 > Initiative map: `docs/spec/payment-platform-capability-map.md`  
 > Workflow: Addy Osmani `spec-driven-development` — Phase 1 Specify  
-> Status: **PROPOSED — HUMAN REVIEW GATE**  
+> Status: **IMPLEMENTED — FINAL VERIFICATION GATE**
+>
 > Date: 2026-09-03 (+07:00)
+>
+> Evidence: `docs/spec/provider-domain-verification-matrix.md`; ADR: `docs/adr/0027-provider-neutral-domain-persistence.md`
 
 ## Assumptions
 
