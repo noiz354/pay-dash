@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { PAYMENT_METHODS } from "@/lib/invoice-status";
 import { payInvoice } from "@/server/data/invoices";
+
+export { PAYMENT_METHODS };
 
 // Server Actions for the billing journey. Same serialisable contract as the
 // transaction and customer actions so client components can drive pending /
@@ -23,12 +26,6 @@ function revalidateBilling(id?: string) {
     revalidatePath(`/billing/${id}`);
   }
 }
-
-export const PAYMENT_METHODS = [
-  "Auto-debit — BCA •••• 8891",
-  "Corporate card — Visa •••• 4242",
-  "Bank transfer — Mandiri",
-] as const;
 
 const PayInvoiceSchema = z.object({
   id: z.string().trim().min(1, "Invoice id is required"),

@@ -4,6 +4,9 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 
 ## [Unreleased]
 
+### Fixed
+- Console triage (2026-09-02): locale-strip for `/_next/static` in `proxy.ts`, `eslint` ignores for `.next`, `PAYMENT_METHODS` client-safe boundary, `web-vitals` guard, `/api/vitals` 204, Sentry dedupe, support `nativeButton` — 286 tests pass, lint 0 errors, `PROGRESS.md` Milestone 7 → ✅.
+
 ### Added
 - `docs/adr/` with 5 accepted ADRs (0001 App Router, 0002 Tailwind+shadcn, 0003 Postgres+Prisma, 0004 Auth, 0005 Observability).
 - `docs/STACK.md` (golden-path deps/commands) and `docs/ARCHITECTURE.md` (layout + boundaries).

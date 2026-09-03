@@ -47,9 +47,18 @@ export default function proxy(request: NextRequest) {
   // Route handlers own /api/*, and "/" renders the root chooser scaffold
   // (app/page.tsx) — both are passed straight through so activating the proxy
   // takes nothing away that used to work.
-  if (pathname === "/" || pathname === "/api" || pathname.startsWith("/api/")) {
-    return NextResponse.next();
-  }
+    if (pathname === "/" || pathname === "/api" || pathname.startsWith("/api/")) {
+        return NextResponse.next();
+    }
+
+    // Strip locale prefix from static assets (e.g. /en/_next/... → /_next/...)
+    // next-intl's "as-needed" localePrefix adds the locale to all paths,
+    // but static chunks must always be served without a locale prefix.
+    if (pathname.match(/^\/(en|id)\/_next/)) {
+        const url = request.nextUrl.clone();
+        url.pathname = pathname.replace(/^\/(en|id)/, "");
+        return NextResponse.rewrite(url);
+    }
 
   // `/id` is the default-locale root. next-intl's "as-needed" strategy would
   // redirect it to "/" (the chooser scaffold), which reads as a dead-end;
@@ -143,5 +152,5 @@ export default function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api|_next).*)"],
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|api|_next|en/_next|id/_next).*)"],
 };

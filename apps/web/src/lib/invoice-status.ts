@@ -1,6 +1,12 @@
 // Client-safe invoice vocabulary.
 // `server/data/invoices.ts` imports "server-only", so anything a client
 // component needs at runtime (status lists, labels) lives here instead.
+export const PAYMENT_METHODS = [
+  "Auto-debit — BCA •••• 8891",
+  "Corporate card — Visa •••• 4242",
+  "Bank transfer — Mandiri",
+] as const;
+
 export const INVOICE_STATUSES = ["PAID", "PENDING", "OVERDUE", "DRAFT"] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 

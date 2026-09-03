@@ -129,6 +129,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Sear
           <Card className="rounded border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)] p-4 shadow-sm">
             <h2 className="label-caps text-[var(--on-surface-variant)] mb-4">Contact Support</h2>
             <Button
+              nativeButton={false}
               render={<a href={supportMailto(ref)} />}
               className="flex w-full items-center justify-between rounded bg-[var(--primary)] p-3 text-[var(--on-primary)] hover:bg-[var(--on-primary-fixed-variant)]"
             >

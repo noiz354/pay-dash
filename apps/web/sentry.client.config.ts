@@ -1,9 +1,3 @@
-import * as Sentry from "@sentry/nextjs";
-
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  tracesSampleRate: 0.1,
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-  environment: process.env.APP_ENV ?? process.env.NODE_ENV,
-});
+// Sentry init lives in `src/instrumentation-client.ts` (Next 15 canonical location).
+// This file is kept to satisfy `withSentryConfig` import but must not double-init.
+export const sentryClientConfigPlaceholder = true as const;

@@ -19,16 +19,23 @@ export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
 // Web Vitals + track() — ADR-0005, NEXTJS #36 instrumentation-client
 export function WebVitals() {
   useReportWebVitals((metric) => {
-    const payload = {
-      name: metric.name,
-      value: metric.value,
-      id: metric.id,
-      delta: (metric as unknown as { delta?: number }).delta,
-      rating: (metric as unknown as { rating?: string }).rating,
-      navigationType: (metric as unknown as { navigationType?: string }).navigationType,
-      // Guard: web-vitals v5 Metric has no startTime; use entries[0].startTime if present
-      startTime: (metric as unknown as { entries?: Array<{ startTime?: number }> }).entries?.[0]?.startTime,
-    };
+    // Guard: web-vitals v5 can invoke callback with undefined during HMR / Fast Refresh
+    if (!metric || typeof (metric as unknown as { name?: unknown }).name !== "string") return;
+    let payload: Record<string, unknown>;
+    try {
+      payload = {
+        name: metric.name,
+        value: metric.value,
+        id: metric.id,
+        delta: (metric as unknown as { delta?: number }).delta,
+        rating: (metric as unknown as { rating?: string }).rating,
+        navigationType: (metric as unknown as { navigationType?: string }).navigationType,
+        // Guard: web-vitals v5 Metric has no startTime; use entries[0].startTime if present
+        startTime: (metric as unknown as { entries?: Array<{ startTime?: number }> }).entries?.[0]?.startTime,
+      };
+    } catch {
+      return;
+    }
     const doTrack = () => {
       try {
         track("web_vital", payload);

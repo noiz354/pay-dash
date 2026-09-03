@@ -21,7 +21,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
-import { payInvoiceAction, PAYMENT_METHODS, type ActionState } from "@/server/actions/invoices";
+import { payInvoiceAction, type ActionState } from "@/server/actions/invoices";
+import { PAYMENT_METHODS } from "@/lib/invoice-status";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
