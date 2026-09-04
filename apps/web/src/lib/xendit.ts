@@ -33,3 +33,12 @@ export const Refund = xenditClient?.Refund;
 export function isXenditConfigured(): boolean {
   return !!xenditClient;
 }
+
+/**
+ * Server-only factory used by the xendit-adapter. This is the single SDK import
+ * boundary; the secret is supplied by provider-secrets at the adapter boundary
+ * and never read from `process.env` here.
+ */
+export function createXenditClient(secretKey: string): Xendit {
+  return new Xendit({ secretKey });
+}
