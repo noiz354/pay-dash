@@ -103,6 +103,10 @@ model Organization {
   payoutBatches       PayoutBatch[]
   platformTransfers   PlatformTransfer[]
   splitRules          SplitRule[]
+  secretRecords       SecretRecord[]
+  durableOperations   DurableOperation[]
+  auditEvents         AuditEvent[]
+  webhookDeliveries   WebhookDelivery[]
 }
 
 // Identity shell only: credentials, capabilities, default selection, and the
@@ -115,6 +119,13 @@ model PaymentProviderConnection {
   mode              String            @db.VarChar(10)
   status            String            @default("DRAFT") @db.VarChar(30)
   providerAccountId String?           @db.VarChar(255)
+  // provider-connections / provider-secrets verification evidence (never a secret).
+  capabilityManifest Json?
+  requirements       Json?
+  webhookHealthStatus String?         @db.VarChar(30)
+  lastVerifiedAt     DateTime?
+  createdByUserId    String?
+  updatedByUserId    String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   providerAccounts       ProviderAccount[]
@@ -128,6 +139,9 @@ model PaymentProviderConnection {
   providerTransfers      ProviderTransfer[]
   splitRoutes            SplitRoute[]
   providerSplitRules     ProviderSplitRule[]
+  secretRecords          SecretRecord[]
+  operations             DurableOperation[]
+  webhookDeliveries      WebhookDelivery[]
 
   @@unique([id, organizationId])
   @@index([organizationId, provider, mode])
@@ -541,4 +555,96 @@ model ProviderSplitRule {
 
   @@unique([connectionId, providerSplitRuleId])
   @@unique([splitRuleVersionId, connectionId])
+}
+
+// ---------------------------------------------------------------------------
+// Wave 0 foundation persistence (provider-secrets / durable-operations /
+// audit-ledger / webhook-ingress / provider-connections verification evidence).
+// Additive only; no secret is ever stored here — secretRef is an opaque key into
+// the secret store, never the raw secret.
+// ---------------------------------------------------------------------------
+
+model SecretRecord {
+  id              String                    @id @default(cuid())
+  organizationId  String
+  organization    Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connectionId    String
+  connection      PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  provider        String                    @db.VarChar(50)
+  mode            String                    @db.VarChar(10)
+  secretRef       String                    @db.VarChar(255)
+  credentialVersion Int                     @default(1)
+  createdByUserId String?
+  createdAt       DateTime                  @default(now())
+  rotatedAt       DateTime?
+  updatedAt       DateTime                  @updatedAt
+
+  @@unique([connectionId, mode])
+  @@index([organizationId, provider, mode])
+}
+
+model DurableOperation {
+  id                 String                    @id @default(cuid())
+  organizationId     String
+  organization       Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connectionId       String
+  connection         PaymentProviderConnection @relation(fields: [connectionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  actorId            String
+  operationType      String                    @db.VarChar(50)
+  resourceType       String                    @db.VarChar(50)
+  resourceId         String?                   @db.VarChar(255)
+  idempotencyKey     String                    @db.VarChar(255)
+  requestHash        String                    @db.VarChar(64)
+  amountMinor        String?                   @db.VarChar(64)
+  currency           String?                   @db.Char(3)
+  approvalState      String                    @default("NOT_REQUIRED") @db.VarChar(30)
+  mfaProofRef        String?
+  state              String                    @default("DRAFT") @db.VarChar(30)
+  attemptCount       Int                       @default(0)
+  providerReference  String?                   @db.VarChar(255)
+  unknownOutcome     Boolean                   @default(false)
+  version            Int                       @default(1)
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@unique([idempotencyKey])
+  @@index([organizationId, state])
+  @@index([connectionId, operationType, resourceId])
+}
+
+model AuditEvent {
+  id              String       @id @default(cuid())
+  eventId         String       @unique
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actorId         String
+  action          String       @db.VarChar(50)
+  outcome         String       @db.VarChar(20)
+  metadata        Json
+  version         Int          @default(1)
+  createdAt       DateTime     @default(now())
+
+  @@index([organizationId, action, createdAt])
+}
+
+model WebhookDelivery {
+  id                 String                    @id @default(cuid())
+  provider           String                    @db.VarChar(50)
+  providerEventId    String                    @db.VarChar(255)
+  type               String                    @db.VarChar(255)
+  connectionId       String?
+  connection         PaymentProviderConnection? @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  organizationId     String
+  receivedAt         DateTime                  @default(now())
+  verificationStatus String                    @default("UNVERIFIED") @db.VarChar(30)
+  processingStatus   String                    @default("PENDING") @db.VarChar(30)
+  attemptCount       Int                       @default(0)
+  nextAttemptAt      DateTime?
+  processedAt        DateTime?
+  lastError          String?                   @db.VarChar(500)
+  redactedPayload    Json
+  createdAt          DateTime                  @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([organizationId, processingStatus, receivedAt])
 }
