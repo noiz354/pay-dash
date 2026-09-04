@@ -30,6 +30,7 @@ const navItems = [
   { href: "/ai-journal/ops-copilot", label: "Ops Copilot", icon: "support_agent" },
   { href: "/ai-journal/recovery-agent", label: "Recovery Agent", icon: "currency_exchange" },
   { href: "/ai-journal/readiness-agent", label: "Readiness", icon: "rocket_launch" },
+  { href: "/ai-journal/evaluation", label: "AI Evaluation", icon: "fact_check" },
   { href: "/settings", label: "Settings", icon: "tune" },
   { href: "/settings/merchant", label: "Merchant", icon: "store" },
   { href: "/settings/notifications", label: "Notifications", icon: "notifications" },

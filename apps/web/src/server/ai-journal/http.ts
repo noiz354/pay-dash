@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import { FirebaseAuthError } from "@/server/firebase/auth";
+import { RateLimitError } from "./rate-limit";
 
 export async function readJson(request: Request): Promise<unknown> {
   const text = await request.text();
@@ -25,6 +26,13 @@ export function handleApiError(error: unknown) {
 
   if (error instanceof z.ZodError) {
     return jsonError(400, "Invalid request payload.", z.treeifyError(error));
+  }
+
+  if (error instanceof RateLimitError) {
+    return Response.json(
+      { error: error.message, retryAfterSeconds: error.retryAfterSeconds },
+      { status: error.status, headers: { "Retry-After": String(error.retryAfterSeconds) } }
+    );
   }
 
   if (error instanceof Error && error.message === "Conversation not found.") {

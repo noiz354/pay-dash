@@ -43,6 +43,7 @@ const nextConfig: NextConfig = {
       "/ai-journal/ops-copilot",
       "/ai-journal/recovery-agent",
       "/ai-journal/readiness-agent",
+      "/ai-journal/evaluation",
     ];
     const dynamicRoutes = [
       // Detail routes reached from ledger rows / row actions

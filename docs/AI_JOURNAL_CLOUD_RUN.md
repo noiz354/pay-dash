@@ -7,6 +7,7 @@ This app adds an Ideathon-ready **Personal Gemini Journal** agent at `/ai-journa
 - **Gemini API**: server-side multi-turn generation with mode-specific instructions.
 - **Google Cloud Secret Manager**: the Gemini API key is retrieved at runtime; it is never bundled into the browser.
 - **Cloud Run**: the existing standalone Next.js Dockerfile deploys the app as a container.
+- **Human-in-loop UX**: AI boundary banners, context transparency, redaction, feedback, report saving, retry-save, rate limiting, and evaluation dashboard are implemented.
 
 ## 1. Brainstormed concept
 
@@ -70,6 +71,9 @@ service cloud.firestore {
         match /messages/{messageId} {
           allow read, write: if request.auth != null && request.auth.uid == userId;
         }
+      }
+      match /reports/{reportId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
   }
@@ -174,8 +178,10 @@ Use this for the demo video/blog post:
 4. Open `/ai-journal/recovery-agent` and generate a failed-payment recovery plan plus respectful customer message drafts.
 5. Open `/ai-journal/readiness-agent` and generate a production/Ideathon readiness score.
 6. Reload the app and open the same thread from **Firestore history** to prove persistence.
-7. Use the **Submission Cockpit** to copy the brief and social post with `#AccelerateAIwithCloudRun`.
-8. Show repository files: `firestore.rules`, `docs/AI_JOURNAL_CLOUD_RUN.md`, `src/server/ai-journal/secrets.ts`, and the Cloud Run label `dev-tutorial=cloud-run-ai-challenge`.
+7. Use copy/redact, feedback, and save-report controls on a Gemini answer to show human-in-loop UX.
+8. Open `/ai-journal/evaluation` to show per-user conversations, feedback, reports, rate-limit policy, and readiness evidence.
+9. Use the **Submission Cockpit** to copy the brief and social post with `#AccelerateAIwithCloudRun`.
+10. Show repository files: `firestore.rules`, `docs/AI_JOURNAL_CLOUD_RUN.md`, `src/server/ai-journal/secrets.ts`, and the Cloud Run label `dev-tutorial=cloud-run-ai-challenge`.
 
 ## 8. Submission-ready brief draft
 

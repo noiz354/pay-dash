@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { AgentRouteCards } from "@/components/ai-journal/agent-route-cards";
 import { GeminiJournalAgent } from "@/components/ai-journal/gemini-journal-agent";
 import { SubmissionToolkit } from "@/components/ai-journal/submission-toolkit";
+import { AiBoundaryBanner, JudgeEvidencePanel } from "@/components/ai-journal/ai-agent-ux";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,8 @@ export default function AiJournalPage() {
       </section>
 
       <AgentRouteCards />
+      <AiBoundaryBanner />
+      <JudgeEvidencePanel />
 
       <Card className="border-[var(--border-subtle)] bg-[var(--surface)] shadow-sm">
         <CardHeader>
@@ -54,7 +57,7 @@ export default function AiJournalPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <GeminiJournalAgent />
+          <GeminiJournalAgent threadTags={["journal", "submission"]} reportKind="note" />
         </CardContent>
       </Card>
 

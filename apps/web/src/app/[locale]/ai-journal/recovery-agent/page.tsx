@@ -1,6 +1,7 @@
 import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AgentDeepLinks, AgentEmptyState, AiBoundaryBanner, ContextTransparencyPanel } from "@/components/ai-journal/ai-agent-ux";
 import { GeminiJournalAgent, type GeminiQuickPrompt } from "@/components/ai-journal/gemini-journal-agent";
 import { formatCompactMoney, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { listCustomers } from "@/server/data/customers";
@@ -81,6 +82,24 @@ export default async function FailedPaymentRecoveryPage() {
         </div>
       </section>
 
+      <AiBoundaryBanner />
+      <ContextTransparencyPanel
+        items={[
+          { label: "Failed transactions", detail: "Failed amount, affected customers, channel, payment method, risk score, and failure reason." },
+          { label: "Customer directory totals", detail: "Directory size and customer identifiers needed to group recovery outreach." },
+          { label: "Recovery constraints", detail: "The agent drafts plans/messages only; it never retries or marks payments successful." },
+          { label: "Privacy defaults", detail: "Copy/save controls can redact customer names, emails, and card-like method labels." },
+        ]}
+      />
+      <AgentDeepLinks
+        links={[
+          { href: "/transactions?status=FAILED", label: "Failed Transactions", icon: "receipt_long" },
+          { href: "/customers", label: "Customers", icon: "group" },
+          { href: "/payments/links", label: "Payment Links", icon: "link" },
+          { href: "/webhooks", label: "Webhook Logs", icon: "webhook" },
+        ]}
+      />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <RecoveryMetric label="Failed amount" value={formatCompactMoney(failedAmount, metrics.currency)} detail={`${failed.rows.length} failed payments in sample`} />
         <RecoveryMetric label="Affected customers" value={formatNumber(uniqueCustomers)} detail={`${formatNumber(customers.total)} customers in directory`} />
@@ -96,6 +115,13 @@ export default async function FailedPaymentRecoveryPage() {
           </p>
         </CardHeader>
         <CardContent>
+          {failed.rows.length === 0 ? (
+            <AgentEmptyState
+              title="No failed payments found in this snapshot"
+              description="Recovery Agent can still help you prepare a prevention playbook before failures happen."
+              actions={["Draft a retry SOP", "Create a customer-safe follow-up template", "Define escalation rules for high-value payments"]}
+            />
+          ) : (
           <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)] bg-white">
             <table className="w-full min-w-[760px] text-left">
               <thead className="bg-[var(--surface-container-low)] label-caps text-[var(--on-surface-variant)]">
@@ -123,6 +149,7 @@ export default async function FailedPaymentRecoveryPage() {
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -139,6 +166,8 @@ export default async function FailedPaymentRecoveryPage() {
             availableModes={["recovery-agent", "ops-copilot", "journal", "brainstorm"]}
             quickPrompts={quickPrompts}
             emptyTitle="Start a failed-payment recovery plan"
+            threadTags={["recovery", "failed-payment", "customer-copy"]}
+            reportKind="recovery-plan"
           />
         </CardContent>
       </Card>

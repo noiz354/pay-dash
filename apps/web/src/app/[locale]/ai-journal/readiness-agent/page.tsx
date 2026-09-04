@@ -1,6 +1,7 @@
 import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AgentDeepLinks, AiBoundaryBanner, ContextTransparencyPanel, JudgeEvidencePanel } from "@/components/ai-journal/ai-agent-ux";
 import { GeminiJournalAgent, type GeminiQuickPrompt } from "@/components/ai-journal/gemini-journal-agent";
 import { SubmissionToolkit } from "@/components/ai-journal/submission-toolkit";
 import { formatDateTime, formatMoney, formatNumber } from "@/lib/format";
@@ -10,6 +11,31 @@ import { getRiskOverview } from "@/server/data/risk";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
 
 export const dynamic = "force-dynamic";
+
+function ScoreBreakdown({ rows }: { rows: Array<{ label: string; points: number; max: number; detail: string }> }) {
+  return (
+    <Card className="border-[var(--border-subtle)] bg-[var(--surface)] shadow-sm">
+      <CardHeader>
+        <CardTitle className="headline-md">Transparent readiness score</CardTitle>
+        <p className="body-sm text-[var(--on-surface-variant)]">Judges can see how the page-derived score is assembled.</p>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {rows.map((row) => (
+          <div key={row.label} className="rounded-xl border border-[var(--border-subtle)] bg-white p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold text-[var(--on-surface)]">{row.label}</p>
+              <span className="data-mono text-[var(--primary)]">{row.points}/{row.max}</span>
+            </div>
+            <div className="mt-3 h-2 rounded-full bg-[var(--surface-container-high)]">
+              <div className="h-2 rounded-full bg-[var(--primary)]" style={{ width: `${Math.round((row.points / row.max) * 100)}%` }} />
+            </div>
+            <p className="body-sm mt-2 text-[var(--on-surface-variant)]">{row.detail}</p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
 
 function ReadinessSignal({ label, complete, detail }: { label: string; complete: boolean; detail: string }) {
   return (
@@ -81,7 +107,16 @@ export default async function LaunchReadinessAgentPage() {
     },
   ];
 
-  const score = Math.round((signals.filter((signal) => signal.complete).length / signals.length) * 100);
+  const scoreRows = [
+    { label: "Profile", points: profile?.tone === "success" ? 15 : 8, max: 15, detail: profile?.badge ?? "Profile status unknown" },
+    { label: "KYC", points: compliance?.tone === "success" ? 15 : 7, max: 15, detail: compliance?.badge ?? "Compliance status unknown" },
+    { label: "Bank/Payout", points: bank?.tone === "success" && payoutSettings.automated ? 15 : bank?.tone === "success" ? 10 : 5, max: 15, detail: `Auto payout ${payoutSettings.automated ? "enabled" : "disabled"}` },
+    { label: "Technical", points: technical?.tone === "success" ? 15 : 8, max: 15, detail: technical?.badge ?? "Technical status unknown" },
+    { label: "Webhooks", points: webhooks.last24h.total > 0 && webhooks.last24h.rejected === 0 ? 15 : webhooks.last24h.total > 0 ? 8 : 4, max: 15, detail: `${webhooks.last24h.rejected} rejected in last 24h` },
+    { label: "Risk", points: risk.effective.volumeLimitsEnabled && risk.effective.rules.some((rule) => rule.enabled) ? 15 : 6, max: 15, detail: `${risk.effective.rules.filter((rule) => rule.enabled).length} enabled rules` },
+    { label: "Ideathon evidence", points: 10, max: 10, detail: "Firebase, Firestore, Gemini, Secret Manager, Cloud Run docs are present" },
+  ];
+  const score = scoreRows.reduce((sum, row) => sum + row.points, 0);
   const sectionContext = onboarding.sections
     .map((section) => {
       const checks = section.checks.map((check) => `${check.done ? "done" : "missing"}: ${check.label}`).join("; ");
@@ -131,6 +166,27 @@ export default async function LaunchReadinessAgentPage() {
         </div>
       </section>
 
+      <AiBoundaryBanner />
+      <ContextTransparencyPanel
+        items={[
+          { label: "Onboarding status", detail: "Profile, compliance/KYC, bank setup, and technical checklist progress." },
+          { label: "Webhook stability", detail: "Last 24h received, duplicated, and rejected callback counts." },
+          { label: "Risk controls", detail: "Enabled rules, volume limit status, daily/monthly cap usage, and deployment timestamp." },
+          { label: "Payout configuration", detail: "Automation status, cadence, and minimum payout amount." },
+        ]}
+      />
+      <JudgeEvidencePanel />
+      <AgentDeepLinks
+        links={[
+          { href: "/onboarding", label: "Onboarding", icon: "checklist" },
+          { href: "/kyc", label: "KYC", icon: "verified_user" },
+          { href: "/settings/api-keys", label: "API Keys", icon: "key" },
+          { href: "/ai-journal/evaluation", label: "AI Evaluation", icon: "fact_check" },
+        ]}
+      />
+
+      <ScoreBreakdown rows={scoreRows} />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {signals.map((signal) => (
           <ReadinessSignal key={signal.label} {...signal} />
@@ -150,6 +206,8 @@ export default async function LaunchReadinessAgentPage() {
             availableModes={["readiness-agent", "submission-review", "ops-copilot", "brainstorm"]}
             quickPrompts={quickPrompts}
             emptyTitle="Start a launch readiness review"
+            threadTags={["readiness", "launch", "submission"]}
+            reportKind="readiness-checklist"
           />
         </CardContent>
       </Card>

@@ -1,7 +1,7 @@
 import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AgentDeepLinks, AiBoundaryBanner, ContextTransparencyPanel } from "@/components/ai-journal/ai-agent-ux";
 import { GeminiJournalAgent, type GeminiQuickPrompt } from "@/components/ai-journal/gemini-journal-agent";
 import { formatCompactMoney, formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import { getBalanceOverview } from "@/server/data/balance";
@@ -89,6 +89,24 @@ export default async function MerchantOpsCopilotPage() {
         </div>
       </section>
 
+      <AiBoundaryBanner />
+      <ContextTransparencyPanel
+        items={[
+          { label: "Ledger metrics", detail: "7-day volume, success count, failure rate, failed/processing counts." },
+          { label: "Balance and payouts", detail: "Available balance, pending settlements, reserved funds, payout queue." },
+          { label: "Risk and webhook health", detail: "Risk alert count, cap usage, received/duplicated/rejected callback totals." },
+          { label: "Failed payment sample", detail: "Top failed transaction IDs, customers, amount, channel, risk score, and failure reason." },
+        ]}
+      />
+      <AgentDeepLinks
+        links={[
+          { href: "/transactions?status=FAILED", label: "Failed Transactions", icon: "receipt_long" },
+          { href: "/webhooks", label: "Webhook Logs", icon: "webhook" },
+          { href: "/risk", label: "Risk Rules", icon: "shield" },
+          { href: "/payouts", label: "Payouts", icon: "payments" },
+        ]}
+      />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <SignalCard label="7d volume" value={formatCompactMoney(metrics.totalVolume, metrics.currency)} detail={`${formatPercent(metrics.volumeDelta)} vs previous period`} icon="payments" />
         <SignalCard label="Failure rate" value={`${metrics.failedRate.toFixed(1)}%`} detail={`${metrics.failedCount} failed payments`} icon="error" />
@@ -111,6 +129,8 @@ export default async function MerchantOpsCopilotPage() {
             availableModes={["ops-copilot", "journal", "brainstorm"]}
             quickPrompts={quickPrompts}
             emptyTitle="Start a merchant ops briefing"
+            threadTags={["ops", "paydash", "daily-brief"]}
+            reportKind="ops-report"
           />
         </CardContent>
       </Card>

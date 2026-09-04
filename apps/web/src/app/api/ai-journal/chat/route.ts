@@ -4,6 +4,7 @@ import { normalizePromptText, titleFromPrompt } from "@/lib/ai-journal/prompt";
 import { generateJournalReply } from "@/server/ai-journal/gemini";
 import { getJournalRepository } from "@/server/ai-journal/repository";
 import { handleApiError, jsonError, readJson } from "@/server/ai-journal/http";
+import { assertWithinAiJournalRateLimit } from "@/server/ai-journal/rate-limit";
 import { requireFirebaseUser } from "@/server/firebase/auth";
 
 export const runtime = "nodejs";
@@ -13,6 +14,7 @@ const chatSchema = z.object({
   conversationId: z.string().trim().min(1).max(160).regex(/^[A-Za-z0-9_-]+$/).optional(),
   message: z.string().trim().min(1).max(4_000),
   mode: z.enum(JOURNAL_MODES).default("journal"),
+  tags: z.array(z.string().trim().min(1).max(32)).max(8).default([]),
 });
 
 export async function POST(request: Request) {
@@ -21,6 +23,7 @@ export async function POST(request: Request) {
     if (body === undefined) return jsonError(400, "Malformed JSON payload.");
 
     const user = await requireFirebaseUser(request);
+    assertWithinAiJournalRateLimit(user.uid);
     const input = chatSchema.parse(body);
     const repository = getJournalRepository();
     const userText = normalizePromptText(input.message);
@@ -37,6 +40,7 @@ export async function POST(request: Request) {
       const created = await repository.createConversation(user.uid, {
         title: titleFromPrompt(userText),
         mode: input.mode,
+        tags: input.tags,
       });
       conversation = { ...created, messages: [] };
     }

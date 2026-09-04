@@ -25,11 +25,18 @@ export const AI_AGENT_ROUTES = [
     icon: "rocket_launch",
     description: "Score payment launch readiness and prepare Ideathon evidence.",
   },
+  {
+    href: "/ai-journal/evaluation",
+    title: "AI Evaluation Dashboard",
+    label: "Evaluate",
+    icon: "fact_check",
+    description: "Review per-user conversations, feedback, saved reports, safety gates, and readiness evidence.",
+  },
 ] as const;
 
 export function AgentRouteCards() {
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {AI_AGENT_ROUTES.map((route) => (
         <Card key={route.href} className="border-[var(--border-subtle)] bg-[var(--surface)] shadow-sm">
           <CardHeader>

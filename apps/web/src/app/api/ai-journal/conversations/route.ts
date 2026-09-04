@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 const createConversationSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   mode: z.enum(JOURNAL_MODES).default("journal"),
+  tags: z.array(z.string().trim().min(1).max(32)).max(8).default([]),
 });
 
 export async function GET(request: Request) {
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
     const conversation = await getJournalRepository().createConversation(user.uid, {
       title: input.title ? titleFromPrompt(input.title) : "New secure journal",
       mode: input.mode,
+      tags: input.tags,
     });
 
     return Response.json({ conversation }, { status: 201 });

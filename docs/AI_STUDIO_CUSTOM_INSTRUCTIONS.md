@@ -33,8 +33,9 @@ The app must use:
 
 ## Firestore shape
 Use this document shape unless explicitly superseded:
-- `users/{uid}/interactions/{interactionId}`: title, mode, createdAt, updatedAt, messageCount.
-- `users/{uid}/interactions/{interactionId}/messages/{messageId}`: role, text, mode, createdAt.
+- `users/{uid}/interactions/{interactionId}`: title, mode, tags, createdAt, updatedAt, messageCount.
+- `users/{uid}/interactions/{interactionId}/messages/{messageId}`: role, text, mode, feedback, createdAt.
+- `users/{uid}/reports/{reportId}`: kind, title, redacted body, source IDs, createdAt.
 
 Rules:
 ```javascript
@@ -48,6 +49,9 @@ service cloud.firestore {
         match /messages/{messageId} {
           allow read, write: if request.auth != null && request.auth.uid == userId;
         }
+      }
+      match /reports/{reportId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
       }
     }
   }

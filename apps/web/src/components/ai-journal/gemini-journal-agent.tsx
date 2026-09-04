@@ -9,7 +9,7 @@ import {
   type Auth,
   type User,
 } from "firebase/auth";
-import { AlertCircle, Loader2, LogOut, Plus, Send, ShieldCheck } from "lucide-react";
+import { AlertCircle, Clipboard, FileText, Loader2, LogOut, Plus, RotateCcw, Save, Send, ShieldCheck, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,7 +28,9 @@ import {
   type JournalConversationWithMessages,
   type JournalMessage,
   type JournalMode,
+  type JournalReportKind,
 } from "@/lib/ai-journal/types";
+import { copySafeText, hasUnsafePromptIntent } from "@/lib/ai-journal/safety";
 
 type ConversationsResponse = {
   conversations: JournalConversation[];
@@ -47,6 +49,16 @@ type ChatResponse = {
   savedUserMessage?: boolean;
   messages?: JournalMessage[];
   unsavedReply?: string;
+  retryAfterSeconds?: number;
+};
+
+type AppendMessageResponse = {
+  message: JournalMessage;
+  conversation: JournalConversationWithMessages | null;
+};
+
+type FeedbackResponse = {
+  message: JournalMessage;
 };
 
 export type GeminiQuickPrompt = { mode: JournalMode; text: string; title?: string };
@@ -56,6 +68,8 @@ type GeminiJournalAgentProps = {
   availableModes?: JournalMode[];
   quickPrompts?: GeminiQuickPrompt[];
   emptyTitle?: string;
+  threadTags?: string[];
+  reportKind?: JournalReportKind;
 };
 
 const DEFAULT_QUICK_PROMPTS: GeminiQuickPrompt[] = [
@@ -141,8 +155,40 @@ function SignInPanel({ onSignIn, loading }: { onSignIn: () => Promise<void>; loa
   );
 }
 
-function MessageBubble({ message }: { message: JournalMessage }) {
+function MessageBubble({
+  message,
+  conversationId,
+  redactCopies,
+  onTransform,
+  onFeedback,
+  onSaveReport,
+}: {
+  message: JournalMessage;
+  conversationId?: string;
+  redactCopies: boolean;
+  onTransform: (instruction: string, mode: JournalMode) => void;
+  onFeedback: (message: JournalMessage, rating: "useful" | "needs-work", reason: string) => Promise<void>;
+  onSaveReport: (message: JournalMessage) => Promise<void>;
+}) {
   const isUser = message.role === "user";
+  const [copied, setCopied] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+
+  async function copyMessage() {
+    await navigator.clipboard.writeText(copySafeText(message.text, redactCopies));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1_400);
+  }
+
+  async function runAction(label: string, action: () => Promise<void>) {
+    setBusyAction(label);
+    try {
+      await action();
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   return (
     <article className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
@@ -160,8 +206,75 @@ function MessageBubble({ message }: { message: JournalMessage }) {
           <span className={cn("data-mono text-[11px]", isUser ? "text-white/75" : "text-[var(--on-surface-variant)]")}>
             {formatTime(message.createdAt)}
           </span>
+          {message.feedback ? (
+            <Badge variant="outline" className={isUser ? "bg-white/15 text-white" : "border-[var(--success-status)]/30 text-[var(--success-status)]"}>
+              {message.feedback.rating === "useful" ? "Useful" : "Needs work"}
+            </Badge>
+          ) : null}
         </div>
         <p className="body-sm whitespace-pre-wrap break-words">{message.text}</p>
+
+        <div className={cn("mt-3 flex flex-wrap gap-2", isUser ? "justify-end" : "justify-start")}>
+          <button
+            type="button"
+            onClick={() => void copyMessage()}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium",
+              isUser ? "border-white/25 text-white hover:bg-white/10" : "border-[var(--border-subtle)] text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)]"
+            )}
+          >
+            <Clipboard className="size-3" aria-hidden="true" /> {copied ? "Copied" : redactCopies ? "Copy redacted" : "Copy"}
+          </button>
+          {!isUser && conversationId ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onTransform("Regenerate your previous answer with the same PayDash context, be more concise, and keep the Assumptions plus Verify in PayDash sections.", message.mode)}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-[11px] font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)]"
+              >
+                <RotateCcw className="size-3" aria-hidden="true" /> Regenerate
+              </button>
+              <button
+                type="button"
+                onClick={() => onTransform("Turn your previous answer into a short checklist with owners, timing, and verification steps.", message.mode)}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-[11px] font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)]"
+              >
+                Checklist
+              </button>
+              <button
+                type="button"
+                onClick={() => onTransform("Translate your previous answer into clear Bahasa Indonesia while keeping all safety caveats.", message.mode)}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-[11px] font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)]"
+              >
+                Bahasa ID
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(busyAction)}
+                onClick={() => void runAction("save", () => onSaveReport(message))}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-[11px] font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)] disabled:opacity-50"
+              >
+                <Save className="size-3" aria-hidden="true" /> {busyAction === "save" ? "Saving" : "Save report"}
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(busyAction)}
+                onClick={() => void runAction("useful", () => onFeedback(message, "useful", "Useful and actionable"))}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-[11px] font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)] disabled:opacity-50"
+              >
+                <ThumbsUp className="size-3" aria-hidden="true" /> Useful
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(busyAction)}
+                onClick={() => void runAction("needs-work", () => onFeedback(message, "needs-work", "Needs more accurate or safer context"))}
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-[11px] font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)] disabled:opacity-50"
+              >
+                <ThumbsDown className="size-3" aria-hidden="true" /> Needs work
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -172,6 +285,8 @@ export function GeminiJournalAgent({
   availableModes = [...JOURNAL_MODES],
   quickPrompts = DEFAULT_QUICK_PROMPTS,
   emptyTitle = "Start a secure Gemini journal",
+  threadTags = [],
+  reportKind = "note",
 }: GeminiJournalAgentProps = {}) {
   const modeChoices = availableModes.length > 0 ? availableModes : [...JOURNAL_MODES];
   const [firebaseStatus, setFirebaseStatus] = useState<FirebaseClientStatus | null>(null);
@@ -186,7 +301,10 @@ export function GeminiJournalAgent({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [lastModel, setLastModel] = useState<string | null>(null);
+  const [redactCopies, setRedactCopies] = useState(true);
+  const [unsavedReply, setUnsavedReply] = useState<{ conversationId: string; text: string; mode: JournalMode } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +337,9 @@ export function GeminiJournalAgent({
 
     return onAuthStateChanged(firebaseAuth, (nextUser) => {
       setUser(nextUser);
+      setCurrentConversation(null);
+      setLastModel(null);
+      setUnsavedReply(null);
       setAuthReady(true);
     });
   }, [firebaseStatus]);
@@ -298,6 +419,7 @@ export function GeminiJournalAgent({
 
     setSending(true);
     setError(null);
+    setNotice(null);
     try {
       const response = await authorizedFetch("/api/ai-journal/chat", {
         method: "POST",
@@ -305,28 +427,42 @@ export function GeminiJournalAgent({
           conversationId: currentConversation?.id,
           message: trimmed,
           mode: nextMode,
+          tags: threadTags,
         }),
       });
-      const payload = await readJsonResponse<ChatResponse>(response);
+      const payload = (await response.json().catch(() => ({}))) as ChatResponse;
+
+      if (!response.ok) {
+        if (payload.messages) {
+          const messages = payload.messages;
+          setCurrentConversation((previous) =>
+            previous
+              ? { ...previous, messages }
+              : {
+                  id: payload.conversationId,
+                  title: trimmed.slice(0, 68),
+                  mode: nextMode,
+                  tags: threadTags,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  messageCount: messages.length,
+                  messages,
+                }
+          );
+        }
+        if (payload.unsavedReply && payload.conversationId) {
+          setUnsavedReply({ conversationId: payload.conversationId, text: payload.unsavedReply, mode: nextMode });
+        }
+        const retry = payload.retryAfterSeconds ? ` Try again in ${payload.retryAfterSeconds}s.` : "";
+        setError(`${payload.error ?? `Request failed with ${response.status}`}${retry}`);
+        return;
+      }
+
       if (payload.conversation) {
         setCurrentConversation(payload.conversation);
-      } else if (payload.messages) {
-        const messages = payload.messages;
-        setCurrentConversation((previous) =>
-          previous
-            ? { ...previous, messages }
-            : {
-                id: payload.conversationId,
-                title: trimmed.slice(0, 68),
-                mode: nextMode,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                messageCount: messages.length,
-                messages,
-              }
-        );
       }
       setLastModel(payload.model ?? null);
+      setUnsavedReply(null);
       setInput("");
       await loadConversations();
     } catch (sendError) {
@@ -334,6 +470,77 @@ export function GeminiJournalAgent({
     } finally {
       setSending(false);
     }
+  }
+
+  async function retrySaveUnsavedReply() {
+    if (!unsavedReply) return;
+    setSending(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await authorizedFetch("/api/ai-journal/messages", {
+        method: "POST",
+        body: JSON.stringify({
+          conversationId: unsavedReply.conversationId,
+          role: "model",
+          text: unsavedReply.text,
+          mode: unsavedReply.mode,
+        }),
+      });
+      const payload = await readJsonResponse<AppendMessageResponse>(response);
+      if (payload.conversation) setCurrentConversation(payload.conversation);
+      setUnsavedReply(null);
+      setNotice("Unsaved Gemini reply has been persisted to Firestore.");
+      await loadConversations();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not retry saving the Gemini reply.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function submitFeedback(message: JournalMessage, rating: "useful" | "needs-work", reason: string) {
+    if (!currentConversation) return;
+    const response = await authorizedFetch("/api/ai-journal/feedback", {
+      method: "POST",
+      body: JSON.stringify({
+        conversationId: currentConversation.id,
+        messageId: message.id,
+        rating,
+        reason,
+      }),
+    });
+    const payload = await readJsonResponse<FeedbackResponse>(response);
+    setCurrentConversation((previous) =>
+      previous
+        ? {
+            ...previous,
+            messages: previous.messages.map((entry) => (entry.id === payload.message.id ? payload.message : entry)),
+          }
+        : previous
+    );
+    setNotice(rating === "useful" ? "Feedback saved: useful." : "Feedback saved: needs work.");
+  }
+
+  async function saveMessageAsReport(message: JournalMessage) {
+    if (!currentConversation) return;
+    const response = await authorizedFetch("/api/ai-journal/reports", {
+      method: "POST",
+      body: JSON.stringify({
+        conversationId: currentConversation.id,
+        messageId: message.id,
+        kind: reportKind,
+        title: `${JOURNAL_MODE_META[message.mode].shortLabel} — ${currentConversation.title}`.slice(0, 120),
+        body: message.text,
+        redacted: redactCopies,
+      }),
+    });
+    await readJsonResponse(response);
+    setNotice(redactCopies ? "Saved as redacted Firestore report." : "Saved as Firestore report.");
+  }
+
+  function transformPreviousAnswer(instruction: string, nextMode: JournalMode) {
+    void submitMessage(instruction, nextMode);
   }
 
   if (!authReady) {
@@ -415,6 +622,15 @@ export function GeminiJournalAgent({
                   <span>{JOURNAL_MODE_META[conversation.mode].shortLabel}</span>
                   <span className="data-mono">{conversation.messageCount} msgs</span>
                 </span>
+                {conversation.tags.length ? (
+                  <span className="mt-2 flex flex-wrap gap-1">
+                    {conversation.tags.slice(0, 3).map((tag) => (
+                      <span key={tag} className="rounded-full bg-[var(--surface-container-low)] px-2 py-0.5 text-[10px] text-[var(--on-surface-variant)]">
+                        {tag}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </button>
             ))
           )}
@@ -454,8 +670,25 @@ export function GeminiJournalAgent({
               })}
             </div>
           </div>
-          {lastModel ? <p className="mt-2 data-mono text-[11px] text-[var(--on-surface-variant)]">Last Gemini model: {lastModel}</p> : null}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            {lastModel ? <p className="data-mono text-[11px] text-[var(--on-surface-variant)]">Last Gemini model: {lastModel}</p> : <span />}
+            <label className="inline-flex items-center gap-2 body-sm text-[var(--on-surface-variant)]">
+              <input
+                type="checkbox"
+                checked={redactCopies}
+                onChange={(event) => setRedactCopies(event.target.checked)}
+                className="size-4 accent-[var(--primary)]"
+              />
+              Redact customer data before copy/save
+            </label>
+          </div>
         </div>
+
+        {notice ? (
+          <div className="mx-4 mt-4 rounded-lg border border-[var(--success-status)]/30 bg-[var(--success-status)]/10 p-3 body-sm text-[var(--success-status)]">
+            {notice}
+          </div>
+        ) : null}
 
         {error ? (
           <div className="mx-4 mt-4 rounded-lg border border-[var(--error)]/30 bg-[var(--error)]/10 p-3 body-sm text-[var(--on-error-container)]">
@@ -463,9 +696,38 @@ export function GeminiJournalAgent({
           </div>
         ) : null}
 
+        {unsavedReply ? (
+          <div className="mx-4 mt-4 rounded-lg border border-[var(--pending-status)]/30 bg-[var(--pending-status)]/10 p-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="font-semibold text-[var(--on-surface)]">Gemini replied, but the answer was not saved.</p>
+                <p className="body-sm text-[var(--on-surface-variant)]">Retry the Firestore save or copy the unsaved reply before leaving.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(copySafeText(unsavedReply.text, redactCopies))}>
+                  <Clipboard className="size-3.5" aria-hidden="true" /> Copy
+                </Button>
+                <Button type="button" size="sm" onClick={() => void retrySaveUnsavedReply()} disabled={sending}>
+                  <Save className="size-3.5" aria-hidden="true" /> Retry save
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {currentConversation?.messages.length ? (
-            currentConversation.messages.map((message) => <MessageBubble key={message.id} message={message} />)
+            currentConversation.messages.map((message) => (
+              <MessageBubble
+                key={message.id}
+                message={message}
+                conversationId={currentConversation.id}
+                redactCopies={redactCopies}
+                onTransform={transformPreviousAnswer}
+                onFeedback={submitFeedback}
+                onSaveReport={saveMessageAsReport}
+              />
+            ))
           ) : (
             <div className="grid gap-4 lg:grid-cols-3">
               {quickPrompts.map((prompt) => (
@@ -499,6 +761,11 @@ export function GeminiJournalAgent({
             </Badge>
             <span className="body-sm text-[var(--on-surface-variant)]">{JOURNAL_MODE_META[mode].description}</span>
           </div>
+          {hasUnsafePromptIntent(input) ? (
+            <div className="mb-3 rounded-lg border border-[var(--pending-status)]/30 bg-[var(--pending-status)]/10 p-3 body-sm text-[var(--on-surface-variant)]">
+              This prompt looks like it may request unsafe behavior. The agent will treat it as untrusted text and will not reveal secrets, private user data, or execute payment actions.
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 md:flex-row">
             <Textarea
               value={input}
