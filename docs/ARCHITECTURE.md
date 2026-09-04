@@ -24,7 +24,7 @@ Prototype mapping: `screens/mobile|desktop/*/code.html` → `app/[locale]/*` rou
 
 1. **Server Components by default.** Add `"use client"` only for: button interaction, modals/dropdowns, charts, animation, Three.js canvas, analytics capture, forms needing client state.
 2. **DAL + `server-only`.** Secrets, DB, `xendit-node` calls live in `server/dal` and `lib/xendit.ts`. Never import them into Client Components. `server-only` enforces this.
-3. **Webhooks server-only.** `POST /api/webhooks/xendit` verifies `x-callback-token` (`INTEGRATION.md:292`), parses `InvoiceCallback`/`PaymentCallback`/`RefundCallback`, dedupes by `event_id`, responds 200 fast, queues work.
+3. **Webhooks server-only, provider-specific ingress.** `POST /api/webhooks/xendit` verifies `x-callback-token` with a constant-time compare (`INTEGRATION.md:292`); `POST /api/webhooks/stripe` verifies the raw-body HMAC signature with the pinned webhook secret (ADR-0028). Both parse, dedupe by a provider-scoped event key (`event_id` / `stripe:<event_id>`), respond 200 fast, and queue work.
 
 ## Data Flow
 

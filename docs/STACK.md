@@ -87,4 +87,4 @@ pnpm add nanoid
 
 ## Env (validate at startup)
 
-`DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `APP_ENV`, `SENTRY_DSN`, `XENDIT_SECRET_KEY`, `XENDIT_WEBHOOK_TOKEN`, `CLERK_*` or Better Auth keys, `REDIS_URL` (when added).
+`DATABASE_URL`, `NEXT_PUBLIC_APP_URL`, `APP_ENV`, `SENTRY_DSN`, `XENDIT_SECRET_KEY`, `XENDIT_WEBHOOK_TOKEN`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `SECRET_STORE_MODE`/`SECRET_STORE_KEY`/`SECRET_STORE_KMS_KEY_ID`, `PAYMENTS_PUBLIC_ORIGIN`, `CLERK_*` or Better Auth keys, `REDIS_URL` (when added). A runnable template is at `apps/web/.env.example`.

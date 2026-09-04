@@ -14,19 +14,34 @@ export const WEBHOOK_STATUS_LABELS: Record<WebhookStatus, string> = {
 
 export const WEBHOOK_SOURCE_LABELS = {
   xendit: "Xendit",
+  stripe: "Stripe",
   simulate: "Simulated",
   replay: "Replay",
 } as const;
 export type WebhookSource = keyof typeof WEBHOOK_SOURCE_LABELS;
 
 // Event types the handler in /api/webhooks/xendit switches on
-// (INTEGRATION.md §7). Anything else is stored and flagged `unhandled`.
+// (INTEGRATION.md §7) plus the canonical Stripe events the Stripe ingress
+// accepts (ADR-0028: charge/transfer/payout/capability events). Anything else
+// is stored and flagged `unhandled`.
 export const KNOWN_WEBHOOK_EVENTS = [
   "payment.succeeded",
   "payment.completed",
   "invoice.paid",
   "invoice.completed",
   "refund.succeeded",
+  // Stripe canonical events (ADR-0028, webhook scope).
+  "payment_intent.succeeded",
+  "payment_intent.payment_failed",
+  "charge.succeeded",
+  "charge.refunded",
+  "charge.refund.updated",
+  "payout.paid",
+  "payout.failed",
+  "transfer.created",
+  "transfer.updated",
+  "account.updated",
+  "account.external_account.created",
 ] as const;
 
 // Type-filter options: the known types plus the "everything else" bucket.

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { env } from "@/lib/env";
 import { recordInbound, rejectInbound } from "@/server/data/webhooks";
+import { verifyXenditCallbackToken } from "@/server/webhooks/verify";
 
 // Reusable webhook handler — INTEGRATION.md #7 (x-callback-token), NEXTJS_CONCEPTS.md #6 Route Handlers, #31 route.ts, #138 Zod
 // Verify → dedupe → 200 fast → queue (docs/QUEUES.md ladder: no Redis until needed)
@@ -22,12 +23,14 @@ const WebhookPayloadSchema = z
 export async function POST(req: Request) {
   const raw = await req.text().catch(() => "");
 
-  // 1. VERIFY x-callback-token (INTEGRATION.md:292, ARCHITECTURE.md:27)
+  // 1. VERIFY x-callback-token (INTEGRATION.md:292, ARCHITECTURE.md:27).
+  // Constant-time compare via webhook-ingress (verify.ts) — never a `!==`.
   const token = req.headers.get("x-callback-token") ?? req.headers.get("X-CALLBACK-TOKEN");
   const expected = env.XENDIT_WEBHOOK_TOKEN;
 
   if (expected) {
-    if (!token || token !== expected) {
+    const verification = verifyXenditCallbackToken({ presented: token, expected });
+    if (!verification.verified) {
       rejectInbound({ reason: "Invalid x-callback-token", raw });
       return NextResponse.json({ error: "Invalid x-callback-token" }, { status: 401 });
     }
