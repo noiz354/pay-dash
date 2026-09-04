@@ -120,12 +120,17 @@ export interface XenditPayoutClient {
   createPayout(args: { idempotencyKey: string; data: Record<string, unknown> }): Promise<{ id: string; status?: string }>;
 }
 
+export interface XenditCustomerClient {
+  create(args: { referenceId: string; givenNames?: string; email?: string; mobileNumber?: string; description?: string }): Promise<{ id: string; reference_id?: string }>;
+}
+
 export interface XenditClientLike {
   readonly Balance: XenditBalanceClient;
   readonly Transaction?: XenditTransactionClient;
   readonly Invoice?: XenditInvoiceClient;
   readonly Refund?: XenditRefundClient;
   readonly Payout?: XenditPayoutClient;
+  readonly Customer?: XenditCustomerClient;
 }
 
 export interface XenditAdapterDeps {
@@ -375,6 +380,28 @@ export class XenditAdapter implements PaymentProviderAdapter {
       },
     });
     return { id: refund.id, status: refund.status ?? "PENDING", provider: "xendit" };
+  }
+
+  async createCustomer(
+    ctx: ProviderConnectionContext,
+    input: { referenceId: string; name?: string; email?: string | null },
+  ): Promise<import("@/domain/payments/commerce").ProviderCustomer> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.Customer) {
+      throw normalizeXenditError(new Error("Customer capability not available on the client"), "xendit.createCustomer");
+    }
+    const customer = await client.Customer.create({
+      referenceId: input.referenceId,
+      givenNames: input.name,
+      email: input.email ?? undefined,
+      description: "Created from the payment dashboard",
+    });
+    return {
+      id: customer.id,
+      provider: "xendit",
+      referenceId: customer.reference_id ?? input.referenceId,
+      status: "NEW",
+    };
   }
 
   async createPayout(

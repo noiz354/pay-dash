@@ -37,11 +37,32 @@ export async function createSubscriptionAction(
     return { status: "error", message: "Enter an amount, e.g. 5,000,000" };
   }
 
+  // Route the recurring plan through the provider when a TEST connection resolves
+  // (Stripe Billing; Xendit recurring is unsupported and propagates). The
+  // in-app subscription is still recorded so the row renders.
+  let providerNote = "";
+  try {
+    const { createProviderRecurringPlan } = await import("@/server/services/commerce");
+    const providerResult = await createProviderRecurringPlan({
+      idempotencyKey: `${customerEmail}:${planName}:${interval}`,
+      planName,
+      currency: "IDR",
+      interval,
+      amountMinor: amount,
+      customerId: customerEmail,
+    });
+    if (providerResult.connected) {
+      providerNote = ` · provider ${providerResult.plan.provider} ${providerResult.plan.id} (${providerResult.plan.status})`;
+    }
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not create the recurring plan at the provider." };
+  }
+
   const sub = await createSubscription({ customerName, customerEmail, planName, interval, amount });
   revalidateSubscriptions();
   return {
     status: "success",
-    message: `${sub.planName} for ${sub.customerName} created — pending setup (${formatMoney(sub.amount, sub.currency)} ${sub.interval}).`,
+    message: `${sub.planName} for ${sub.customerName} created — pending setup (${formatMoney(sub.amount, sub.currency)} ${sub.interval})${providerNote}.`,
     data: { id: sub.id },
   };
 }

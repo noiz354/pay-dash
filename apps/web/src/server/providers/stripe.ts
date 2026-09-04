@@ -156,6 +156,19 @@ export interface StripeTransferLike {
   status?: string | null;
 }
 
+export interface StripeCustomerLike {
+  id: string;
+  object: string;
+  email?: string | null;
+}
+
+export interface StripeSubscriptionLike {
+  id: string;
+  status: string;
+  currency: string | null;
+  customer: string | null;
+}
+
 export interface StripeClientLike {
   readonly accounts?: {
     retrieve(id: string): Promise<StripeAccountLike>;
@@ -177,6 +190,12 @@ export interface StripeClientLike {
   };
   readonly transfers?: {
     create(params: Record<string, unknown>): Promise<StripeTransferLike>;
+  };
+  readonly customers?: {
+    create(params: Record<string, unknown>): Promise<StripeCustomerLike>;
+  };
+  readonly subscriptions?: {
+    create(params: Record<string, unknown>): Promise<StripeSubscriptionLike>;
   };
 }
 
@@ -457,6 +476,54 @@ export class StripeAdapter implements PaymentProviderAdapter {
       currency: input.currency,
       destinations: input.destinations,
       status: "ACTIVE",
+    };
+  }
+
+  async createCustomer(
+    ctx: ProviderConnectionContext,
+    input: { referenceId: string; name?: string; email?: string | null },
+  ): Promise<import("@/domain/payments/commerce").ProviderCustomer> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.customers) {
+      throw normalizeStripeError(new Error("Customer capability not available on the client"), "stripe.createCustomer");
+    }
+    const customer = await client.customers.create({
+      email: input.email ?? undefined,
+      name: input.name ?? undefined,
+      metadata: { referenceId: input.referenceId },
+    });
+    return { id: customer.id, provider: "stripe", referenceId: input.referenceId, status: "VERIFIED" };
+  }
+
+  async createRecurringPlan(
+    ctx: ProviderConnectionContext,
+    input: {
+      idempotencyKey: string;
+      planName: string;
+      currency: string;
+      interval: "monthly" | "yearly";
+      amountMinor: number;
+      customerId: string;
+    },
+  ): Promise<import("@/domain/payments/commerce").ProviderRecurringPlan> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.subscriptions) {
+      throw normalizeStripeError(new Error("Subscriptions capability not available on the client"), "stripe.createRecurringPlan");
+    }
+    const interval = input.interval === "monthly" ? "month" : "year";
+    const subscription = await client.subscriptions.create({
+      customer: input.customerId,
+      items: [{ price_data: { currency: input.currency, unit_amount: input.amountMinor, recurring: { interval }, product_data: { name: input.planName } } }],
+      metadata: { referenceId: input.idempotencyKey },
+    });
+    return {
+      id: subscription.id,
+      provider: "stripe",
+      planName: input.planName,
+      currency: subscription.currency ?? input.currency,
+      interval: input.interval,
+      amountMinor: input.amountMinor,
+      status: subscription.status === "active" || subscription.status === "trialing" ? "ACTIVE" : "DRAFT",
     };
   }
 

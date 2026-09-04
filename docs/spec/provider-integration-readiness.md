@@ -227,9 +227,13 @@ sink."*
 6. ~~**Build connected-accounts / KYC / platform-routing**~~ → done: Stripe Connect,
    KYC verification routing, split/transfer routing with actions + UI shell.
 
-**Still open**: customer vault / invoice / recurring wiring; LIVE activation (needs
-`kms` backend); real multi-tenant org-context authz (currently single-tenant
-`org_demo`/OWNER default); production KYC verification outcome.
+**Still open**: LIVE activation (needs `kms` backend); real multi-tenant
+org-context authz (currently single-tenant `org_demo`/OWNER default); production
+KYC verification outcome; saved-payment-methods action + UI wiring.
+
+**Done**: customer vault / invoice / recurring now route through the provider
+(`createCustomer`, `createRecurringPlan`, hostable invoices via
+`hostedPaymentLinks`) when a TEST connection resolves (fail-closed).
 
 ---
 

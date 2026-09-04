@@ -26,7 +26,7 @@ derived/in-memory data, not live provider data.
 | Payout | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with connection |
 | Connected-accounts / Split / Transfer | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅* | ✅ | *with connection |
 | Compliance KYC | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ | ⚠️* | ✅ | verification outcome via webhook |
-| Customer / Invoice / Recurring | ✅ | ⚠️ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
+| Customer / Invoice / Recurring | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅* | ✅ | *with connection |
 | **Webhook ingest (Xendit)** | ✅ | ✅ | n/a | ✅ | — | ✅ | **⚙️** | 7 → **wired** |
 | **Webhook ingest (Stripe)** | ✅ | ✅ | n/a | ✅ | — | ✅ | **⚙️** | 7 → **wired** |
 
@@ -68,27 +68,26 @@ are now implemented**:
 
 ## Still to close
 
-- **Customer vault / Invoice / Recurring** — still mock/in-memory at hop 2/4/6/7
-  (adapter paths `createCustomer`, `createRecurringPlan` exist on the interface
-  but are not yet wired to real actions + UI).
 - **LIVE activation** — blocked by design until a production-grade `kms` backend
   exists; `kms` is refused for LIVE now.
-- **Org-context authz** — the read path gates use a single-tenant `org_demo`/
+- **Org-context authz** — the read/write gates use a single-tenant `org_demo`/
   OWNER default; a real multi-tenant session→org→membership lookup is needed to
   replace it (read-path permission gates are ⚠️).
 - **KYC verification outcome** — submission is handed off to the provider; the
   verified/action-required result is surfaced via webhook (not yet a production
   provider call).
+- **Saved payment methods** — capability slot exists but not yet wired to an
+  action + UI.
 
 ## Bottom line
 
 > Menyuplai `.env` **menyiapkan kredensial** tetapi **tidak mengaktifkan jalur
 > provider** tanpa sebuah koneksi ACTIVE yang dipersist + secret yang di-unseal.
-> Setelah rekomendasi #1–#6, mata rantai **layar → action → authz → adapter →
-> SDK → provider → kembali ke layar** kini tertutup untuk **webhook ingress
-> (verify + dedupe + store + projection)**, **money-in**, **balance/transactions
-> read**, **refund**, **payout**, dan **platform (connected-account, split,
-> transfer)** — semuanya terhadap koneksi TEST yang dikonfigurasi (org-scoped,
-> fail-closed). Yang masih berhenti: **customer / invoice / recurring**, plus
-> **aktivasi LIVE** dan **authz org multi-tenant** yang masih memakai default
-> single-tenant.
+> Setelah rekomendasi #1–#6 + yang tersisa, mata rantai **layar → action → authz →
+> adapter → SDK → provider → kembali ke layar** kini tertutup untuk **webhook
+> ingress (verify + dedupe + store + projection)**, **money-in**,
+> **balance/transactions read**, **refund**, **payout**, **platform
+> (connected-account, split, transfer)**, dan **customer / invoice / recurring**
+> — semuanya terhadap koneksi TEST yang dikonfigurasi (org-scoped, fail-closed).
+> Yang masih berhenti: **aktivasi LIVE**, **authz org multi-tenant**, **hasil
+> verifikasi KYC**, dan **saved payment methods**.
