@@ -7,7 +7,7 @@ import { createStripeClient } from "@/lib/stripe";
 import type { XenditClientLike } from "@/server/providers/xendit";
 import type { StripeClientLike } from "@/server/providers/stripe";
 import { PaymentFlowService, type OperationStore, type AuditStore, type FlowActor, type ProviderFlowResult } from "./payment-flow";
-import { buildRuntimeConnectionResolver } from "@/server/repositories/runtime-connection-resolver";
+import { buildRuntimeConnectionResolver, type RuntimeConnectionResolver } from "@/server/repositories/runtime-connection-resolver";
 import { buildOperationStore } from "@/server/repositories/durable-operation-store";
 import { buildAuditStore } from "@/server/repositories/audit-event-store";
 
@@ -20,6 +20,11 @@ import { buildAuditStore } from "@/server/repositories/audit-event-store";
  * activate a provider path without a persisted ACTIVE connection + secret.
  */
 
+/** Single-tenant demo org used when a caller does not supply an org (the app
+ *  currently has no org-scoping plumbing). Never cross-org: resolution always
+ *  filters by this org. Multi-tenant callers pass the real organizationId. */
+export const DEFAULT_DEMO_ORG = "org_demo";
+
 export type MoneyInConnection = {
   provider: "xendit" | "stripe";
   connectionId: string;
@@ -27,15 +32,17 @@ export type MoneyInConnection = {
   mode: "TEST" | "LIVE";
 };
 
-export type MoneyInConnectionResolver = () => Promise<MoneyInConnection | null>;
+export type MoneyInConnectionResolver = (organizationId?: string) => Promise<MoneyInConnection | null>;
 
 export type MoneyInRuntimeDeps = {
-  /** Optional override to select a connection (defaults: null — no provider). */
+  /** Optional override to select a connection (default: first ACTIVE TEST for the org). */
   connectionResolver?: MoneyInConnectionResolver;
   registry?: ProviderRegistry;
   operations?: OperationStore;
   audit?: AuditStore;
   actor?: FlowActor;
+  /** Org to scope connection selection to; defaults to `DEFAULT_DEMO_ORG`. */
+  organizationId?: string;
 };
 
 export type HostedPaymentInput = {
@@ -44,11 +51,12 @@ export type HostedPaymentInput = {
   currency: string;
   description?: string;
   payerEmail?: string | null;
+  /** Optional org override for connection selection (scoped, never cross-org). */
+  organizationId?: string;
 };
 
-/** Build the default provider registry with real SDK clients + real secret resolution. */
-async function buildDefaultRegistry(): Promise<ProviderRegistry> {
-  const resolver = await buildRuntimeConnectionResolver();
+/** Build the provider registry with real SDK clients + real secret resolution. */
+function buildDefaultRegistry(resolver: RuntimeConnectionResolver): ProviderRegistry {
   const resolveSecretForConnection = async (connectionId: string): Promise<string | null> => {
     const resolved = await resolver.resolveForConnection(connectionId);
     return resolved?.secret ?? null;
@@ -73,17 +81,33 @@ async function buildDefaultRegistry(): Promise<ProviderRegistry> {
 }
 
 export async function createMoneyInRuntime(deps: MoneyInRuntimeDeps = {}) {
-  const connectionResolver = deps.connectionResolver ?? (async (): Promise<MoneyInConnection | null> => null);
-  const registry = deps.registry ?? (await buildDefaultRegistry());
+  const resolver = await buildRuntimeConnectionResolver();
+  const connectionResolver =
+    deps.connectionResolver ??
+    (async (organizationId?: string): Promise<MoneyInConnection | null> => {
+      const org = organizationId ?? deps.organizationId ?? DEFAULT_DEMO_ORG;
+      const resolved = await resolver.resolveFirstActive(org);
+      if (!resolved) {
+        return null;
+      }
+      return {
+        provider: resolved.connection.provider,
+        connectionId: resolved.connection.connectionId,
+        organizationId: resolved.connection.organizationId,
+        mode: resolved.connection.mode,
+      };
+    });
+
+  const registry = deps.registry ?? buildDefaultRegistry(resolver);
   const operations = deps.operations ?? (await buildOperationStore());
   const audit = deps.audit ?? (await buildAuditStore());
   const actor: FlowActor = deps.actor ?? { id: "system", roles: ["OWNER"] };
 
   return {
     async executeHostedPayment(input: HostedPaymentInput): Promise<ProviderFlowResult | null> {
-      const connection = await connectionResolver();
+      const connection = await connectionResolver(input.organizationId ?? deps.organizationId);
       if (!connection) {
-        return null; // no TEST provider connection configured → dev/demo link
+        return null; // no ACTIVE TEST provider connection configured → dev/demo link
       }
       const service = new PaymentFlowService({
         organizationId: connection.organizationId,

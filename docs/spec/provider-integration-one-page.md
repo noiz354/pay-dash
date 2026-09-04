@@ -39,7 +39,9 @@ injections. They were intentionally un-wired (fail-closed) — **recommendations
 are now implemented**:
 
 1. **Connection resolver** — resolves a persisted `PaymentProviderConnection`
-   (provider + connectionId + org + mode TEST/LIVE). ✅ wired
+   (provider + connectionId + org + mode TEST/LIVE), incl. an org-scoped
+   `resolveFirstActive(organizationId)` that picks the first ACTIVE TEST
+   connection (never cross-org; single-tenant default `org_demo`). ✅ wired
    `server/repositories/runtime-connection-resolver.ts`.
 2. **Secret resolver** — `resolveSecretForConnection` unseals the credential via
    `provider-secrets` (`SecretStore`: local AES-256-GCM for TEST; `kms` for LIVE).

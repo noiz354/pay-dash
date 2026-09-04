@@ -35,6 +35,8 @@ export type RuntimeSecretRef = {
 
 export interface RuntimeConnectionDb {
   findActiveConnection(connectionId: string): Promise<RuntimeConnection | null>;
+  /** First ACTIVE connection for an organization (scoped — never cross-org). */
+  findFirstActive(organizationId: string): Promise<RuntimeConnection | null>;
   findSecretRef(connectionId: string, mode: ProviderMode): Promise<RuntimeSecretRef | null>;
 }
 
@@ -85,6 +87,24 @@ export class RuntimeConnectionResolver {
     }
     return { connection, secret };
   }
+
+  /**
+   * Resolve the first ACTIVE connection for an organization together with its
+   * unsealed secret. Returns `null` when the org has no ACTIVE connection
+   * (dev/demo keeps the local link); throws when a connection exists but its
+   * secret cannot be unsealed (configured-but-broken → surfaced, never mocked).
+   */
+  async resolveFirstActive(organizationId: string): Promise<{ connection: RuntimeConnection; secret: string } | null> {
+    const connection = await this.db.findFirstActive(organizationId);
+    if (!connection) {
+      return null;
+    }
+    const secret = await this.resolveSecret(connection);
+    if (!secret) {
+      throw new RepositoryError("NOT_FOUND", `No secret resolvable for connection ${connection.connectionId}`);
+    }
+    return { connection, secret };
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -99,19 +119,15 @@ export class PrismaRuntimeConnectionDb implements RuntimeConnectionDb {
       findFirst(args: { where: Record<string, unknown> }): Promise<Record<string, unknown> | null>;
     };
     const row = await client.findFirst({ where: { id: connectionId, status: "ACTIVE" } });
-    if (!row) {
-      return null;
-    }
-    const provider = String(row.provider);
-    if (provider !== "xendit" && provider !== "stripe") {
-      return null;
-    }
-    return {
-      connectionId: String(row.id),
-      organizationId: String(row.organizationId),
-      provider,
-      mode: row.mode as ProviderMode,
+    return row ? mapConnection(row) : null;
+  }
+
+  async findFirstActive(organizationId: string): Promise<RuntimeConnection | null> {
+    const client = this.prisma.paymentProviderConnection as {
+      findFirst(args: { where: Record<string, unknown>; orderBy?: Record<string, unknown> }): Promise<Record<string, unknown> | null>;
     };
+    const row = await client.findFirst({ where: { organizationId, status: "ACTIVE" }, orderBy: { createdAt: "asc" } });
+    return row ? mapConnection(row) : null;
   }
 
   async findSecretRef(connectionId: string, mode: ProviderMode): Promise<RuntimeSecretRef | null> {
@@ -126,6 +142,20 @@ export class PrismaRuntimeConnectionDb implements RuntimeConnectionDb {
     }
     return { secretRef: String(row.secretRef), credentialVersion: Number(row.credentialVersion ?? 1) };
   }
+}
+
+/** Project a provider-connection row to a `RuntimeConnection` (fail-closed on unknown provider). */
+function mapConnection(row: Record<string, unknown>): RuntimeConnection | null {
+  const provider = String(row.provider);
+  if (provider !== "xendit" && provider !== "stripe") {
+    return null;
+  }
+  return {
+    connectionId: String(row.id),
+    organizationId: String(row.organizationId),
+    provider,
+    mode: row.mode as ProviderMode,
+  };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -146,6 +176,15 @@ export class InMemoryRuntimeConnectionDb implements RuntimeConnectionDb {
 
   async findActiveConnection(connectionId: string): Promise<RuntimeConnection | null> {
     return this.connections.get(connectionId) ?? null;
+  }
+
+  async findFirstActive(organizationId: string): Promise<RuntimeConnection | null> {
+    for (const conn of this.connections.values()) {
+      if (conn.organizationId === organizationId) {
+        return conn;
+      }
+    }
+    return null;
   }
 
   async findSecretRef(connectionId: string, mode: ProviderMode): Promise<RuntimeSecretRef | null> {

@@ -97,4 +97,21 @@ describe("money-in runtime (PaymentFlowService wiring)", () => {
     expect(audit.events).toHaveLength(1);
     expect(audit.events[0].action).toBe("OPERATION_SUCCEEDED");
   });
+
+  it("threads the organizationId through to the connection resolver (org-scoped selection)", async () => {
+    const seen: Array<string | undefined> = [];
+    const runtime = await createMoneyInRuntime({
+      registry: registryWith(makeRegistry()),
+      connectionResolver: async (organizationId?: string) => {
+        seen.push(organizationId);
+        // Only activate for the requested org.
+        return organizationId === "org-9" ? { ...connection, organizationId: "org-9" } : null;
+      },
+    });
+    const ok = await runtime.executeHostedPayment({ externalId: "link-5", amountMinor: "1500000", currency: "IDR", organizationId: "org-9" });
+    expect(ok).not.toBeNull();
+    const skipped = await runtime.executeHostedPayment({ externalId: "link-6", amountMinor: "1500000", currency: "IDR", organizationId: "org-other" });
+    expect(skipped).toBeNull();
+    expect(seen).toEqual(["org-9", "org-other"]);
+  });
 });

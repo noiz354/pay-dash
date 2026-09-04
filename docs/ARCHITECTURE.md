@@ -52,7 +52,9 @@ projection.
 1. **Connection + secret resolution** (`server/repositories/runtime-connection-resolver.ts`)
    resolves a persisted ACTIVE `PaymentProviderConnection` and unseals its
    `SecretRecord` via `SecretStore` (local AES-256-GCM for TEST; `kms` refused for
-   LIVE). Missing connection/secret stays **fail-closed** — no mock downgrade.
+   LIVE). Missing connection/secret stays **fail-closed** — no mock downgrade. An
+   org-scoped `resolveFirstActive(organizationId)` auto-selects the first ACTIVE
+   TEST connection (single-tenant default `org_demo`); it never crosses orgs.
 2. **Durable stores** (`durable-operation-store.ts`, `audit-event-store.ts`)
    bind `OperationStore`/`AuditStore` to `DurableOperation`/`AuditEvent`; in-memory
    fallback in dev. Idempotency + audit intact.

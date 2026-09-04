@@ -265,6 +265,39 @@ describe("runtime connection resolver", () => {
     const resolver = await buildRuntimeConnectionResolver({ db: new InMemoryRuntimeConnectionDb() });
     expect(await resolver.resolveForConnection("conn-x")).toBeNull();
   });
+
+  it("resolveFirstActive returns the first ACTIVE connection + unsealed secret for an org", async () => {
+    const store = new LocalEncryptedSecretStore(KEY, "local");
+    const envelope = await store.seal("sk_test_first");
+    const db = new InMemoryRuntimeConnectionDb();
+    db.seedConnection({ connectionId: "conn-1", organizationId: "org-1", provider: "xendit", mode: "TEST" });
+    db.seedConnection({ connectionId: "conn-2", organizationId: "org-other", provider: "stripe", mode: "TEST" });
+    db.seedSecret("conn-1", "TEST", { secretRef: JSON.stringify(envelope), credentialVersion: 1 });
+
+    const resolver = new RuntimeConnectionResolver(db, store);
+    const resolved = await resolver.resolveFirstActive("org-1");
+    expect(resolved?.connection.connectionId).toBe("conn-1");
+    expect(resolved?.secret).toBe("sk_test_first");
+    // Org-scoped: a different org's connection is never returned.
+    expect(await resolver.resolveFirstActive("org-missing")).toBeNull();
+  });
+
+  it("resolveFirstActive throws NOT_FOUND when an org has a connection but no secret", async () => {
+    const store = new LocalEncryptedSecretStore(KEY, "local");
+    const db = new InMemoryRuntimeConnectionDb();
+    db.seedConnection({ connectionId: "conn-1", organizationId: "org-1", provider: "xendit", mode: "TEST" });
+    const resolver = new RuntimeConnectionResolver(db, store);
+    await expect(resolver.resolveFirstActive("org-1")).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("InMemoryRuntimeConnectionDb.findFirstActive scopes to the organization", async () => {
+    const db = new InMemoryRuntimeConnectionDb();
+    db.seedConnection({ connectionId: "c-1", organizationId: "org-a", provider: "xendit", mode: "TEST" });
+    db.seedConnection({ connectionId: "c-2", organizationId: "org-b", provider: "stripe", mode: "TEST" });
+    expect((await db.findFirstActive("org-a"))?.connectionId).toBe("c-1");
+    expect((await db.findFirstActive("org-b"))?.connectionId).toBe("c-2");
+    expect(await db.findFirstActive("org-z")).toBeNull();
+  });
 });
 
 /* Prisma-backed executors remain type-safe and forward to the lazy client. */
@@ -288,6 +321,19 @@ describe("prisma-backed repository executors", () => {
     expect(conn?.provider).toBe("xendit");
     const secretRef = await db.findSecretRef("conn-1", "TEST");
     expect(secretRef?.secretRef).toBe("plaintext-dev");
+
+    // findFirstActive scopes by organization + ACTIVE and orders by createdAt.
+    const byOrg = await db.findFirstActive("org-1");
+    expect(calls[calls.length - 1].where).toMatchObject({ organizationId: "org-1", status: "ACTIVE" });
+    expect(byOrg?.provider).toBe("xendit");
+
+    // Unknown provider is rejected (fail-closed).
+    const prisma2 = {
+      paymentProviderConnection: { findFirst: async () => ({ id: "c", organizationId: "o", provider: "bitcoin", mode: "TEST", status: "ACTIVE" }) },
+      secretRecord: { findUnique: async () => null },
+    };
+    const db2 = new PrismaRuntimeConnectionDb(prisma2);
+    expect(await db2.findFirstActive("o")).toBeNull();
   });
 
   it("PaymentProjectionDb adapter forwards find/update to the lazy client", async () => {
