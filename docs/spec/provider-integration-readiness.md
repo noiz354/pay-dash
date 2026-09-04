@@ -221,10 +221,15 @@ sink."*
    against a real (TEST) connection (fail-closed).
 2. ~~**Durable stores**~~ → done: `OperationStore`/`AuditStore` to `DurableOperation`/`AuditEvent`.
 3. ~~**Webhook projection**~~ → done: verified webhooks mutate the canonical resource the UI renders.
-4. **Read-path adapter wiring** → balance/transactions surface live provider data.
-5. **Refund + payout action wiring** → completes the write side.
-6. **Build connected-accounts / KYC / platform-routing** → fills the gaps with no
-   adapter at all.
+4. ~~**Read-path adapter wiring**~~ → done: balance/transactions surface live provider data
+   (`getBalance` / `listTransactions`, org-scoped read service).
+5. ~~**Refund + payout action wiring**~~ → done: executed via the provider payment-flow.
+6. ~~**Build connected-accounts / KYC / platform-routing**~~ → done: Stripe Connect,
+   KYC verification routing, split/transfer routing with actions + UI shell.
+
+**Still open**: customer vault / invoice / recurring wiring; LIVE activation (needs
+`kms` backend); real multi-tenant org-context authz (currently single-tenant
+`org_demo`/OWNER default); production KYC verification outcome.
 
 ---
 

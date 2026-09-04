@@ -19,17 +19,19 @@ derived/in-memory data, not live provider data.
 
 | Capability | 1 | 2 | 3 | 4 | 5 | 6 | 7 | Stops at |
 |---|---|---|---|---|---|---|---|---|
-| Money-in (hosted link) | ✅ | ⚠️ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 2 / 6 / 7 |
-| Balance read | ✅ | ❌ | ❌ | ✅ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
-| Transactions list | ✅ | ❌ | ❌ | ✅ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
-| Refund / Payout | ✅ | ❌ | ✅ | ✅ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
+| Money-in (hosted link) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with persisted connection |
+| Balance read | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅* | ✅ | *with connection |
+| Transactions list | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅* | ✅ | *with connection |
+| Refund | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with connection |
+| Payout | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with connection |
+| Connected-accounts / Split / Transfer | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅* | ✅ | *with connection |
+| Compliance KYC | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ | ⚠️* | ✅ | verification outcome via webhook |
 | Customer / Invoice / Recurring | ✅ | ⚠️ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
-| Connected-accounts / Split | ❌ | ❌ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | 1 / 6 / 7 |
-| Compliance KYC | ✅ | ⚠️ | ❌ | ❌ | ⚠️ | ⚠️ | ⚠️ | 4 / 6 |
 | **Webhook ingest (Xendit)** | ✅ | ✅ | n/a | ✅ | — | ✅ | **⚙️** | 7 → **wired** |
 | **Webhook ingest (Stripe)** | ✅ | ✅ | n/a | ✅ | — | ✅ | **⚙️** | 7 → **wired** |
 
-✅ live · ⚠️ partial (stub/mock/un-wired resolver) · ❌ missing · ⚙️ now wired.
+✅ live · ⚠️ partial (stub/mock/needs LIVE or real review) · ❌ missing · ⚙️ wired ·
+*needs a persisted ACTIVE TEST connection + unsealed secret (org-scoped, never cross-org).
 
 ## Why `.env` alone is not enough
 
@@ -64,23 +66,29 @@ are now implemented**:
 - Provider SDK models/raw payloads never leak to the UI; provider IDs are resolved
   server-side from the persisted mapping (never from browser input).
 
-## Still to close (recommendations #4–#6)
+## Still to close
 
-- **#4** Route balance/transactions reads through the adapter (`getBalance`,
-  `listTransactions`) instead of in-memory stores → live provider data on screen.
-- **#5** Wire `executeRefund` + `releaseRecipient` to server actions + UI.
-- **#6** Build connected-accounts onboarding, KYC provider verification,
-  platform-routing/split.
+- **Customer vault / Invoice / Recurring** — still mock/in-memory at hop 2/4/6/7
+  (adapter paths `createCustomer`, `createRecurringPlan` exist on the interface
+  but are not yet wired to real actions + UI).
+- **LIVE activation** — blocked by design until a production-grade `kms` backend
+  exists; `kms` is refused for LIVE now.
+- **Org-context authz** — the read path gates use a single-tenant `org_demo`/
+  OWNER default; a real multi-tenant session→org→membership lookup is needed to
+  replace it (read-path permission gates are ⚠️).
+- **KYC verification outcome** — submission is handed off to the provider; the
+  verified/action-required result is surfaced via webhook (not yet a production
+  provider call).
 
 ## Bottom line
 
 > Menyuplai `.env` **menyiapkan kredensial** tetapi **tidak mengaktifkan jalur
-> provider**. Yang kini benar-benar hidup sampai provider adalah **webhook ingress
-> (verify + dedupe + store + projection)** dan **money-in** terhadap koneksi TEST
-> yang dipersist + di-unseal. Semua kemampuan lain (balance, transaction, refund,
-> payout, customer, invoice, recurring, connected-account, KYC, routing) masih
-> berhenti di hop 2 (mock/in-memory), hop 6 (belum di-wire), atau hop 7 (proyeksi).
-
-The adapter + SDK + registry layer is solid. What remains is the **read-path
-adapter wiring** and the **write-side actions**, plus the still-unbuilt
-connected-accounts / KYC / routing modules.
+> provider** tanpa sebuah koneksi ACTIVE yang dipersist + secret yang di-unseal.
+> Setelah rekomendasi #1–#6, mata rantai **layar → action → authz → adapter →
+> SDK → provider → kembali ke layar** kini tertutup untuk **webhook ingress
+> (verify + dedupe + store + projection)**, **money-in**, **balance/transactions
+> read**, **refund**, **payout**, dan **platform (connected-account, split,
+> transfer)** — semuanya terhadap koneksi TEST yang dikonfigurasi (org-scoped,
+> fail-closed). Yang masih berhenti: **customer / invoice / recurring**, plus
+> **aktivasi LIVE** dan **authz org multi-tenant** yang masih memakai default
+> single-tenant.
