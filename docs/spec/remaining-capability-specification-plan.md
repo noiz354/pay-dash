@@ -71,7 +71,22 @@ Specs/matrices: `SPEC-provider-connections.md`, `SPEC-provider-secrets.md`, `SPE
 | Adapter write tests | `xendit.test.ts` (14) + `stripe.test.ts` (15) incl. normalized create paths + safe-error branches | ✅ green |
 | Flow orchestration tests | `payment-flow.test.ts` (9): authz deny, dual-control require/distinct, idempotency DUPLICATE, capability-not-configured no-retry, audit + state transitions | ✅ green |
 
-Notes: provider (`xendit`/`stripe`) write methods are only invoked through the registry `invokeCapability` boundary; the SDK is imported solely in the server-only `apps/web/src/lib/{xendit,stripe}.ts` boundaries, and provider SDK models never leak to UI/application services. No real money movement in any test; only in-memory fakes / test keys. Focused suite for these modules: **177 tests green** (domain/payments + security + organization + providers + repositories + webhooks + payment-flows), plus the earlier Wave 0 + adapters baseline.
+Notes: provider (`xendit`/`stripe`) write methods are only invoked through the registry `invokeCapability` boundary; the SDK is imported solely in the server-only `apps/web/src/lib/{xendit,stripe}.ts` boundaries, and provider SDK models never leak to UI/application services. No real money movement in any test; only in-memory fakes / test keys.
+
+### Webhook durable dedupe + money-in runtime wiring (turn follow-up)
+
+| Item | Evidence | Status |
+|---|---|---|
+| Durable webhook dedupe store | `server/repositories/webhook-deliveries.ts` (`DurableWebhookDeliveryStore`, `InMemoryWebhookDeliveryStore`, `DurableWebhookDeliveryStore`, `assertKnownProvider`); `webhook-delivery-store.ts` (`buildWebhookDeliveryStore` + `PrismaWebhookDeliveryDb`) | ✅ implemented |
+| Dedupe backed by `@@unique([provider, providerEventId])` | PGlite integration test `webhook-delivery-store.integration.test.ts` (5): created → deduped on replay (not a second row), provider-scoped non-collision, unknown-provider fail-closed, `isAvailable` | ✅ green |
+| Routes use durable gate + shared log | `server/webhooks/store-delivery.ts` (`recordWebhookDelivery`) used by both `/api/webhooks/xendit` and `/api/webhooks/stripe`; in-memory receive log kept in sync on the same provider-scoped key | ✅ implemented |
+| Prisma availability | `buildWebhookDeliveryStore()` loads Prisma lazily; returns durable when initialized, else in-memory (dev/test) | ✅ implemented |
+| Money-in runtime wiring | `server/payment-flows/money-in-runtime.ts` (`createMoneyInRuntime`) wires registry (real SDK clients, fail-closed secret resolution) + operation/audit stores; `server/payment-flows/in-memory-stores.ts` (InMemoryOperationStore/InMemoryAuditStore) | ✅ implemented |
+| Server action integration | `server/actions/links.ts` `createPaymentLinkAction` routes money-in through `createMoneyInRuntime().executeHostedPayment`; returns `checkoutUrl` when a TEST connection is configured, keeps the local dev/demo link when none, and surfaces a configured-provider failure (no mock downgrade) | ✅ implemented |
+| Money-in runtime tests | `money-in-runtime.test.ts` (4): provider path surfaces checkoutUrl, no-connection → null (local link), configured-provider failure propagates, audit recorded | ✅ green |
+| `ProviderFlowResult.checkoutUrl` | surfaced by `PaymentFlowService.createHostedPayment` | ✅ implemented |
+
+Focused suite for these modules: **159 tests green** (webhooks + repositories + payment-flows + providers + actions + links), plus the earlier Wave 0 + adapters baseline.
 
 ## 3. Which existing research documents feed which module
 

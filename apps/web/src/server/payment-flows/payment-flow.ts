@@ -72,6 +72,8 @@ export interface ProviderFlowResult {
   providerResourceId: string | null;
   status: string;
   mode: "TEST" | "LIVE";
+  /** Hosted-payment checkout URL (money-in only). */
+  checkoutUrl?: string | null;
 }
 
 export class PaymentFlowError extends Error {
@@ -237,7 +239,14 @@ export class PaymentFlowService {
       }) as { id: string; checkoutUrl: string; status: string; provider: string };
       await this.transitionTo(operation, "SUCCEEDED");
       await this.audit(args.actor.id, "OPERATION_SUCCEEDED", "SUCCESS", operation.id, { resourceType: "payment", provider: this.ctx.provider, mode: this.ctx.mode });
-      return { operationId: operation.id, provider: this.ctx.provider, providerResourceId: result.id, status: result.status, mode: this.ctx.mode };
+      return {
+        operationId: operation.id,
+        provider: this.ctx.provider,
+        providerResourceId: result.id,
+        status: result.status,
+        mode: this.ctx.mode,
+        checkoutUrl: result.checkoutUrl ?? null,
+      };
     } catch (err) {
       await this.failOperation(operation, args.actor.id, "payment", err);
       throw err;

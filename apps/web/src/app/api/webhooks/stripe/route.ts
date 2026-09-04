@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { env } from "@/lib/env";
-import { recordInbound, rejectInbound } from "@/server/data/webhooks";
+import { rejectInbound } from "@/server/data/webhooks";
+import { recordWebhookDelivery } from "@/server/webhooks/store-delivery";
 import { verifyStripeSignature } from "@/server/webhooks/verify";
 
 // Stripe webhook ingress (ADR-0028): provider-specific endpoint at
@@ -65,16 +66,21 @@ export async function POST(req: Request) {
   const eventId = payload.id;
   const type = payload.type;
 
-  // 3. Persist — provider-scoped dedupe so a Stripe event id can never collide
-  //    with an Xendit event id of the same value.
-  const { deduped } = recordInbound({ eventId, type, payload: body, source: "stripe", dedupeKey: `stripe:${eventId}` });
+  // 3. Persist — durable dedupe on `WebhookDelivery` (provider-scoped key, so a
+  //    Stripe event id can never collide with an Xendit event id) plus the log.
+  const { received, deduped, event: outEvent } = await recordWebhookDelivery({
+    provider: "stripe",
+    eventId,
+    type,
+    payload: body,
+  });
 
   // 4. Respond 200 fast; async processing is downstream (QUEUES.md).
   void processStripeWebhookAsync(type, body).catch((e) => {
     console.error("[webhook] stripe async processing failed", e);
   });
 
-  return NextResponse.json(deduped ? { received: true, deduped: true } : { received: true, event: type }, {
+  return NextResponse.json(deduped ? { received, deduped: true } : { received, event: outEvent }, {
     status: 200,
   });
 }

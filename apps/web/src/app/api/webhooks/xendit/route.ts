@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { env } from "@/lib/env";
-import { recordInbound, rejectInbound } from "@/server/data/webhooks";
+import { rejectInbound } from "@/server/data/webhooks";
+import { recordWebhookDelivery } from "@/server/webhooks/store-delivery";
 import { verifyXenditCallbackToken } from "@/server/webhooks/verify";
 
 // Reusable webhook handler — INTEGRATION.md #7 (x-callback-token), NEXTJS_CONCEPTS.md #6 Route Handlers, #31 route.ts, #138 Zod
@@ -60,9 +61,14 @@ export async function POST(req: Request) {
   const eventId = (payload.event_id as string) ?? (payload.id as string) ?? JSON.stringify(payload).slice(0, 64);
   const event = (payload.event as string) ?? "unknown";
 
-  // 3. Persist — dedupe by event id (idempotency — ARCHITECTURE.md:42).
-  // A retried event id logs a DUPLICATED row instead of a second RECEIVED.
-  const { deduped } = recordInbound({ eventId, type: event, payload, source: "xendit" });
+  // 3. Persist — durable dedupe on `WebhookDelivery` (provider-scoped key) plus
+  // the /webhooks log. A retried event id is classified DUPLICATED in both.
+  const { received, deduped, event: outEvent } = await recordWebhookDelivery({
+    provider: "xendit",
+    eventId,
+    type: event,
+    payload,
+  });
 
   // 4. Respond 200 fast — non-2xx triggers Xendit retries (INTEGRATION.md:301)
   // Queue work async (placeholder — docs/QUEUES.md: Inngest/Trigger.dev/BullMQ when needed)
@@ -70,7 +76,7 @@ export async function POST(req: Request) {
     console.error("[webhook] async processing failed", e);
   });
 
-  return NextResponse.json(deduped ? { received: true, deduped: true } : { received: true, event }, {
+  return NextResponse.json(deduped ? { received, deduped: true } : { received, event: outEvent }, {
     status: 200,
   });
 }
