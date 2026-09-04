@@ -9,7 +9,7 @@ const handleI18nRouting = createMiddleware(routing);
 
 // Reusable proxy (formerly middleware) — NEXTJS #7 proxy, ADR-0004 Better Auth
 // Verifies session cookie; redirects unauthenticated from protected routes
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/auth", "/api/health", "/_next", "/favicon", "/static"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/ai-journal", "/api/auth", "/api/health", "/_next", "/favicon", "/static"];
 
 // Single source of truth for authenticated app routes (kept in sync with
 // `next.config.ts` rewrites and `components/layout/sidebar.tsx`). Prefix match
@@ -35,6 +35,7 @@ const APP_ROUTE_PREFIXES = [
   "/onboarding",
   "/support",
   "/risk",
+  "/ai-journal",
 ];
 
 function isPublic(pathname: string) {

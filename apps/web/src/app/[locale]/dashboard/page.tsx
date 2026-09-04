@@ -189,7 +189,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
               { label: "Invoices", icon: "receipt_long", href: "/billing" },
               { label: "Add Customer", icon: "person_add", href: "/customers?new=1" },
               { label: "Payouts", icon: "account_balance", href: "/payouts/bulk" },
-              { label: "API Keys", icon: "api", href: "/settings/api-keys" },
+              { label: "AI Journal", icon: "auto_awesome", href: "/ai-journal" },
             ].map((a) => (
               <Link
                 key={a.label}

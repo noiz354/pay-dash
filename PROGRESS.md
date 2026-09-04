@@ -14,6 +14,7 @@ Build-status tracker for the payment-gateway dashboard. Prototype screens are do
 | 5 3D/Polish | `three` + R3F + drei behind `dynamic(ssr:false)` + `Hero3D` | ✅ | — |  | 2026-08-31 |
 | 6 Testing/CI | Vitest + RTL + Playwright + GitHub Actions + `prisma migrate deploy` | ✅ | 0001 |  | 2026-08-31 |
 | 7 Flow completeness | Server Actions (create/refund/retry) + URL filter state + toasts/skeletons/empty states + `transactions/[id]` | ✅ | 0006 |  | 2026-09-02 |
+| 8 Ideathon AI Journal | Firebase Auth + user-isolated Firestore + Gemini + Secret Manager + Cloud Run docs | ✅ | 0029 |  | 2026-09-04 |
 
 > Flip one row per PR that touches `apps/web`. See `AGENTS.md` and `docs/adr/`.
 

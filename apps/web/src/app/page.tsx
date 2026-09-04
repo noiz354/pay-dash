@@ -15,6 +15,7 @@ export default function Home() {
           <CardContent className="flex flex-wrap gap-2">
             <Link href="/en/dashboard"><Button>Dashboard /en</Button></Link>
             <Link href="/id/dashboard"><Button variant="outline">Dashboard /id</Button></Link>
+            <Link href="/ai-journal"><Button variant="outline">Gemini Journal</Button></Link>
           </CardContent>
         </Card>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
