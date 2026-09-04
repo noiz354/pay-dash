@@ -188,6 +188,17 @@ describe("payment-flow orchestration", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("allows a finance operator to create a hosted payment via money_in.create", async () => {
+    const { service } = makeService();
+    const result = await service.createHostedPayment({
+      actor: actor(["FINANCE_OPERATOR"]),
+      externalId: "inv-1003",
+      amountMinor: "2500000",
+      currency: "IDR",
+    });
+    expect(result.providerResourceId).toBe("cs_test_1");
+  });
+
   it("executes a low-value refund in TEST mode with an operator", async () => {
     const { service } = makeService();
     const result = await service.executeRefund({

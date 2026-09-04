@@ -24,6 +24,16 @@ describe("organization roles", () => {
     expect(hasPermission("DEVELOPER", "provider.connect.live")).toBe(false);
   });
 
+  it("grants money-in link creation to operators but not to support/analysts", () => {
+    expect(hasPermission("OWNER", "money_in.create")).toBe(true);
+    expect(hasPermission("FINANCE_ADMIN", "money_in.create")).toBe(true);
+    expect(hasPermission("FINANCE_OPERATOR", "money_in.create")).toBe(true);
+    expect(hasPermission("DEVELOPER", "money_in.create")).toBe(true);
+    expect(hasPermission("SUPPORT", "money_in.create")).toBe(false);
+    expect(hasPermission("ANALYST", "money_in.create")).toBe(false);
+    expect(hasPermission("RISK_ANALYST", "money_in.create")).toBe(false);
+  });
+
   it("OWNER can perform every financial operation", () => {
     const owner = ROLE_PERMISSIONS.OWNER;
     expect(owner).toContain("provider.connect.live");

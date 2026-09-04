@@ -223,7 +223,7 @@ export class PaymentFlowService {
     description?: string;
     payerEmail?: string | null;
   }): Promise<ProviderFlowResult> {
-    authorize(args.actor, "recurring.create");
+    authorize(args.actor, "money_in.create");
     const payload = { externalId: args.externalId, amountMinor: args.amountMinor, currency: args.currency, description: args.description, payerEmail: args.payerEmail };
     const operation = await this.persistOperation(args.actor.id, "money_in.hosted_payment", "payment", args.externalId, payload, args.amountMinor, args.currency);
     await this.transitionTo(operation, "EXECUTING");

@@ -27,6 +27,8 @@ export const PermissionSchema = z.enum([
   "provider.connect.test",
   "provider.rotate",
   "provider.disconnect",
+  // Money-in.
+  "money_in.create",
   // Payouts.
   "payout.create",
   "payout.release",
@@ -68,6 +70,7 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
     "provider.connect.test",
     "provider.rotate",
     "provider.disconnect",
+    "money_in.create",
     "payout.create",
     "payout.release",
     "payout.cancel",
@@ -89,6 +92,7 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
     "settings.manage",
   ],
   FINANCE_ADMIN: [
+    "money_in.create",
     "payout.create",
     "payout.release",
     "payout.cancel",
@@ -106,6 +110,7 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
     "audit.read",
   ],
   FINANCE_OPERATOR: [
+    "money_in.create",
     "payout.create",
     "refund.prepare",
     "split.prepare",
@@ -117,6 +122,7 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
   DEVELOPER: [
     "provider.connect.test",
     "provider.rotate",
+    "money_in.create",
     "transaction.read",
     "report.export",
   ],
