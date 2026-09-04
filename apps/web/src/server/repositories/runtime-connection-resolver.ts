@@ -75,12 +75,38 @@ export class RuntimeConnectionResolver {
     return resolveSecretValue(rec.secretRef, this.secretStore);
   }
 
+  /** The secret store backing this resolver (exposed for LIVE-gate probes). */
+  getSecretStore(): SecretStore {
+    return this.secretStore;
+  }
+
+  /**
+   * LIVE-activation gate. LIVE writes are only allowed when the secret store is
+   * a production-grade (kms) backend AND a seal→open round-trip succeeds. With
+   * a `local`/disabled store this throws (fail-closed), so `.env` alone can
+   * never activate a LIVE connection.
+   */
+  async assertLiveActivation(connection: RuntimeConnection): Promise<void> {
+    if (connection.mode !== "LIVE") {
+      return;
+    }
+    if (this.secretStore.mode !== "kms") {
+      throw new RepositoryError("FORBIDDEN", "LIVE activation requires a KMS-backed secret store");
+    }
+    const probe = await this.secretStore.seal("live-activation-probe");
+    const opened = await this.secretStore.open(probe);
+    if (opened !== "live-activation-probe") {
+      throw new RepositoryError("FORBIDDEN", "LIVE activation probe failed");
+    }
+  }
+
   /** Adapter-facing helper: get the active connection and its unsealed secret. */
   async resolveForConnection(connectionId: string): Promise<{ connection: RuntimeConnection; secret: string } | null> {
     const connection = await this.resolveActive(connectionId);
     if (!connection) {
       return null;
     }
+    await this.assertLiveActivation(connection);
     const secret = await this.resolveSecret(connection);
     if (!secret) {
       throw new RepositoryError("NOT_FOUND", `No secret resolvable for connection ${connectionId}`);
@@ -99,6 +125,7 @@ export class RuntimeConnectionResolver {
     if (!connection) {
       return null;
     }
+    await this.assertLiveActivation(connection);
     const secret = await this.resolveSecret(connection);
     if (!secret) {
       throw new RepositoryError("NOT_FOUND", `No secret resolvable for connection ${connection.connectionId}`);

@@ -24,9 +24,10 @@ derived/in-memory data, not live provider data.
 | Transactions list | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅* | ✅ | *with connection |
 | Refund | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with connection |
 | Payout | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with connection |
-| Connected-accounts / Split / Transfer | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅* | ✅ | *with connection |
-| Compliance KYC | ✅ | ✅ | ⚠️ | ⚠️ | ⚠️ | ⚠️* | ✅ | verification outcome via webhook |
-| Customer / Invoice / Recurring | ✅ | ✅ | ⚠️ | ✅ | ✅ | ✅* | ✅ | *with connection |
+| Connected-accounts / Split / Transfer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with connection |
+| Compliance KYC | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅* | ✅ | *provider outcome (Stripe account verification; Xendit unsupported) |
+| Customer / Invoice / Recurring | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with connection |
+| Saved payment methods | ✅ | ✅ | ✅ | ✅ | ✅ | ✅* | ✅ | *with connection (Stripe PaymentMethod; Xendit unsupported) |
 | **Webhook ingest (Xendit)** | ✅ | ✅ | n/a | ✅ | — | ✅ | **⚙️** | 7 → **wired** |
 | **Webhook ingest (Stripe)** | ✅ | ✅ | n/a | ✅ | — | ✅ | **⚙️** | 7 → **wired** |
 
@@ -61,23 +62,47 @@ are now implemented**:
   downgraded to mock success.
 - Missing connection/secret stays **fail-closed** (returns `null` / throws), never
   a mock secret.
-- **LIVE** activation is refused until a production-grade **kms** backend exists;
-  only `local` (TEST) encryption is enabled now.
+- **LIVE** activation is gated by a real **kms** secret store: a `KmsEnvelopeClient`
+  wraps a per-seal data key, and `assertLiveActivation` refuses to resolve any LIVE
+  secret unless the store is `kms` **and** a seal→open round-trip succeeds. With the
+  `local` (TEST) store — or no KMS client — LIVE is refused (fail-closed).
+- Authorization is always resolved from the **session membership** (org →
+  roles), never from the browser; dev/demo falls back to the single-tenant
+  `org_demo`/OWNER default, flagged `isDemoFallback`.
 - Provider SDK models/raw payloads never leak to the UI; provider IDs are resolved
   server-side from the persisted mapping (never from browser input).
 
-## Still to close
+## Now wired (fail-closed)
 
-- **LIVE activation** — blocked by design until a production-grade `kms` backend
-  exists; `kms` is refused for LIVE now.
-- **Org-context authz** — the read/write gates use a single-tenant `org_demo`/
-  OWNER default; a real multi-tenant session→org→membership lookup is needed to
-  replace it (read-path permission gates are ⚠️).
-- **KYC verification outcome** — submission is handed off to the provider; the
-  verified/action-required result is surfaced via webhook (not yet a production
-  provider call).
-- **Saved payment methods** — capability slot exists but not yet wired to an
-  action + UI.
+- **LIVE-activation gate + KMS store** — `KmsSecretStore` (envelope encryption via
+  injected `KmsEnvelopeClient`) + `assertLiveActivation` in the runtime resolver.
+  In this sandbox there is no cloud KMS, so LIVE stays **refused**; the gate and
+  store are tested with a fake KMS. Production go-live still needs a real cloud KMS
+  SDK + `SECRET_STORE_KMS_KEY_ID`.
+- **Org-context authz** — `org-context.ts` (membership resolver, `authorizeOrgContext`,
+  `buildOrgContext`, `OrgContextDb`) + `session-org-context.ts` (`resolveSessionOrgContext`,
+  `requireOrgContext`) + `OrganizationMember` model/migration. Actions now derive the
+  acting org + role from the session and authorize the permission before a provider
+  write. Dev/demo uses the OWNER demo context until a signed-in membership exists.
+- **KYC verification outcome** — `verifyKyc` on the Stripe adapter reads the
+  connected account's verification requirements and returns VERIFIED /
+  ACTION_REQUIRED / FAILED; `verifyKycProvider` routes the outcome through the
+  adapter. Xendit (no `verifyKyc`) fails closed to ACTION_REQUIRED.
+- **Saved payment methods** — `ProviderSavedPaymentMethod` DTO, Stripe
+  `createPaymentMethod` (PaymentMethod + attach), `createProviderSavedPaymentMethod`,
+  `createPaymentMethodAction`, and a `SavePaymentMethodDialog` on the billing page.
+  Xendit declares `savedPaymentMethods` unsupported so the registry gate is honest.
+
+## Still requiring production infrastructure
+
+- **LIVE go-live** — the gate is real and tested, but a production cloud KMS SDK +
+  a live provider key are still needed to actually activate a LIVE connection.
+- **True multi-tenant tenant switching** — default org selection uses a single
+  `buildOrgContext(memberships)` resolution; a real deployment needs an explicit
+  session→active-org context (and webhook event dedupe cross-org is already org-scoped).
+- **Webhook-driven KYC outcome** — the adapter returns the provider outcome on
+  demand; event-driven updates from a webhook are still surfaced through the
+  projection path.
 
 ## Bottom line
 
@@ -87,7 +112,9 @@ are now implemented**:
 > adapter → SDK → provider → kembali ke layar** kini tertutup untuk **webhook
 > ingress (verify + dedupe + store + projection)**, **money-in**,
 > **balance/transactions read**, **refund**, **payout**, **platform
-> (connected-account, split, transfer)**, dan **customer / invoice / recurring**
-> — semuanya terhadap koneksi TEST yang dikonfigurasi (org-scoped, fail-closed).
-> Yang masih berhenti: **aktivasi LIVE**, **authz org multi-tenant**, **hasil
-> verifikasi KYC**, dan **saved payment methods**.
+> (connected-account, split, transfer)**, **customer / invoice / recurring**,
+> **saved payment methods**, dan **KYC verification outcome** — semuanya terhadap
+> koneksi TEST yang dikonfigurasi (org-scoped, org-context authz, fail-closed).
+> Yang masih butuh infrastruktur produksi: **aktivasi LIVE** (backend `kms` + key
+> live), **tenant switching multi-tenant** (pemilihan org aktif dari sesi), dan
+> **outcome KYC via webhook**.

@@ -39,6 +39,20 @@ function registryWithPlatform() {
     async createTransfer(_ctx: ProviderConnectionContext, input: { amount: number; currency: string; destination: string }) {
       return { id: "tr_1", provider: "stripe" as const, amount: input.amount, currency: input.currency, status: "pending", destination: input.destination };
     },
+    async verifyKyc(_ctx: ProviderConnectionContext) {
+      return { state: "VERIFIED" as const, provider: "stripe" as const, requirements: [], verifiedAt: new Date().toISOString() };
+    },
+  } as unknown as PaymentProviderAdapter);
+  // A minimal xendit adapter with NO `verifyKyc` — exercises the fail-closed
+  // path where a provider is connected but KYC verification is unsupported.
+  registry.register({
+    provider: "xendit",
+    async verifyConnection() {
+      return { verified: true, provider: "xendit", mode: "TEST", accountIdentity: null, accountDisplayName: null, permissionsVerified: true, capabilities: manifest(), webhookHealth: { status: "UNCONFIGURED", reason: null, lastCheckedAt: null }, requirements: [], state: "ACTIVE", reason: null, verifiedAt: new Date().toISOString() };
+    },
+    async getCapabilities() {
+      return manifest();
+    },
   } as unknown as PaymentProviderAdapter);
   return registry;
 }
@@ -56,6 +70,27 @@ describe("platform service (rekomendasi #6)", () => {
     const { resolver } = await makeDeps();
     const verification = await verifyKycProvider("org-none", { resolver });
     expect(verification.state).toBe("SUBMITTED");
+  });
+
+  it("verifyKycProvider returns the provider KYC outcome when a connection resolves", async () => {
+    const { store, db, resolver, registry } = await makeDeps();
+    db.seedConnection({ connectionId: "conn-1", organizationId: "org-1", provider: "stripe", mode: "TEST" });
+    const envelope = await store.seal("sk_test_platform");
+    db.seedSecret("conn-1", "TEST", { secretRef: JSON.stringify(envelope), credentialVersion: 1 });
+    const verification = await verifyKycProvider("org-1", { resolver, registry });
+    expect(verification.state).toBe("VERIFIED");
+    expect(verification.provider).toBe("stripe");
+  });
+
+  it("verifyKycProvider fails closed to ACTION_REQUIRED for a provider without KYC", async () => {
+    const { store, db, resolver, registry } = await makeDeps();
+    db.seedConnection({ connectionId: "conn-1", organizationId: "org-1", provider: "xendit", mode: "TEST" });
+    const envelope = await store.seal("sk_test_xendit");
+    db.seedSecret("conn-1", "TEST", { secretRef: JSON.stringify(envelope), credentialVersion: 1 });
+    const verification = await verifyKycProvider("org-1", { resolver, registry });
+    // The registered xendit stub has no verifyKyc → ACTION_REQUIRED (never verified).
+    expect(verification.state).toBe("ACTION_REQUIRED");
+    expect(verification.provider).toBe("xendit");
   });
 
   it("routes connected-account / split-rule / transfer through the adapter when a connection resolves", async () => {

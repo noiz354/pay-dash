@@ -32,8 +32,12 @@ export async function createConnectedAccountAction(
     return { status: "error", message: "Please fix the highlighted fields." };
   }
   try {
+    // Org-context authz: the acting org + role come from the session membership.
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("provider.connect.test");
+
     const service = await buildPlatformService();
-    const out = await service.createConnectedAccount({ email: parsed.data.email, type: parsed.data.type });
+    const out = await service.createConnectedAccount({ organizationId: ctx.organizationId, email: parsed.data.email, type: parsed.data.type });
     if (!out.connected) {
       return { status: "error", message: "No provider connection configured — connect a provider before creating an account." };
     }
@@ -83,8 +87,13 @@ export async function createSplitRuleAction(
     return { status: "error", message: "Add at least one destination to the split rule." };
   }
   try {
+    // Org-context authz: the acting org + role come from the session membership.
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("split.prepare");
+
     const service = await buildPlatformService();
     const out = await service.createSplitRule({
+      organizationId: ctx.organizationId,
       name: parsed.data.name,
       currency: parsed.data.currency,
       destinations: parsed.data.destinations,
@@ -114,8 +123,12 @@ export async function createTransferAction(
     return { status: "error", message: "Enter a valid amount and destination." };
   }
   try {
+    // Org-context authz: the acting org + role come from the session membership.
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("transfer.execute");
+
     const service = await buildPlatformService();
-    const out = await service.createTransfer({ amount, currency, destination });
+    const out = await service.createTransfer({ organizationId: ctx.organizationId, amount, currency, destination });
     if (!out.connected) {
       return { status: "error", message: "No provider connection configured — connect a provider first." };
     }

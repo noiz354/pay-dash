@@ -16,6 +16,7 @@ export type LazyPrisma = {
   auditEvent: unknown;
   canonicalPayment: unknown;
   providerPayment: unknown;
+  organizationMember?: unknown;
 };
 
 export async function loadLazyPrisma(): Promise<LazyPrisma | null> {

@@ -32,6 +32,17 @@ export interface ProviderInvoice {
   currency: string;
 }
 
+/** A saved payment method on a canonical customer (masked; never a raw token). */
+export interface ProviderSavedPaymentMethod {
+  id: string;
+  provider: "xendit" | "stripe";
+  customerId: string;
+  kind: "CARD" | "BANK_ACCOUNT" | "EWALLET";
+  brand: string | null;
+  last4: string | null;
+  status: "ATTACHED" | "PENDING" | "FAILED";
+}
+
 export const ProviderCustomerSchema = z.object({
   id: z.string().min(1),
   provider: z.enum(["xendit", "stripe"]),
@@ -60,3 +71,14 @@ export const ProviderInvoiceSchema = z.object({
   currency: z.string(),
 });
 export type ProviderInvoiceInput = z.infer<typeof ProviderInvoiceSchema>;
+
+export const ProviderSavedPaymentMethodSchema = z.object({
+  id: z.string().min(1),
+  provider: z.enum(["xendit", "stripe"]),
+  customerId: z.string(),
+  kind: z.enum(["CARD", "BANK_ACCOUNT", "EWALLET"]),
+  brand: z.string().nullable(),
+  last4: z.string().nullable(),
+  status: z.enum(["ATTACHED", "PENDING", "FAILED"]),
+});
+export type ProviderSavedPaymentMethodInput = z.infer<typeof ProviderSavedPaymentMethodSchema>;

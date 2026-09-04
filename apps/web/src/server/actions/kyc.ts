@@ -34,6 +34,16 @@ export async function submitKycDocumentAction(
     return { status: "error", message: "Enter the issuing jurisdiction." };
   }
 
+  // Org-context authz: the acting org + role come from the session membership.
+  let organizationId: string | undefined;
+  try {
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("kyc.submit");
+    organizationId = ctx.organizationId;
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Not authorized to submit KYC." };
+  }
+
   const submission = submitKycDocument({
     fileName,
     sizeBytes,
@@ -46,7 +56,7 @@ export async function submitKycDocumentAction(
   let note = "Submitted for review.";
   try {
     const { verifyKycProvider } = await import("@/server/platform/platform-service");
-    const verification = await verifyKycProvider();
+    const verification = await verifyKycProvider(organizationId);
     note =
       verification.state === "SUBMITTED"
         ? "Submitted for review. Connect a provider to verify KYC."

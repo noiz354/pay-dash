@@ -10,6 +10,7 @@ import { TablePagination } from "@/components/transactions/table-pagination";
 import { BillingSummaryCards, OverdueBanner } from "@/components/billing/billing-summary-cards";
 import { InvoiceFilters } from "@/components/billing/invoice-filters";
 import { InvoicesTable } from "@/components/billing/invoices-table";
+import { SavePaymentMethodDialog } from "@/components/billing/save-payment-method-dialog";
 import { getBillingSummary, listInvoices } from "@/server/data/invoices";
 import type { InvoiceStatus } from "@/lib/invoice-status";
 
@@ -130,6 +131,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Sear
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
+        <SavePaymentMethodDialog />
         <ExportCsvButton
           label="Export Statement"
           endpoint="/api/exports/invoices"

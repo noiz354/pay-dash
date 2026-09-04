@@ -20,6 +20,7 @@ const makeAdapter = (opts?: {
   noCheckout?: boolean;
   noRefunds?: boolean;
   noAccountsCreate?: boolean;
+  noPaymentMethods?: boolean;
 }): StripeAdapter => {
   const client: StripeClientLike = {
     accounts: {
@@ -50,6 +51,19 @@ const makeAdapter = (opts?: {
       : {
           refunds: {
             async create() { return { id: "re_test_1", status: "pending" }; },
+          },
+        }),
+    ...(opts?.noPaymentMethods
+      ? {}
+      : {
+          paymentMethods: {
+            async create(params: Record<string, unknown>) {
+              const metadata = params.metadata as Record<string, unknown> | undefined;
+              return { id: `pm_${String(metadata?.referenceId ?? "").slice(0, 6) || "1"}`, type: "card", customer: "cus_1", card: { brand: "Visa", last4: "4242" } };
+            },
+            async attach(params: Record<string, unknown>) {
+              return { id: String(params.payment_method), type: "card", customer: String(params.customer), card: { brand: "Visa", last4: "4242" } };
+            },
           },
         }),
   };
@@ -148,6 +162,15 @@ describe("stripe adapter write capabilities", () => {
     expect(result.provider).toBe("stripe");
     expect(result.id).toMatch(/^acct_/);
     expect(result.id).not.toContain("Stripe-Account");
+  });
+
+  it("creates a saved payment method and attaches it to the customer", async () => {
+    const result = await makeAdapter().createPaymentMethod(ctx, { customerId: "cus_1", token: "tok_visa", kind: "card", referenceId: "billing-card" });
+    expect(result).toEqual({ id: expect.stringMatching(/^pm_/), provider: "stripe", customerId: "cus_1", kind: "CARD", brand: "Visa", last4: "4242", status: "ATTACHED" });
+  });
+
+  it("throws a safe error when PaymentMethods is not available", async () => {
+    await expect(makeAdapter({ noPaymentMethods: true }).createPaymentMethod(ctx, { customerId: "cus_1", token: "tok_visa" })).rejects.toThrow(/PaymentMethods/);
   });
 });
 

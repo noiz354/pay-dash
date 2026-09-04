@@ -37,6 +37,16 @@ export async function createSubscriptionAction(
     return { status: "error", message: "Enter an amount, e.g. 5,000,000" };
   }
 
+  // Org-context authz: the acting org + role come from the session membership.
+  let orgId: string | undefined;
+  try {
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("recurring.create");
+    orgId = ctx.organizationId;
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Not authorized to create a subscription." };
+  }
+
   // Route the recurring plan through the provider when a TEST connection resolves
   // (Stripe Billing; Xendit recurring is unsupported and propagates). The
   // in-app subscription is still recorded so the row renders.
@@ -44,6 +54,7 @@ export async function createSubscriptionAction(
   try {
     const { createProviderRecurringPlan } = await import("@/server/services/commerce");
     const providerResult = await createProviderRecurringPlan({
+      organizationId: orgId,
       idempotencyKey: `${customerEmail}:${planName}:${interval}`,
       planName,
       currency: "IDR",

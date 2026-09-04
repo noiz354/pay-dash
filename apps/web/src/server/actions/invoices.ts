@@ -144,8 +144,13 @@ export async function createInvoiceAction(
     };
   }
   try {
+    // Org-context authz: the acting org + role come from the session membership.
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("money_in.create");
+
     const { createProviderInvoice } = await import("@/server/services/commerce");
     const out = await createProviderInvoice({
+      organizationId: ctx.organizationId,
       externalId: parsed.data.number,
       amountMinor: String(parsed.data.amount),
       currency: parsed.data.currency,

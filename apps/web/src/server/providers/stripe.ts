@@ -169,6 +169,18 @@ export interface StripeSubscriptionLike {
   customer: string | null;
 }
 
+export interface StripePaymentMethodLike {
+  id: string;
+  type: string;
+  customer?: string | null;
+  card?: {
+    brand?: string | null;
+    last4?: string | null;
+    exp_month?: number | null;
+    exp_year?: number | null;
+  } | null;
+}
+
 export interface StripeClientLike {
   readonly accounts?: {
     retrieve(id: string): Promise<StripeAccountLike>;
@@ -193,6 +205,10 @@ export interface StripeClientLike {
   };
   readonly customers?: {
     create(params: Record<string, unknown>): Promise<StripeCustomerLike>;
+  };
+  readonly paymentMethods?: {
+    create(params: Record<string, unknown>): Promise<StripePaymentMethodLike>;
+    attach?(params: Record<string, unknown>): Promise<StripePaymentMethodLike>;
   };
   readonly subscriptions?: {
     create(params: Record<string, unknown>): Promise<StripeSubscriptionLike>;
@@ -495,6 +511,35 @@ export class StripeAdapter implements PaymentProviderAdapter {
     return { id: customer.id, provider: "stripe", referenceId: input.referenceId, status: "VERIFIED" };
   }
 
+  async createPaymentMethod(
+    ctx: ProviderConnectionContext,
+    input: { customerId: string; token: string; kind?: "card" | "bank_account" | "ewallet"; referenceId?: string },
+  ): Promise<import("@/domain/payments/commerce").ProviderSavedPaymentMethod> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.paymentMethods) {
+      throw normalizeStripeError(new Error("PaymentMethods capability not available on the client"), "stripe.createPaymentMethod");
+    }
+    const pm = await client.paymentMethods.create({
+      type: "card",
+      card: { token: input.token },
+      metadata: { customerId: input.customerId, referenceId: input.referenceId ?? "" },
+    });
+    let attached = pm;
+    if (client.paymentMethods.attach && pm.customer !== input.customerId) {
+      attached = await client.paymentMethods.attach({ payment_method: pm.id, customer: input.customerId });
+    }
+    const kind = input.kind === "bank_account" ? ("BANK_ACCOUNT" as const) : input.kind === "ewallet" ? ("EWALLET" as const) : ("CARD" as const);
+    return {
+      id: attached.id,
+      provider: "stripe",
+      customerId: input.customerId,
+      kind,
+      brand: attached.card?.brand ?? null,
+      last4: attached.card?.last4 ?? null,
+      status: "ATTACHED",
+    };
+  }
+
   async createRecurringPlan(
     ctx: ProviderConnectionContext,
     input: {
@@ -525,6 +570,26 @@ export class StripeAdapter implements PaymentProviderAdapter {
       amountMinor: input.amountMinor,
       status: subscription.status === "active" || subscription.status === "trialing" ? "ACTIVE" : "DRAFT",
     };
+  }
+
+  async verifyKyc(
+    ctx: ProviderConnectionContext,
+    _input: unknown,
+  ): Promise<import("@/domain/payments/platform").KycVerification> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.accounts) {
+      throw normalizeStripeError(new Error("KYC verification requires Accounts capability"), "stripe.verifyKyc");
+    }
+    const account = await client.accounts.retrieve("self");
+    const disabled = account.requirements?.disabled_reason ?? null;
+    if (disabled) {
+      return { state: "FAILED", provider: "stripe", requirements: [disabled], verifiedAt: null };
+    }
+    const due = account.requirements?.currently_due ?? [];
+    if (due.length) {
+      return { state: "ACTION_REQUIRED", provider: "stripe", requirements: due, verifiedAt: null };
+    }
+    return { state: "VERIFIED", provider: "stripe", requirements: [], verifiedAt: new Date().toISOString() };
   }
 
   async createConnectedAccount(

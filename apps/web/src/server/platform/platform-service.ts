@@ -34,6 +34,17 @@ export interface PlatformService {
 
 let cachedRegistry: ProviderRegistry | null = null;
 
+async function getRegistry(deps: ProviderWriteDeps): Promise<ProviderRegistry> {
+  if (deps.registry) return deps.registry;
+  if (!cachedRegistry) {
+    const { buildRuntimeConnectionResolver } = await import("@/server/repositories/runtime-connection-resolver");
+    const c = await buildRuntimeConnectionResolver();
+    const { buildProviderRuntimeRegistry: bpr } = await import("@/server/payment-flows/money-in-runtime");
+    cachedRegistry = bpr(c);
+  }
+  return cachedRegistry;
+}
+
 export async function buildPlatformService(deps: ProviderWriteDeps = {}): Promise<PlatformService> {
   const resolver = deps.resolver ?? null;
   const makeCtx = async (organizationId?: string): Promise<PlatformResolution> => {
@@ -46,22 +57,13 @@ export async function buildPlatformService(deps: ProviderWriteDeps = {}): Promis
 
   // Lazy-build the default registry (deferred SDK import so server-only modules
   // don't pull provider SDKs during jsdom unit tests).
-  const getRegistry = async () => {
-    if (deps.registry) return deps.registry;
-    if (!cachedRegistry) {
-      const { buildRuntimeConnectionResolver } = await import("@/server/repositories/runtime-connection-resolver");
-      const c = await buildRuntimeConnectionResolver();
-      const { buildProviderRuntimeRegistry: bpr } = await import("@/server/payment-flows/money-in-runtime");
-      cachedRegistry = bpr(c);
-    }
-    return cachedRegistry;
-  };
+  const registry = () => getRegistry(deps);
 
   return {
     async createConnectedAccount(input) {
       const resolved = await makeCtx(input.organizationId);
       if (!resolved.connected) return { connected: false };
-      const reg = await getRegistry();
+      const reg = await registry();
       const raw = (await reg.invokeCapability(resolved.ctx.provider, "connectedAccounts", resolved.ctx, {
         email: input.email,
         type: input.type,
@@ -72,7 +74,7 @@ export async function buildPlatformService(deps: ProviderWriteDeps = {}): Promis
     async createSplitRule(input) {
       const resolved = await makeCtx(input.organizationId);
       if (!resolved.connected) return { connected: false };
-      const reg = await getRegistry();
+      const reg = await registry();
       const raw = (await reg.invokeCapability(resolved.ctx.provider, "splitRouting", resolved.ctx, {
         idempotencyKey: `${resolved.res.organizationId}:${input.name}`,
         name: input.name,
@@ -85,7 +87,7 @@ export async function buildPlatformService(deps: ProviderWriteDeps = {}): Promis
     async createTransfer(input) {
       const resolved = await makeCtx(input.organizationId ?? DEFAULT_DEMO_ORG);
       if (!resolved.connected) return { connected: false };
-      const reg = await getRegistry();
+      const reg = await registry();
       const raw = (await reg.invokeCapability(resolved.ctx.provider, "internalTransfers", resolved.ctx, {
         idempotencyKey: `${resolved.res.organizationId}:${input.destination}:${input.amount}`,
         amount: input.amount,
@@ -98,18 +100,33 @@ export async function buildPlatformService(deps: ProviderWriteDeps = {}): Promis
   };
 }
 
-/** Route a KYC submission's verification state through the provider when a
- *  connection resolves. A connected provider means the document is handed off
- *  for review; the review outcome is surfaced via webhook/verification later. */
+/**
+ * Route a KYC submission's verification state through the provider when a
+ * connection resolves. A connected provider returns the authoritative
+ * VERIFIED / ACTION_REQUIRED / FAILED outcome (Stripe reads the connected
+ * account's verification requirements); a provider that doesn't support KYC
+ * verification fails closed to ACTION_REQUIRED rather than claiming verified.
+ */
 export async function verifyKycProvider(organizationId?: string, deps: ProviderWriteDeps = {}): Promise<KycVerification> {
   const res = await resolveProviderWrite(organizationId ?? DEFAULT_DEMO_ORG, deps);
   if (!res.connected) {
     return { state: "SUBMITTED", provider: "xendit", requirements: ["Connect a provider to verify KYC"], verifiedAt: null };
   }
-  return {
-    state: "ACTION_REQUIRED",
+  const registry = await getRegistry(deps);
+  const adapter = registry.resolve(res.provider);
+  if (typeof adapter.verifyKyc !== "function") {
+    return {
+      state: "ACTION_REQUIRED",
+      provider: res.provider,
+      requirements: ["KYC verification is not available from this provider"],
+      verifiedAt: null,
+    };
+  }
+  const ctx: ProviderConnectionContext = {
+    organizationId: res.organizationId,
+    connectionId: res.connectionId,
     provider: res.provider,
-    requirements: ["Provider review in progress"],
-    verifiedAt: null,
+    mode: res.mode,
   };
+  return (await adapter.verifyKyc(ctx, { submissionReference: `${res.organizationId}:kyc` })) as KycVerification;
 }

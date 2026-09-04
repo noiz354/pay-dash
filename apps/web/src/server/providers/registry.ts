@@ -66,6 +66,9 @@ export interface TransferProvider {
 export interface SplitRoutingProvider {
   createSplitRule(ctx: ProviderConnectionContext, input: unknown): Promise<unknown>;
 }
+export interface KycVerificationProvider {
+  verifyKyc(ctx: ProviderConnectionContext, input: unknown): Promise<unknown>;
+}
 
 /**
  * Base adapter contract. Concrete adapters must be server-only and must never
@@ -88,6 +91,7 @@ export interface PaymentProviderAdapter {
   createConnectedAccount?(ctx: ProviderConnectionContext, input: unknown): Promise<unknown>;
   createTransfer?(ctx: ProviderConnectionContext, input: unknown): Promise<unknown>;
   createSplitRule?(ctx: ProviderConnectionContext, input: unknown): Promise<unknown>;
+  verifyKyc?(ctx: ProviderConnectionContext, input: unknown): Promise<unknown>;
 }
 
 /** Maps a manifest capability key to the adapter method that serves it. */

@@ -5,7 +5,7 @@ import { deriveCapabilityState, type CapabilityManifest } from "@/domain/payment
 import { createProviderRegistry, type PaymentProviderAdapter, type ProviderConnectionContext } from "@/server/providers/registry";
 import { LocalEncryptedSecretStore } from "@/server/secrets/store";
 import { InMemoryRuntimeConnectionDb, buildRuntimeConnectionResolver } from "@/server/repositories/runtime-connection-resolver";
-import { createProviderCustomer, createProviderInvoice, createProviderRecurringPlan } from "./commerce";
+import { createProviderCustomer, createProviderInvoice, createProviderRecurringPlan, createProviderSavedPaymentMethod } from "./commerce";
 
 const KEY = "commerce-test-key-that-is-long-enough-for-scrypt-derivation";
 
@@ -14,7 +14,7 @@ function manifest(): CapabilityManifest {
   const on = build({ supported: true, configured: true, mode: "TEST", reason: null, requirements: [], lastVerifiedAt: null });
   const off = build({ supported: true, configured: false, mode: "TEST", reason: null, requirements: [], lastVerifiedAt: null });
   return {
-    balanceRead: off, transactionRead: off, hostedPaymentLinks: on, customers: on, savedPaymentMethods: off,
+    balanceRead: off, transactionRead: off, hostedPaymentLinks: on, customers: on, savedPaymentMethods: on,
     recurringBilling: on, refunds: off, payouts: off, connectedAccounts: off, internalTransfers: off,
     splitRouting: off, webhookHealth: build({ supported: true, configured: false, mode: "TEST", reason: null, requirements: [], lastVerifiedAt: null }),
   };
@@ -38,6 +38,9 @@ function registryWithCommerce() {
     },
     async createRecurringPlan(_ctx: ProviderConnectionContext, input: { planName: string; amountMinor: number; interval: string }) {
       return { id: "sub_1", provider: "stripe" as const, planName: input.planName, currency: "IDR", interval: input.interval as "monthly" | "yearly", amountMinor: input.amountMinor, status: "ACTIVE" as const };
+    },
+    async createPaymentMethod(_ctx: ProviderConnectionContext, input: { customerId: string; kind: string }) {
+      return { id: "pm_1", provider: "stripe" as const, customerId: input.customerId, kind: input.kind.toUpperCase() as "CARD", brand: "Visa", last4: "4242", status: "ATTACHED" as const };
     },
   } as unknown as PaymentProviderAdapter);
   return registry;
@@ -92,5 +95,22 @@ describe("commerce service (customer / invoice / recurring)", () => {
       expect(out.plan.id).toBe("sub_1");
       expect(out.plan.status).toBe("ACTIVE");
     }
+  });
+
+  it("routes a saved payment method through the adapter when a connection resolves", async () => {
+    const { store, db, resolver, registry } = await makeDeps();
+    await seedConnection(db, store);
+    const out = await createProviderSavedPaymentMethod({ organizationId: "org-1", customerId: "cus_1", token: "tok_visa", kind: "card", referenceId: "billing-card" }, { resolver, registry });
+    expect(out.connected).toBe(true);
+    if (out.connected) {
+      expect(out.paymentMethod.id).toBe("pm_1");
+      expect(out.paymentMethod.status).toBe("ATTACHED");
+    }
+  });
+
+  it("returns connected:false when no connection resolves (saved payment method fallback)", async () => {
+    const { resolver, registry } = await makeDeps();
+    const out = await createProviderSavedPaymentMethod({ customerId: "cus_1", token: "tok_visa" }, { resolver, registry });
+    expect(out.connected).toBe(false);
   });
 });

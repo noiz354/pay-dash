@@ -2,7 +2,8 @@ export type RepositoryErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "INVALID_TOPOLOGY"
-  | "STALE_VERSION";
+  | "STALE_VERSION"
+  | "FORBIDDEN";
 
 export class RepositoryError extends Error {
   constructor(

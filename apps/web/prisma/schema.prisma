@@ -93,6 +93,7 @@ model Organization {
   name                String
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
+  members             OrganizationMember[]
   providerConnections PaymentProviderConnection[]
   providerAccounts    ProviderAccount[]
   customers           CanonicalCustomer[]
@@ -107,6 +108,24 @@ model Organization {
   durableOperations   DurableOperation[]
   auditEvents         AuditEvent[]
   webhookDeliveries   WebhookDelivery[]
+}
+
+// Organization membership (organization-access). Links a signed-in user to an
+// organization with an RBAC role. Authorization is always resolved from this
+// authenticated membership, never from the browser.
+model OrganizationMember {
+  id             String      @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  role           String      @db.VarChar(50)
+  status         String      @default("ACTIVE") @db.VarChar(20)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("organization_member")
 }
 
 // Identity shell only: credentials, capabilities, default selection, and the

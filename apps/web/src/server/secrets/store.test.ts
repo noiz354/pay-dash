@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   createSecretStore,
+  KmsSecretStore,
   LocalEncryptedSecretStore,
   SecretStoreError,
+  type KmsEnvelopeClient,
 } from "./store";
 
 async function rejectsWithCode(promise: Promise<unknown>, code: string): Promise<void> {
@@ -80,5 +82,64 @@ describe("secret store factory", () => {
 
   it("requires a kms key id in kms mode", () => {
     expect(() => createSecretStore({ mode: "kms", kmsKeyId: undefined })).toThrow(/KMS/);
+  });
+});
+
+/** A KMS client that "wraps" the DEK with a static marker (test-only). */
+function fakeKms(): KmsEnvelopeClient {
+  return {
+    async wrapDataKey(dataKeyBase64) {
+      return { keyId: "alias/live-key", wrappedKeyBase64: `wrapped:${dataKeyBase64}` };
+    },
+    async unwrapDataKey(wrappedKeyBase64) {
+      if (!wrappedKeyBase64.startsWith("wrapped:")) {
+        throw new Error("invalid wrapped key");
+      }
+      return wrappedKeyBase64.slice("wrapped:".length);
+    },
+  };
+}
+
+describe("kms secret store (envelope encryption)", () => {
+  it("seals and opens a value via KMS-wrapped DEK", async () => {
+    const store = new KmsSecretStore("alias/live-key", "alias/live-key", fakeKms());
+    const envelope = await store.seal("sk_live_do_not_leak");
+    expect(envelope.scheme).toBe("kms");
+    expect(envelope.wrappedKey).toMatch(/^wrapped:/);
+    expect(envelope.ciphertext).not.toContain("sk_live");
+    expect(await store.open(envelope)).toBe("sk_live_do_not_leak");
+  });
+
+  it("fails closed without a KMS client", async () => {
+    const store = new KmsSecretStore("alias/live-key", "alias/live-key");
+    await rejectsWithCode(store.seal("v"), "MISSING_CONFIG");
+  });
+
+  it("fails closed when the KMS client cannot unwrap", async () => {
+    const store = new KmsSecretStore("alias/live-key", "alias/live-key", {
+      async wrapDataKey(dataKeyBase64) {
+        return { keyId: "alias/live-key", wrappedKeyBase64: dataKeyBase64 };
+      },
+      async unwrapDataKey() {
+        throw new Error("KMS deny");
+      },
+    });
+    await expect(store.seal("v").then((e) => store.open(e))).rejects.toThrow(/KMS deny/);
+  });
+
+  it("rejects a non-kms scheme", async () => {
+    const store = new KmsSecretStore("alias/live-key", "alias/live-key", fakeKms());
+    await rejectsWithCode(
+      store.open({ scheme: "local-aes-256-gcm", keyRef: "local", version: 1, ciphertext: "", iv: "", authTag: "", createdAt: "" }),
+      "UNSUPPORTED_SCHEME",
+    );
+  });
+
+  it("increments version on rotate", async () => {
+    const store = new KmsSecretStore("alias/live-key", "alias/live-key", fakeKms());
+    const original = await store.seal("v1");
+    const rotated = await store.rotate("v2", original.version);
+    expect(rotated.version).toBe(original.version + 1);
+    expect(await store.open(rotated)).toBe("v2");
   });
 });

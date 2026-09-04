@@ -2,7 +2,7 @@ import "server-only";
 
 import { resolveProviderWrite, type ProviderWriteDeps } from "@/server/payment-flows/execute-provider-write";
 import type { ProviderConnectionContext, ProviderRegistry } from "@/server/providers/registry";
-import type { ProviderCustomer, ProviderInvoice, ProviderRecurringPlan } from "@/domain/payments/commerce";
+import type { ProviderCustomer, ProviderInvoice, ProviderRecurringPlan, ProviderSavedPaymentMethod } from "@/domain/payments/commerce";
 import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 
 /**
@@ -69,6 +69,22 @@ export async function createProviderInvoice(
     connected: true,
     invoice: { id: raw.id, provider: m.ctx.provider, checkoutUrl: raw.checkoutUrl, status: raw.status, amountMinor: Number(input.amountMinor), currency: input.currency },
   };
+}
+
+export async function createProviderSavedPaymentMethod(
+  input: { organizationId?: string; customerId: string; token: string; kind?: "card" | "bank_account" | "ewallet"; referenceId?: string },
+  deps: ProviderWriteDeps = {},
+): Promise<{ connected: false } | { connected: true; paymentMethod: ProviderSavedPaymentMethod }> {
+  const m = await makeCtx(input.organizationId, deps);
+  if (!m.connected) return { connected: false };
+  const registry = await getRegistry(deps);
+  const raw = (await registry.invokeCapability(m.ctx.provider, "savedPaymentMethods", m.ctx, {
+    customerId: input.customerId,
+    token: input.token,
+    kind: input.kind ?? "card",
+    referenceId: input.referenceId,
+  })) as ProviderSavedPaymentMethod;
+  return { connected: true, paymentMethod: raw };
 }
 
 export async function createProviderRecurringPlan(

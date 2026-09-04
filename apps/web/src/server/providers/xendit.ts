@@ -179,7 +179,7 @@ const SUPPORT_BY_CAPABILITY: Record<Exclude<keyof CapabilityManifest, "webhookHe
   transactionRead: true,
   hostedPaymentLinks: true, // Invoice
   customers: true,
-  savedPaymentMethods: true,
+  savedPaymentMethods: false, // not in the Xendit SDK product list; no implementor, so it fails closed (never mocked)
   refunds: true,
   payouts: true,
   recurringBilling: false, // requires approved direct HTTP API

@@ -51,6 +51,11 @@ export async function createCustomerAction(
   }
 
   try {
+    // Org-context authz: the acting org + role come from the session membership,
+    // never from the browser. Dev/demo falls back to the OWNER demo org.
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("customer.read");
+
     // Route the customer through the provider when a TEST connection resolves
     // (rekomendasi: customer vault). The in-memory directory is also updated so
     // the row renders; a configured-but-failing provider propagates (never mocked).
@@ -58,6 +63,7 @@ export async function createCustomerAction(
     try {
       const { createProviderCustomer } = await import("@/server/services/commerce");
       const providerResult = await createProviderCustomer({
+        organizationId: ctx.organizationId,
         referenceId: parsed.data.email,
         name: parsed.data.name,
         email: parsed.data.email,
