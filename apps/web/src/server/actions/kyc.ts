@@ -40,10 +40,25 @@ export async function submitKycDocumentAction(
     docType: docType as KycDocumentType,
     jurisdiction,
   });
+
+  // Rekomendasi #6: hand the submission off to the provider for verification when
+  // a TEST connection resolves. The review outcome is surfaced via webhook.
+  let note = "Submitted for review.";
+  try {
+    const { verifyKycProvider } = await import("@/server/platform/platform-service");
+    const verification = await verifyKycProvider();
+    note =
+      verification.state === "SUBMITTED"
+        ? "Submitted for review. Connect a provider to verify KYC."
+        : `Submitted for provider review (${verification.provider}) — in progress.`;
+  } catch {
+    // No provider connection — keep the in-app submission.
+  }
+
   revalidateKyc();
   return {
     status: "success",
-    message: `${submission.fileName} submitted for review.`,
+    message: `${submission.fileName} ${note}`,
     data: { fileName: submission.fileName },
   };
 }

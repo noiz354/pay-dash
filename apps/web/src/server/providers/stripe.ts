@@ -148,6 +148,14 @@ export interface StripeConnectAccountLike {
   object: string;
 }
 
+export interface StripeTransferLike {
+  id: string;
+  amount: number;
+  currency: string;
+  destination: string;
+  status?: string | null;
+}
+
 export interface StripeClientLike {
   readonly accounts?: {
     retrieve(id: string): Promise<StripeAccountLike>;
@@ -166,6 +174,9 @@ export interface StripeClientLike {
   };
   readonly charges?: {
     list(params?: Record<string, unknown>): Promise<{ data: StripeChargeLike[] }>;
+  };
+  readonly transfers?: {
+    create(params: Record<string, unknown>): Promise<StripeTransferLike>;
   };
 }
 
@@ -411,6 +422,42 @@ export class StripeAdapter implements PaymentProviderAdapter {
       reason: input.reason === "requested_by_customer" ? "requested_by_customer" : undefined,
     });
     return { id: refund.id, status: refund.status ?? "pending", provider: "stripe" };
+  }
+
+  async createTransfer(
+    ctx: ProviderConnectionContext,
+    input: { idempotencyKey: string; amount: number; currency: string; destination: string; description?: string | null },
+  ): Promise<import("@/domain/payments/platform").ProviderTransfer> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.transfers) {
+      throw normalizeStripeError(new Error("Transfers capability not available on the client"), "stripe.createTransfer");
+    }
+    const transfer = await client.transfers.create({
+      amount: input.amount,
+      currency: input.currency,
+      destination: input.destination,
+      description: input.description ?? undefined,
+      transfer_group: input.idempotencyKey,
+    });
+    return { id: transfer.id, provider: "stripe", amount: transfer.amount, currency: transfer.currency, status: transfer.status ?? "pending", destination: transfer.destination };
+  }
+
+  async createSplitRule(
+    ctx: ProviderConnectionContext,
+    input: { idempotencyKey: string; name: string; currency: string; destinations: Array<{ accountId: string; amount: number; percent: number | null }> },
+  ): Promise<import("@/domain/payments/platform").ProviderSplitRule> {
+    // Stripe applies split at charge time via application_fee_amount / transfer_data
+    // (ADR-0028). The rule itself is modeled server-side as the canonical split;
+    // it is not a standalone Stripe object. Return the normalized rule.
+    const ruleId = `split_${ctx.organizationId.slice(0, 8)}_${input.idempotencyKey.replace(/[\W_]/g, "").slice(0, 12)}`;
+    return {
+      id: ruleId,
+      provider: "stripe",
+      name: input.name,
+      currency: input.currency,
+      destinations: input.destinations,
+      status: "ACTIVE",
+    };
   }
 
   async createConnectedAccount(
