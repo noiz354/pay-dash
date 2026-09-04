@@ -106,3 +106,67 @@ export async function payInvoicesAction(
     data: { paid, failed },
   };
 }
+
+const CreateInvoiceSchema = z.object({
+  number: z.string().trim().min(3, "Invoice number is required"),
+  counterparty: z.string().trim().min(2, "Counterparty is required"),
+  amount: z
+    .string()
+    .trim()
+    .transform((v) => Number(v.replace(/[^0-9.]/g, "")))
+    .refine((n) => Number.isFinite(n) && n > 0, "Amount must be greater than zero"),
+  currency: z.enum(["IDR", "USD"]).default("IDR"),
+  email: z.string().trim().email("Enter a valid email").or(z.literal("")),
+});
+
+/**
+ * Issue a hostable invoice through the provider (Xendit Invoice / Stripe
+ * Checkout-Invoice). Invoices in this app are ledger-derived (ADR-0008); issuing
+ * a hostable provider invoice requires a configured connection — otherwise this
+ * fails closed (never a mock invoice).
+ */
+export async function createInvoiceAction(
+  _prev: ActionState<{ id: string; checkoutUrl: string | null }> | undefined,
+  formData: FormData
+): Promise<ActionState<{ id: string; checkoutUrl: string | null }>> {
+  const parsed = CreateInvoiceSchema.safeParse({
+    number: formData.get("number"),
+    counterparty: formData.get("counterparty"),
+    amount: formData.get("amount"),
+    currency: formData.get("currency") ?? "IDR",
+    email: formData.get("email") ?? "",
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
+    };
+  }
+  try {
+    // Org-context authz: the acting org + role come from the session membership.
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("money_in.create");
+
+    const { createProviderInvoice } = await import("@/server/services/commerce");
+    const out = await createProviderInvoice({
+      organizationId: ctx.organizationId,
+      externalId: parsed.data.number,
+      amountMinor: String(parsed.data.amount),
+      currency: parsed.data.currency,
+      description: `${parsed.data.counterparty} — ${parsed.data.number}`,
+      payerEmail: parsed.data.email || null,
+    });
+    if (!out.connected) {
+      return { status: "error", message: "No provider connection configured — connect a provider to issue a hostable invoice." };
+    }
+    revalidateBilling();
+    return {
+      status: "success",
+      message: `Invoice ${parsed.data.number} issued via ${out.invoice.provider} (${out.invoice.status})`,
+      data: { id: out.invoice.id, checkoutUrl: out.invoice.checkoutUrl },
+    };
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not issue the invoice." };
+  }
+}

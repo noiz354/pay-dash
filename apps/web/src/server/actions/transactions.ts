@@ -113,6 +113,33 @@ export async function refundTransactionAction(
     };
   }
 
+  // Rekomendasi #5: route the refund through the provider payment-flow when a
+  // TEST connection resolves (idempotency + durable op + authz/step-up + audit).
+  // A configured-but-failing provider propagates (never mock); with no connection
+  // the in-memory dev/demo ledger is the fallback.
+  try {
+    const { tryProviderRefund } = await import("@/server/payment-flows/execute-provider-write");
+    const providerResult = await tryProviderRefund({
+      originalPaymentId: parsed.data.id,
+      amountMinor: String(parsed.data.amount),
+      currency: existing.currency,
+      originalPaymentAmountMinor: String(existing.amount),
+      approverId: String(formData.get("approverId") ?? "").trim() || null,
+    });
+    if (providerResult.connected) {
+      revalidatePath("/[locale]/transactions/[id]", "page");
+      revalidatePath("/[locale]/transactions", "page");
+      revalidatePath("/[locale]/dashboard", "page");
+      return {
+        status: "success",
+        message: `Refund issued via ${providerResult.result.provider} (${providerResult.result.providerResourceId})`,
+      };
+    }
+  } catch (error) {
+    // Provider write failed (dual-control required / provider error) — surface.
+    return { status: "error", message: error instanceof Error ? error.message : "Refund failed." };
+  }
+
   await refundTransaction(parsed.data.id, parsed.data.amount, parsed.data.reason ?? "");
   revalidatePath("/[locale]/transactions/[id]", "page");
   revalidatePath("/[locale]/transactions", "page");

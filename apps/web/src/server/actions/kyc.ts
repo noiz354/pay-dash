@@ -34,16 +34,41 @@ export async function submitKycDocumentAction(
     return { status: "error", message: "Enter the issuing jurisdiction." };
   }
 
+  // Org-context authz: the acting org + role come from the session membership.
+  let organizationId: string | undefined;
+  try {
+    const { requireOrgContext } = await import("@/server/services/session-org-context");
+    const ctx = await requireOrgContext("kyc.submit");
+    organizationId = ctx.organizationId;
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Not authorized to submit KYC." };
+  }
+
   const submission = submitKycDocument({
     fileName,
     sizeBytes,
     docType: docType as KycDocumentType,
     jurisdiction,
   });
+
+  // Rekomendasi #6: hand the submission off to the provider for verification when
+  // a TEST connection resolves. The review outcome is surfaced via webhook.
+  let note = "Submitted for review.";
+  try {
+    const { verifyKycProvider } = await import("@/server/platform/platform-service");
+    const verification = await verifyKycProvider(organizationId);
+    note =
+      verification.state === "SUBMITTED"
+        ? "Submitted for review. Connect a provider to verify KYC."
+        : `Submitted for provider review (${verification.provider}) — in progress.`;
+  } catch {
+    // No provider connection — keep the in-app submission.
+  }
+
   revalidateKyc();
   return {
     status: "success",
-    message: `${submission.fileName} submitted for review.`,
+    message: `${submission.fileName} ${note}`,
     data: { fileName: submission.fileName },
   };
 }

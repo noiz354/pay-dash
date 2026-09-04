@@ -619,6 +619,65 @@ export async function approveBatch(id: string): Promise<{ batch: PayoutBatch; pa
   if (batch.recipients.length === 0) throw new Error("Add at least one recipient before sending this batch");
 
   const now = new Date().toISOString();
+
+  // Rekomendasi #5: when a TEST provider connection resolves, release each
+  // recipient through the payment-flow orchestration (idempotency + authz +
+  // audit). A configured-but-failing provider marks that recipient failed (never
+  // a mock success); with no connection the in-memory dev/demo store is used.
+  let providerConnected = false;
+  try {
+    const { resolveProviderWrite } = await import("@/server/payment-flows/execute-provider-write");
+    const probe = await resolveProviderWrite();
+    providerConnected = probe.connected;
+  } catch {
+    // Non-server / no SDK — fall back to the in-memory dev store.
+    providerConnected = false;
+  }
+
+  if (providerConnected) {
+    let paid = 0;
+    let failed = 0;
+    for (const row of batch.recipients) {
+      if (row.status !== "PENDING") continue;
+      try {
+        const { tryProviderPayout } = await import("@/server/payment-flows/execute-provider-write");
+        const r = await tryProviderPayout({
+          recipientId: row.id,
+          channelCode: row.bank,
+          accountNumber: row.accountNumber,
+          accountHolderName: row.name,
+          amountMinor: String(row.amount),
+          currency: "IDR",
+        });
+        if (r.connected) {
+          row.status = "PAID";
+          row.paidAt = now;
+          row.failureReason = null;
+          paid += 1;
+        } else {
+          row.status = "FAILED";
+          row.failureReason = "No provider connection for release";
+          failed += 1;
+        }
+      } catch (err) {
+        row.status = "FAILED";
+        row.failureReason = err instanceof Error ? err.message : "Provider failed";
+        failed += 1;
+      }
+    }
+    batch.status = "PROCESSING";
+    batch.completedAt = now;
+    batch.status = deriveStatus(batch);
+    batch.timeline.push({
+      id: `${batch.id}-E${batch.timeline.length + 1}`,
+      at: now,
+      label: failed ? "Completed with failures" : "Completed",
+      detail: `${paid} paid, ${failed} failed`,
+      kind: failed ? "warning" : "success",
+    });
+    return { batch, paid, failed };
+  }
+
   let paid = 0;
   let failed = 0;
   for (const row of batch.recipients) {

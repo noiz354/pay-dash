@@ -8,6 +8,7 @@ import type {
 import type { RecipientDraft } from "@/lib/payout-csv";
 import { getLedgerRows } from "./transactions";
 import { approveBatch, createBatch, listBankAccounts, getPayoutBatches } from "./payouts";
+import type { ProviderBalance, ProviderReadResult } from "@/domain/payments/provider-read";
 
 export type { MovementStatus, MovementType };
 export { MOVEMENT_TYPES, MOVEMENT_STATUSES, MOVEMENT_TYPE_LABELS, MOVEMENT_STATUS_LABELS } from "@/lib/balance-status";
@@ -255,7 +256,39 @@ const RANGE_DAYS: Record<NonNullable<MovementFilters["range"]>, number | null> =
   all: null,
 };
 
+/** Lazily attempt a provider balance read (see transactions.ts note re: jsdom env). */
+async function tryProviderBalance(): Promise<ProviderReadResult<ProviderBalance>> {
+  try {
+    const { getProviderReadService } = await import("@/server/repositories/provider-read");
+    const service = await getProviderReadService();
+    return await service.readBalance();
+  } catch {
+    return { connected: false };
+  }
+}
+
 export async function getBalanceOverview(): Promise<BalanceOverview> {
+  // Live provider balance (rekomendasi #4) takes precedence for the available
+  // figure; derived pending/reserved settlements still come from the ledger.
+  // A configured-but-failing provider propagates (never mocked); with no
+  // connection the in-memory dev/demo ledger is the fallback.
+  const providerResult = await tryProviderBalance();
+  if (providerResult.connected) {
+    const { available, currency } = providerResult.data;
+    let pendingSettlements = 0;
+    let reserved = 0;
+    let lastPayoutAt: string | null = null;
+    for (const m of deriveMovements()) {
+      if (m.type === "WITHDRAWAL") {
+        if (m.status === "SETTLED" && (!lastPayoutAt || m.at > lastPayoutAt)) lastPayoutAt = m.at;
+        if (m.status === "PENDING") reserved += -m.amount;
+      } else if (m.status === "PENDING") {
+        pendingSettlements += m.amount;
+      }
+    }
+    return { available, pendingSettlements, reserved, lastPayoutAt, currency };
+  }
+
   let available = OPENING_BALANCE;
   let pendingSettlements = 0;
   let reserved = 0;

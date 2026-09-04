@@ -69,9 +69,9 @@ const CreateLinkSchema = z
   });
 
 export async function createPaymentLinkAction(
-  _prev: ActionState<{ id: string }> | undefined,
+  _prev: ActionState<{ id: string; checkoutUrl?: string }> | undefined,
   formData: FormData
-): Promise<ActionState<{ id: string }>> {
+): Promise<ActionState<{ id: string; checkoutUrl?: string }>> {
   const kind = String(formData.get("kind") ?? "single");
   const payerEmail = String(formData.get("payerEmail") ?? "").trim();
   const expiresIn = String(formData.get("expiresIn") ?? "");
@@ -115,10 +115,32 @@ export async function createPaymentLinkAction(
   });
 
   revalidateLinks(link.id);
+
+  // TEST-mode money-in: if a provider connection is configured, route a hosted
+  // payment link through the payment-flow orchestration (idempotency + durable
+  // operation + audit). When no connection is configured this returns null and
+  // we keep the local dev/demo link. A configured provider that FAILS is
+  // surfaced as an error — never silently downgraded to mock success.
+  let checkoutUrl: string | null = null;
+  try {
+    const { createMoneyInRuntime } = await import("@/server/payment-flows/money-in-runtime");
+    const moneyIn = await createMoneyInRuntime();
+    const result = await moneyIn.executeHostedPayment({
+      externalId: link.id,
+      amountMinor: String(totalOf(link)),
+      currency: link.currency,
+      description: `${link.kind} payment link`,
+      payerEmail: link.payerEmail,
+    });
+    if (result) checkoutUrl = result.checkoutUrl ?? null;
+  } catch (error) {
+    return { status: "error", message: error instanceof Error ? error.message : "Could not create the hosted payment." };
+  }
+
   return {
     status: "success",
-    message: `Link created — ${link.id} for ${formatMoney(totalOf(link), link.currency)}.`,
-    data: { id: link.id },
+    message: `Link created — ${link.id} for ${formatMoney(totalOf(link), link.currency)}${checkoutUrl ? " · hosted payment ready" : "."}`,
+    data: { id: link.id, checkoutUrl: checkoutUrl ?? undefined },
   };
 }
 

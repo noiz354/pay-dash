@@ -1,0 +1,112 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { env } from "@/lib/env";
+import { rejectInbound } from "@/server/data/webhooks";
+import { recordWebhookDelivery } from "@/server/webhooks/store-delivery";
+import { verifyStripeSignature } from "@/server/webhooks/verify";
+
+// Stripe webhook ingress (ADR-0028): provider-specific endpoint at
+// `/api/webhooks/stripe`. This app RECEIVES callbacks; it never delivers them.
+//
+// Security boundary, in order:
+//   1. VERIFY the raw-body signature with the pinned webhook secret before any
+//      mutation (never reuse Xendit's callback-token logic).
+//   2. Parse + validate the payload shape.
+//   3. Persist (dedupe by `stripe:<event_id>` — a retried event id logs a
+//      DUPLICATED row instead of a second RECEIVED).
+//   4. Respond 200 fast — non-2xx triggers Stripe retries.
+//
+// No Stripe SDK model leaks here; this is a thin, server-only boundary.
+
+const StripeEventPayloadSchema = z
+  .object({
+    id: z.string().min(1),
+    type: z.string().min(1),
+    created: z.number().int().positive().optional(),
+    data: z.unknown().optional(),
+  })
+  .passthrough();
+
+export async function POST(req: Request) {
+  const raw = await req.text().catch(() => "");
+
+  // 1. VERIFY raw-body signature (ADR-0028 webhook scope).
+  const signature = req.headers.get("stripe-signature");
+  const secret = env.STRIPE_WEBHOOK_SECRET;
+
+  if (secret) {
+    const verification = verifyStripeSignature({ rawBody: raw, signatureHeader: signature ?? "", secret });
+    if (!verification.verified) {
+      rejectInbound({ reason: `Invalid Stripe signature: ${verification.reason}`, raw, source: "stripe" });
+      return NextResponse.json({ error: "Invalid Stripe signature" }, { status: 400 });
+    }
+  } else if (process.env.NODE_ENV === "production") {
+    rejectInbound({ reason: "Stripe webhook secret not configured", raw, source: "stripe" });
+    return NextResponse.json({ error: "Stripe webhook secret not configured" }, { status: 500 });
+  }
+  // In dev without a secret, allow but warn (mirrors the Xendit route).
+
+  // 2. Parse & validate.
+  let body: unknown;
+  try {
+    body = raw ? JSON.parse(raw) : undefined;
+    if (body === undefined) throw new Error("empty body");
+  } catch {
+    rejectInbound({ reason: "Invalid JSON", raw, source: "stripe" });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const parsed = StripeEventPayloadSchema.safeParse(body);
+  if (!parsed.success) {
+    rejectInbound({ reason: "Invalid payload", raw, source: "stripe" });
+    return NextResponse.json({ error: "Invalid payload", issues: parsed.error.flatten() }, { status: 422 });
+  }
+
+  const payload = parsed.data as { id: string; type: string; created?: number };
+  const eventId = payload.id;
+  const type = payload.type;
+
+  // 3. Persist — durable dedupe on `WebhookDelivery` (provider-scoped key, so a
+  //    Stripe event id can never collide with an Xendit event id) plus the log.
+  const { received, deduped, event: outEvent } = await recordWebhookDelivery({
+    provider: "stripe",
+    eventId,
+    type,
+    payload: body,
+  });
+
+  // 4. Respond 200 fast; async processing is downstream (QUEUES.md).
+  void processStripeWebhookAsync(type, body).catch((e) => {
+    console.error("[webhook] stripe async processing failed", e);
+  });
+
+  return NextResponse.json(deduped ? { received, deduped: true } : { received, event: outEvent }, {
+    status: 200,
+  });
+}
+
+async function processStripeWebhookAsync(type: string, payload: unknown) {
+  // Project the verified event into a canonical status (event-projection). The
+  // projector resolves the canonical resource from the Stripe resource id via
+  // the persisted ProviderPayment mapping (ADR-0028) — never the default
+  // provider/account. Unknown resources/statuses defer rather than inventing a
+  // success.
+  try {
+    const { projectWebhookEvent } = await import("@/server/webhooks/project");
+    const result = await projectWebhookEvent({
+      provider: "stripe",
+      eventId: (payload as { id?: string })?.id ?? "",
+      type,
+      payload,
+    });
+    if (result !== "UNAVAILABLE") {
+      console.log(`[webhook] stripe projection ${result} for ${type}`);
+    }
+  } catch (err) {
+    console.error("[webhook] stripe projection failed", err);
+  }
+}
+
+export async function GET() {
+  return NextResponse.json({ status: "webhook endpoint — POST with stripe-signature" });
+}

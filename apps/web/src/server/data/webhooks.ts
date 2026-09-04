@@ -24,6 +24,13 @@ export type WebhookEvent = {
   id: string;
   /** Provider event id — the dedupe key (INTEGRATION.md:303, idempotency). */
   eventId: string;
+  /**
+   * Provider-scoped dedupe key (e.g. `stripe:<event_id>`). Defaults to
+   * `eventId` when omitted, so a single-provider event id dedupes on itself
+   * while multi-provider ids never collide. Stored so a later same-key
+   * delivery is classified as DUPLICATED regardless of source.
+   */
+  dedupeKey?: string;
   /** Event type as sent by the provider; may be outside the known set. */
   type: string;
   receivedAt: string;
@@ -268,6 +275,8 @@ export type RecordInboundInput = {
   payload: unknown;
   source: WebhookSource;
   receivedAt?: string;
+  /** Optional provider-scoped dedupe key; defaults to `eventId`. */
+  dedupeKey?: string;
 };
 
 function rowId(): string {
@@ -281,11 +290,13 @@ function rowId(): string {
  * → second is deduped").
  */
 export function recordInbound(input: RecordInboundInput): { event: WebhookEvent; deduped: boolean } {
-  const first = store().events.find((e) => e.eventId === input.eventId);
+  const dedupeKey = input.dedupeKey ?? input.eventId;
+  const first = store().events.find((e) => (e.dedupeKey ?? e.eventId) === dedupeKey);
   const receivedAt = input.receivedAt ?? new Date().toISOString();
   const event: WebhookEvent = {
     id: rowId(),
     eventId: input.eventId,
+    dedupeKey: input.dedupeKey,
     type: input.type,
     receivedAt,
     source: input.source,
