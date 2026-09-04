@@ -7,16 +7,17 @@ import { createStripeClient } from "@/lib/stripe";
 import type { XenditClientLike } from "@/server/providers/xendit";
 import type { StripeClientLike } from "@/server/providers/stripe";
 import { PaymentFlowService, type OperationStore, type AuditStore, type FlowActor, type ProviderFlowResult } from "./payment-flow";
-import { InMemoryOperationStore, InMemoryAuditStore } from "./in-memory-stores";
+import { buildRuntimeConnectionResolver } from "@/server/repositories/runtime-connection-resolver";
+import { buildOperationStore } from "@/server/repositories/durable-operation-store";
+import { buildAuditStore } from "@/server/repositories/audit-event-store";
 
 /**
- * Runtime composition for TEST-mode money-in. Wires the provider registry
- * (real SDK client factories at the server-only boundary), the durable
- * operation/audit stores (or in-memory dev substitutes), and the payment-flow
- * orchestration into a single callable. The server action's money-in path calls
- * `executeHostedPayment`; when no provider connection is configured it returns
- * `null` and the caller keeps the local (dev/demo) link — a configured provider
- * that fails is never silently downgraded to mock success.
+ * Runtime composition for TEST-mode money-in (Rekomendasi #1 + #2).
+ * Resolves a real persisted connection + secret via `provider-secrets` and binds
+ * the durable operation/audit stores to `DurableOperation`/`AuditEvent`.
+ * When no store is available (dev/test, Prisma not generated) it falls back to
+ * an in-memory store and a fail-closed resolver, so `.env` alone still cannot
+ * activate a provider path without a persisted ACTIVE connection + secret.
  */
 
 export type MoneyInConnection = {
@@ -29,12 +30,11 @@ export type MoneyInConnection = {
 export type MoneyInConnectionResolver = () => Promise<MoneyInConnection | null>;
 
 export type MoneyInRuntimeDeps = {
+  /** Optional override to select a connection (defaults: null — no provider). */
   connectionResolver?: MoneyInConnectionResolver;
   registry?: ProviderRegistry;
   operations?: OperationStore;
   audit?: AuditStore;
-  resolveSecretNotSupported?: never;
-  /** Optional actor used when the action has no authenticated member context. */
   actor?: FlowActor;
 };
 
@@ -46,31 +46,37 @@ export type HostedPaymentInput = {
   payerEmail?: string | null;
 };
 
-/** Build the default provider registry with real SDK clients + fail-closed secret resolution. */
-function buildDefaultRegistry(): ProviderRegistry {
+/** Build the default provider registry with real SDK clients + real secret resolution. */
+async function buildDefaultRegistry(): Promise<ProviderRegistry> {
+  const resolver = await buildRuntimeConnectionResolver();
+  const resolveSecretForConnection = async (connectionId: string): Promise<string | null> => {
+    const resolved = await resolver.resolveForConnection(connectionId);
+    return resolved?.secret ?? null;
+  };
+
   return buildProviderRegistry({
     xendit: {
       createClient: (secretKey) => createXenditClient(secretKey) as unknown as XenditClientLike,
       resolveSecret: async () => {
-        throw new Error("No secret resolver configured; provider-secrets must be wired");
+        throw new Error("verifyConnection resolves secrets via provider-secrets; no direct ref path");
       },
-      resolveSecretForConnection: async () => null,
+      resolveSecretForConnection,
     },
     stripe: {
       createClient: (secretKey) => createStripeClient(secretKey) as unknown as StripeClientLike,
       resolveSecret: async () => {
-        throw new Error("No secret resolver configured; provider-secrets must be wired");
+        throw new Error("verifyConnection resolves secrets via provider-secrets; no direct ref path");
       },
-      resolveSecretForConnection: async () => null,
+      resolveSecretForConnection,
     },
   });
 }
 
-export function createMoneyInRuntime(deps: MoneyInRuntimeDeps = {}) {
+export async function createMoneyInRuntime(deps: MoneyInRuntimeDeps = {}) {
   const connectionResolver = deps.connectionResolver ?? (async (): Promise<MoneyInConnection | null> => null);
-  const registry = deps.registry ?? buildDefaultRegistry();
-  const operations = deps.operations ?? new InMemoryOperationStore();
-  const audit = deps.audit ?? new InMemoryAuditStore();
+  const registry = deps.registry ?? (await buildDefaultRegistry());
+  const operations = deps.operations ?? (await buildOperationStore());
+  const audit = deps.audit ?? (await buildAuditStore());
   const actor: FlowActor = deps.actor ?? { id: "system", roles: ["OWNER"] };
 
   return {

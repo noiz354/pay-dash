@@ -61,7 +61,7 @@ const connection: MoneyInConnection = { provider: "stripe", connectionId: "conn-
 
 describe("money-in runtime (PaymentFlowService wiring)", () => {
   it("routes a hosted payment through the flow when a TEST connection is resolved, surfacing the checkout URL", async () => {
-    const runtime = createMoneyInRuntime({ registry: registryWith(makeRegistry()), connectionResolver: async () => connection });
+    const runtime = await createMoneyInRuntime({ registry: registryWith(makeRegistry()), connectionResolver: async () => connection });
     const result = await runtime.executeHostedPayment({
       externalId: "link-1",
       amountMinor: "1500000",
@@ -76,7 +76,7 @@ describe("money-in runtime (PaymentFlowService wiring)", () => {
   });
 
   it("returns null (dev/demo link) when no provider connection is configured", async () => {
-    const runtime = createMoneyInRuntime({ registry: registryWith(makeRegistry()), connectionResolver: async () => null });
+    const runtime = await createMoneyInRuntime({ registry: registryWith(makeRegistry()), connectionResolver: async () => null });
     const result = await runtime.executeHostedPayment({ externalId: "link-2", amountMinor: "1500000", currency: "IDR" });
     expect(result).toBeNull();
   });
@@ -86,12 +86,12 @@ describe("money-in runtime (PaymentFlowService wiring)", () => {
     failing.createHostedPayment = async () => {
       throw { code: "UNAVAILABLE" };
     };
-    const runtime = createMoneyInRuntime({ registry: registryWith(failing), connectionResolver: async () => connection });
+    const runtime = await createMoneyInRuntime({ registry: registryWith(failing), connectionResolver: async () => connection });
     await expect(runtime.executeHostedPayment({ externalId: "link-3", amountMinor: "1500000", currency: "IDR" })).rejects.toMatchObject({ code: "UNAVAILABLE" });
   });
 
   it("records an audit event for the routed hosted payment", async () => {
-    const runtime = createMoneyInRuntime({ registry: registryWith(makeRegistry()), connectionResolver: async () => connection });
+    const runtime = await createMoneyInRuntime({ registry: registryWith(makeRegistry()), connectionResolver: async () => connection });
     await runtime.executeHostedPayment({ externalId: "link-4", amountMinor: "1500000", currency: "IDR" });
     const audit = runtime._stores.audit as unknown as { events: Array<{ action: string }> };
     expect(audit.events).toHaveLength(1);

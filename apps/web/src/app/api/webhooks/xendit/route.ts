@@ -82,26 +82,23 @@ export async function POST(req: Request) {
 }
 
 async function processWebhookAsync(event: string, payload: unknown) {
-  // TODO: update ledger via DAL (server/dal/ledger.ts) — handlePaymentSucceeded etc.
-  // (QUEUES.md design: queue → worker → idempotent ledger update. Out of scope
-  // for the log pass, ADR-0014 — the callback is stored, not yet processed.)
-  // Reusable handlers per INTEGRATION.md #7:
-  //   payment.succeeded → PaymentCallback, invoice.paid → InvoiceCallback, refund.succeeded → RefundCallback
-  switch (event) {
-    case "payment.succeeded":
-    case "payment.completed":
-      // handlePaymentSucceeded(payload as PaymentCallback)
-      break;
-    case "invoice.paid":
-    case "invoice.completed":
-      // handleInvoicePaid(payload as InvoiceCallback)
-      break;
-    case "refund.succeeded":
-      // handleRefundSucceeded(payload as RefundCallback)
-      break;
-    default:
-      // unknown event — log for observability (Sentry #203, pino #36)
-      console.log(`[webhook] unhandled event: ${event}`, payload);
+  // Project the verified event into a canonical status (event-projection). The
+  // projector is idempotent and resolves the canonical resource from the
+  // provider resource id (never the browser); unknown resources/statuses defer
+  // rather than inventing a success.
+  try {
+    const { projectWebhookEvent } = await import("@/server/webhooks/project");
+    const result = await projectWebhookEvent({
+      provider: "xendit",
+      eventId: (payload as { id?: string })?.id ?? "",
+      type: event,
+      payload,
+    });
+    if (result !== "UNAVAILABLE") {
+      console.log(`[webhook] xendit projection ${result} for ${event}`);
+    }
+  } catch (err) {
+    console.error("[webhook] xendit projection failed", err);
   }
 }
 

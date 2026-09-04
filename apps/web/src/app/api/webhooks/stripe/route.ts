@@ -86,22 +86,24 @@ export async function POST(req: Request) {
 }
 
 async function processStripeWebhookAsync(type: string, payload: unknown) {
-  // TODO: update the canonical status via event-projection. Stripe event ids
-  // arrive both as `id` (event id) and `data.object.id` (resource id); the
-  // projector must map `type` → canonical status and reconcile the correct
-  // persisted connection/account (never the current default provider).
-  switch (type) {
-    case "payment_intent.succeeded":
-    case "charge.succeeded":
-    case "charge.refunded":
-    case "payout.paid":
-    case "payout.failed":
-    case "transfer.created":
-    case "account.updated":
-      // handleStripeEvent(payload as ...) — placeholder for projection wiring.
-      break;
-    default:
-      console.log(`[webhook] unhandled stripe event: ${type}`, payload);
+  // Project the verified event into a canonical status (event-projection). The
+  // projector resolves the canonical resource from the Stripe resource id via
+  // the persisted ProviderPayment mapping (ADR-0028) — never the default
+  // provider/account. Unknown resources/statuses defer rather than inventing a
+  // success.
+  try {
+    const { projectWebhookEvent } = await import("@/server/webhooks/project");
+    const result = await projectWebhookEvent({
+      provider: "stripe",
+      eventId: (payload as { id?: string })?.id ?? "",
+      type,
+      payload,
+    });
+    if (result !== "UNAVAILABLE") {
+      console.log(`[webhook] stripe projection ${result} for ${type}`);
+    }
+  } catch (err) {
+    console.error("[webhook] stripe projection failed", err);
   }
 }
 

@@ -124,7 +124,7 @@ export async function createPaymentLinkAction(
   let checkoutUrl: string | null = null;
   try {
     const { createMoneyInRuntime } = await import("@/server/payment-flows/money-in-runtime");
-    const moneyIn = createMoneyInRuntime();
+    const moneyIn = await createMoneyInRuntime();
     const result = await moneyIn.executeHostedPayment({
       externalId: link.id,
       amountMinor: String(totalOf(link)),

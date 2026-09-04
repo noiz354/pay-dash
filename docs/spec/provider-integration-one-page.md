@@ -1,0 +1,84 @@
+# Provider Integration — one-page readiness (Xendit + Stripe)
+
+> Scope: does a feature travel the full chain **screen → server action → authz →
+> adapter → SDK → provider → back to screen**? This is the short version of
+> `provider-integration-readiness.md`. It answers *"is `.env` enough?"* with
+> evidence, not intent.
+
+## The completeness path
+
+```text
+[1] LAYAR  → [2] SERVER ACTION → [3] AUTHZ → [4] ADAPTER → [5] SDK → [6] PROVIDER → [7] BACK TO LAYAR
+```
+
+A feature is only ever "done" when **every** hop is crossed with a **real**
+connection. Anything that stops before the provider leaves the screen showing
+derived/in-memory data, not live provider data.
+
+## Where each capability stops (readiness matrix)
+
+| Capability | 1 | 2 | 3 | 4 | 5 | 6 | 7 | Stops at |
+|---|---|---|---|---|---|---|---|---|
+| Money-in (hosted link) | ✅ | ⚠️ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | 2 / 6 / 7 |
+| Balance read | ✅ | ❌ | ❌ | ✅ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
+| Transactions list | ✅ | ❌ | ❌ | ✅ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
+| Refund / Payout | ✅ | ❌ | ✅ | ✅ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
+| Customer / Invoice / Recurring | ✅ | ⚠️ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | 2 / 6 / 7 |
+| Connected-accounts / Split | ❌ | ❌ | ❌ | ⚠️ | ✅ | ⚠️ | ❌ | 1 / 6 / 7 |
+| Compliance KYC | ✅ | ⚠️ | ❌ | ❌ | ⚠️ | ⚠️ | ⚠️ | 4 / 6 |
+| **Webhook ingest (Xendit)** | ✅ | ✅ | n/a | ✅ | — | ✅ | **⚙️** | 7 → **wired** |
+| **Webhook ingest (Stripe)** | ✅ | ✅ | n/a | ✅ | — | ✅ | **⚙️** | 7 → **wired** |
+
+✅ live · ⚠️ partial (stub/mock/un-wired resolver) · ❌ missing · ⚙️ now wired.
+
+## Why `.env` alone is not enough
+
+Filling `XENDIT_SECRET_KEY`, `STRIPE_SECRET_KEY`, `SECRET_STORE_*`, webhook tokens
+is **necessary but not sufficient**. The provider path is gated at runtime by four
+injections. They were intentionally un-wired (fail-closed) — **recommendations #1–#3
+are now implemented**:
+
+1. **Connection resolver** — resolves a persisted `PaymentProviderConnection`
+   (provider + connectionId + org + mode TEST/LIVE). ✅ wired
+   `server/repositories/runtime-connection-resolver.ts`.
+2. **Secret resolver** — `resolveSecretForConnection` unseals the credential via
+   `provider-secrets` (`SecretStore`: local AES-256-GCM for TEST; `kms` for LIVE).
+   ✅ wired (fail-closed, no mock downgrade).
+3. **Durable stores** — `OperationStore`/`AuditStore` bound to `DurableOperation`/`AuditEvent`.
+   ✅ wired (`durable-operation-store.ts`, `audit-event-store.ts`; in-memory fallback in dev).
+4. **Webhook projection** — verified + deduped events update canonical resource
+   status via the idempotent `projectStatusUpdate` guard (no fake success, no
+   terminal regression, no unknown success). ✅ wired (`server/webhooks/project.ts`,
+   `domain/payments/projection.ts`, `webhook-maps.ts`).
+
+## Security posture (hard rules)
+
+- A configured provider that **fails** is surfaced as an error — **never** silently
+  downgraded to mock success.
+- Missing connection/secret stays **fail-closed** (returns `null` / throws), never
+  a mock secret.
+- **LIVE** activation is refused until a production-grade **kms** backend exists;
+  only `local` (TEST) encryption is enabled now.
+- Provider SDK models/raw payloads never leak to the UI; provider IDs are resolved
+  server-side from the persisted mapping (never from browser input).
+
+## Still to close (recommendations #4–#6)
+
+- **#4** Route balance/transactions reads through the adapter (`getBalance`,
+  `listTransactions`) instead of in-memory stores → live provider data on screen.
+- **#5** Wire `executeRefund` + `releaseRecipient` to server actions + UI.
+- **#6** Build connected-accounts onboarding, KYC provider verification,
+  platform-routing/split.
+
+## Bottom line
+
+> Menyuplai `.env` **menyiapkan kredensial** tetapi **tidak mengaktifkan jalur
+> provider**. Yang kini benar-benar hidup sampai provider adalah **webhook ingress
+> (verify + dedupe + store + projection)** dan **money-in** terhadap koneksi TEST
+> yang dipersist + di-unseal. Semua kemampuan lain (balance, transaction, refund,
+> payout, customer, invoice, recurring, connected-account, KYC, routing) masih
+> berhenti di hop 2 (mock/in-memory), hop 6 (belum di-wire), atau hop 7 (proyeksi).
+
+The adapter + SDK + registry layer is solid. What remains is the **read-path
+adapter wiring** and the **write-side actions**, plus the still-unbuilt
+connected-accounts / KYC / routing modules.
