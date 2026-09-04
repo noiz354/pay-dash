@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { ProviderReadResult, ProviderTransaction } from "@/domain/payments/provider-read";
+
 // ---------------------------------------------------------------------------
 // Transactions data source
 // ---------------------------------------------------------------------------
@@ -229,10 +231,49 @@ function store(): Store {
 
 // --- reads -----------------------------------------------------------------
 
-function withinRange(iso: string, range: TransactionFilters["range"]) {
-  if (!range || range === "all") return true;
+/** Map a provider transaction to the UI `Transaction` DTO (live data source).
+ *  UI-only enrichment fields get safe defaults; provider fields are authoritative. */
+function providerTransactionToRow(p: ProviderTransaction): Transaction {
+  const channel = (CHANNELS as readonly string[]).includes(p.channel) ? (p.channel as Channel) : "CARD";
+  return {
+    id: p.id,
+    referenceId: p.referenceId,
+    createdAt: p.at,
+    updatedAt: p.at,
+    amount: p.amount,
+    currency: p.currency,
+    fee: p.fee ?? 0,
+    net: p.net ?? p.amount,
+    status: p.status,
+    channel,
+    methodLabel: p.methodLabel,
+    customerName: p.customerName ?? "Live provider",
+    customerEmail: p.customerEmail ?? "",
+    description: p.description ?? "",
+    riskScore: 0,
+    refundedAmount: p.status === "REFUNDED" ? p.amount : 0,
+    events: [{ id: `evt-${p.id}`, at: p.at, label: "Provider transaction", detail: p.status, kind: "info" }],
+  };
+}
+
+function withinRange(iso: string, range: TransactionFilters["range"]): boolean {
+  if (range === "all" || !range) return true;
   const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
   return Date.now() - new Date(iso).getTime() <= days * 24 * 60 * 60 * 1000;
+}
+
+/** Lazily attempt a provider transaction read. The provider read module pulls
+ *  the SDK/client boundary which reads server env; in a non-server (jsdom test)
+ *  context that import fails and we fall back to `{ connected: false }`. In the
+ *  real server the SDK loads and the read reaches the provider. */
+async function tryProviderTransactions(): Promise<ProviderReadResult<ProviderTransaction[]>> {
+  try {
+    const { getProviderReadService } = await import("@/server/repositories/provider-read");
+    const service = await getProviderReadService();
+    return await service.readTransactions();
+  } catch {
+    return { connected: false };
+  }
 }
 
 export async function listTransactions(filters: TransactionFilters = {}): Promise<Paginated<Transaction>> {
@@ -240,6 +281,36 @@ export async function listTransactions(filters: TransactionFilters = {}): Promis
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
+
+  // Live provider read (rekomendasi #4). When a configured TEST connection +
+  // secret resolves for the org, provider transactions are authoritative. A
+  // configured-but-failing provider propagates (never mocked); with no
+  // connection the in-memory dev/demo ledger is the fallback.
+  const providerResult = await tryProviderTransactions();
+  if (providerResult.connected) {
+    const filtered = providerResult.data
+      .map(providerTransactionToRow)
+      .filter((t) => {
+        if (status !== "ALL" && t.status !== status) return false;
+        if (channel !== "ALL" && t.channel !== channel) return false;
+        if (!withinRange(t.createdAt, range)) return false;
+        if (needle) {
+          const hay = `${t.referenceId} ${t.customerName} ${t.customerEmail} ${t.methodLabel} ${t.description}`.toLowerCase();
+          if (!hay.includes(needle)) return false;
+        }
+        return true;
+      });
+    const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const safePage = Math.min(page, pageCount);
+    return {
+      rows: filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+      total: filtered.length,
+      page: safePage,
+      pageSize,
+      pageCount,
+      isFiltered: status !== "ALL" || channel !== "ALL" || range !== "all" || needle.length > 0,
+    };
+  }
 
   const filtered = store().rows.filter((t) => {
     if (status !== "ALL" && t.status !== status) return false;

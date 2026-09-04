@@ -10,6 +10,7 @@ import { PaymentFlowService, type OperationStore, type AuditStore, type FlowActo
 import { buildRuntimeConnectionResolver, type RuntimeConnectionResolver } from "@/server/repositories/runtime-connection-resolver";
 import { buildOperationStore } from "@/server/repositories/durable-operation-store";
 import { buildAuditStore } from "@/server/repositories/audit-event-store";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 
 /**
  * Runtime composition for TEST-mode money-in (Rekomendasi #1 + #2).
@@ -20,10 +21,7 @@ import { buildAuditStore } from "@/server/repositories/audit-event-store";
  * activate a provider path without a persisted ACTIVE connection + secret.
  */
 
-/** Single-tenant demo org used when a caller does not supply an org (the app
- *  currently has no org-scoping plumbing). Never cross-org: resolution always
- *  filters by this org. Multi-tenant callers pass the real organizationId. */
-export const DEFAULT_DEMO_ORG = "org_demo";
+export { DEFAULT_DEMO_ORG };
 
 export type MoneyInConnection = {
   provider: "xendit" | "stripe";

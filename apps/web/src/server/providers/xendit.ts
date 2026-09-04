@@ -2,6 +2,7 @@ import "server-only";
 
 import { deriveCapabilityState, type CapabilityManifest, type CapabilityState } from "@/domain/payments/capabilities";
 import type { ConnectionVerification } from "@/domain/payments/connection";
+import { amountFromMinor, canonicalTransactionStatus, type ProviderTransaction } from "@/domain/payments/provider-read";
 import type {
   PaymentProviderAdapter,
   ProviderConnectionContext,
@@ -134,6 +135,34 @@ export interface XenditAdapterDeps {
   /** Resolve the secret for a connection by its id (capability invocation path). */
   resolveSecretForConnection(connectionId: string): Promise<string | null>;
   now?(): Date;
+}
+
+/** Map an arbitrary Xendit transaction/charge payload to the canonical DTO. */
+export function mapXenditTransactions(raw: unknown): ProviderTransaction[] {
+  const rows = Array.isArray(raw) ? raw : ((raw as { data?: unknown[] })?.data ?? []);
+  return rows.map((r) => {
+    const o = (r ?? {}) as Record<string, unknown>;
+    const amount = amountFromMinor(Number(o.amount ?? 0), String(o.currency ?? "IDR"));
+    const status = canonicalTransactionStatus(o.status);
+    const ref = String(o.referenceId ?? o.id ?? "");
+    const id = String(o.id ?? "");
+    return {
+      id,
+      referenceId: ref,
+      at: String(o.createdAt ?? o.updatedAt ?? new Date().toISOString()),
+      amount: amount.amount,
+      currency: amount.currency,
+      status,
+      channel: String(o.channel ?? "VA"),
+      methodLabel: String(o.paymentMethod ?? o.channel ?? "Xendit"),
+      customerName: o.customerName ? String(o.customerName) : null,
+      customerEmail: o.customerEmail ? String(o.customerEmail) : null,
+      description: o.description ? String(o.description) : null,
+      fee: o.fee != null ? Number(o.fee) : null,
+      net: amount.amount,
+      source: "xendit-live",
+    };
+  });
 }
 
 /* ---------------------------------------------------------------------- */
@@ -290,6 +319,15 @@ export class XenditAdapter implements PaymentProviderAdapter {
     const client = await this.clientForConnection(ctx.connectionId);
     const balance = await client.Balance.getBalance({ accountType: "CASH", currency: "IDR" });
     return { available: balance.balance, currency: balance.currency, source: "xendit-live", asOf: new Date().toISOString() };
+  }
+
+  async listTransactions(ctx: ProviderConnectionContext): Promise<import("@/domain/payments/provider-read").ProviderTransaction[]> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.Transaction) {
+      throw normalizeXenditError(new Error("Transaction capability not available on the client"), "xendit.listTransactions");
+    }
+    const raw = await client.Transaction.getAllTransactions({ currency: "IDR" });
+    return mapXenditTransactions(raw);
   }
 
   async createHostedPayment(

@@ -2,6 +2,7 @@ import "server-only";
 
 import { deriveCapabilityState, type CapabilityManifest, type CapabilityState } from "@/domain/payments/capabilities";
 import type { ConnectionVerification, WebhookHealthState } from "@/domain/payments/connection";
+import { amountFromMinor, canonicalTransactionStatus, type ProviderTransaction } from "@/domain/payments/provider-read";
 import type {
   PaymentProviderAdapter,
   ProviderConnectionContext,
@@ -130,6 +131,18 @@ export interface StripeRefundLike {
   status: string;
 }
 
+export interface StripeChargeLike {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  created?: number;
+  livemode?: boolean;
+  description?: string | null;
+  refunded?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 export interface StripeConnectAccountLike {
   id: string;
   object: string;
@@ -151,6 +164,9 @@ export interface StripeClientLike {
   readonly refunds?: {
     create(params: Record<string, unknown>): Promise<StripeRefundLike>;
   };
+  readonly charges?: {
+    list(params?: Record<string, unknown>): Promise<{ data: StripeChargeLike[] }>;
+  };
 }
 
 export interface StripeAdapterDeps {
@@ -158,6 +174,29 @@ export interface StripeAdapterDeps {
   resolveSecret(secretRef: string): Promise<string>;
   resolveSecretForConnection(connectionId: string): Promise<string | null>;
   now?(): Date;
+}
+
+/** Map a Stripe Charge to the canonical transaction DTO (never leaks SDK model). */
+export function mapStripeCharge(charge: StripeChargeLike): ProviderTransaction {
+  const amount = amountFromMinor(charge.amount, charge.currency);
+  const status = charge.refunded ? "REFUNDED" : canonicalTransactionStatus(charge.status);
+  const referenceId = String((charge.metadata?.referenceId as string | undefined) ?? charge.id);
+  return {
+    id: charge.id,
+    referenceId,
+    at: new Date((charge.created ?? Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+    amount: amount.amount,
+    currency: amount.currency,
+    status,
+    channel: "CARD",
+    methodLabel: "Card",
+    customerName: (charge.metadata?.customerName as string | undefined) ?? null,
+    customerEmail: (charge.metadata?.customerEmail as string | undefined) ?? null,
+    description: charge.description ?? null,
+    fee: null,
+    net: amount.amount,
+    source: "stripe-live",
+  };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -325,6 +364,15 @@ export class StripeAdapter implements PaymentProviderAdapter {
     const available = balance.available?.[0]?.amount ?? 0;
     const currency = balance.available?.[0]?.currency ?? "IDR";
     return { available, currency, source: "stripe-live", asOf: new Date().toISOString() };
+  }
+
+  async listTransactions(ctx: ProviderConnectionContext): Promise<ProviderTransaction[]> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.charges) {
+      throw normalizeStripeError(new Error("Charge list capability not available on the client"), "stripe.listTransactions");
+    }
+    const res = await client.charges.list({ limit: 100 });
+    return (res?.data ?? []).map((c) => mapStripeCharge(c));
   }
 
   async createHostedPayment(
