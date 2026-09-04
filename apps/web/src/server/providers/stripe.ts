@@ -125,9 +125,20 @@ export interface StripeCheckoutSessionLike {
   customer: string | null;
 }
 
+export interface StripeRefundLike {
+  id: string;
+  status: string;
+}
+
+export interface StripeConnectAccountLike {
+  id: string;
+  object: string;
+}
+
 export interface StripeClientLike {
   readonly accounts?: {
     retrieve(id: string): Promise<StripeAccountLike>;
+    create?(params: Record<string, unknown>): Promise<StripeConnectAccountLike>;
   };
   readonly balance?: {
     retrieve(): Promise<StripeBalanceLike>;
@@ -136,6 +147,9 @@ export interface StripeClientLike {
     sessions: {
       create(params: Record<string, unknown>): Promise<StripeCheckoutSessionLike | StripeClientLike>;
     };
+  };
+  readonly refunds?: {
+    create(params: Record<string, unknown>): Promise<StripeRefundLike>;
   };
 }
 
@@ -177,7 +191,13 @@ export class StripeAdapter implements PaymentProviderAdapter {
     return this.deps.createClient(secret);
   }
 
-  private async capabilities(_ctx: ProviderConnectionContext): Promise<CapabilityManifest> {
+  private async capabilities(ctx: ProviderConnectionContext): Promise<CapabilityManifest> {
+    // Write capabilities are executed through the payment-flow orchestration
+    // (idempotency + durable-operation state machine + access/step-up + audit),
+    // which is now wired. TEST-mode writes are configured and routed; LIVE-mode
+    // writes stay blocked until a KMS-backed secret store and live-activation
+    // gates are in place.
+    const writesConfigured = ctx.mode === "TEST";
     const manifest = {} as CapabilityManifest;
     const build = (state: Omit<CapabilityState, "available">): CapabilityState => deriveCapabilityState(state);
     for (const key of [
@@ -198,13 +218,15 @@ export class StripeAdapter implements PaymentProviderAdapter {
       const isWrite = !isRead;
       manifest[key] = build({
         supported,
-        configured: isRead,
-        mode: "TEST",
+        configured: isRead ? true : supported ? writesConfigured : false,
+        mode: ctx.mode,
         reason: supported
           ? isRead
             ? null
             : isWrite
-              ? "Requires durable-operation + access/MFA/audit wiring before execution"
+              ? ctx.mode === "TEST"
+                ? "TEST-mode write is routed through the payment-flow orchestration"
+                : "Required for LIVE activation: KMS-backed secret store + live-activation gates"
               : null
           : "Not supported by Stripe",
         requirements: supported
@@ -218,7 +240,7 @@ export class StripeAdapter implements PaymentProviderAdapter {
     manifest.webhookHealth = build({
       supported: true,
       configured: false,
-      mode: "TEST",
+      mode: ctx.mode,
       reason: "Stripe webhook endpoint is not yet verified",
       requirements: ["Configure the Stripe webhook endpoint"],
       lastVerifiedAt: null,
@@ -286,12 +308,16 @@ export class StripeAdapter implements PaymentProviderAdapter {
     }
   }
 
-  async getBalance(ctx: ProviderConnectionContext): Promise<{ available: number; currency: string; source: "stripe-live"; asOf: string }> {
-    const secret = await this.deps.resolveSecretForConnection(ctx.connectionId);
+  private async clientForConnection(connectionId: string): Promise<StripeClientLike> {
+    const secret = await this.deps.resolveSecretForConnection(connectionId);
     if (!secret) {
-      throw normalizeStripeError(new Error("No secret configured for this connection"), "stripe.getBalance");
+      throw normalizeStripeError(new Error("No secret configured for this connection"), "stripe.invoke");
     }
-    const client = this.deps.createClient(secret);
+    return this.deps.createClient(secret);
+  }
+
+  async getBalance(ctx: ProviderConnectionContext): Promise<{ available: number; currency: string; source: "stripe-live"; asOf: string }> {
+    const client = await this.clientForConnection(ctx.connectionId);
     if (!client.balance) {
       throw normalizeStripeError(new Error("Balance capability not available on the client"), "stripe.getBalance");
     }
@@ -299,5 +325,60 @@ export class StripeAdapter implements PaymentProviderAdapter {
     const available = balance.available?.[0]?.amount ?? 0;
     const currency = balance.available?.[0]?.currency ?? "IDR";
     return { available, currency, source: "stripe-live", asOf: new Date().toISOString() };
+  }
+
+  async createHostedPayment(
+    ctx: ProviderConnectionContext,
+    input: { externalId: string; amount: number; currency: string; customerEmail?: string | null; mode: "TEST" | "LIVE" },
+  ): Promise<{ id: string; checkoutUrl: string; status: string; externalId: string; provider: "stripe" }> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.checkout?.sessions) {
+      throw normalizeStripeError(new Error("Checkout Sessions capability not available on the client"), "stripe.createHostedPayment");
+    }
+    const session = (await client.checkout.sessions.create({
+      mode: "payment",
+      success_url: "https://example.test/checkout/success",
+      cancel_url: "https://example.test/checkout/cancel",
+      line_items: [{ price_data: { currency: input.currency, unit_amount: input.amount, product_data: { name: input.externalId } }, quantity: 1 }],
+      client_reference_id: input.externalId,
+      customer_email: input.customerEmail ?? undefined,
+    })) as StripeCheckoutSessionLike;
+    if (!session?.url) {
+      throw normalizeStripeError(new Error("Invalid Checkout Session response: missing url"), "stripe.createHostedPayment");
+    }
+    return { id: session.id, checkoutUrl: session.url, status: session.payment_status ?? "unpaid", externalId: input.externalId, provider: "stripe" };
+  }
+
+  async createRefund(
+    ctx: ProviderConnectionContext,
+    input: { idempotencyKey: string; paymentId: string; amount: number; currency: string; reason?: string | null },
+  ): Promise<{ id: string; status: string; provider: "stripe" }> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.refunds) {
+      throw normalizeStripeError(new Error("Refund capability not available on the client"), "stripe.createRefund");
+    }
+    const refund = await client.refunds.create({
+      payment_intent: input.paymentId,
+      amount: input.amount,
+      reason: input.reason === "requested_by_customer" ? "requested_by_customer" : undefined,
+    });
+    return { id: refund.id, status: refund.status ?? "pending", provider: "stripe" };
+  }
+
+  async createConnectedAccount(
+    ctx: ProviderConnectionContext,
+    input: { email: string; type: "express" | "custom" | "standard" },
+  ): Promise<{ id: string; provider: "stripe" }> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.accounts?.create) {
+      throw normalizeStripeError(new Error("Accounts.create capability not available on the client"), "stripe.createConnectedAccount");
+    }
+    const account = await client.accounts.create({
+      type: input.type,
+      email: input.email,
+      capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
+      defaults: { responsibilities: { fees_collector: "application", losses_collector: "application" } },
+    });
+    return { id: account.id, provider: "stripe" };
   }
 }

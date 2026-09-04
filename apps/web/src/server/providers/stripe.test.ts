@@ -17,9 +17,15 @@ const makeAdapter = (opts?: {
   account?: StripeAccountLike;
   balanceAvailable?: Array<{ amount: number; currency: string }>;
   secretForConnection?: string | null;
+  noCheckout?: boolean;
+  noRefunds?: boolean;
+  noAccountsCreate?: boolean;
 }): StripeAdapter => {
   const client: StripeClientLike = {
-    accounts: { async retrieve() { return opts?.account ?? fullAccount; } },
+    accounts: {
+      async retrieve() { return opts?.account ?? fullAccount; },
+      ...(opts?.noAccountsCreate ? {} : { async create(params: Record<string, unknown>) { return { id: `acct_${String(params.email).slice(0, 6)}`, object: "account" }; } }),
+    },
     balance: {
       async retrieve() {
         return {
@@ -28,6 +34,24 @@ const makeAdapter = (opts?: {
         };
       },
     },
+    ...(opts?.noCheckout
+      ? {}
+      : {
+          checkout: {
+            sessions: {
+              async create() {
+                return { id: "cs_test_1", url: "https://checkout.stripe.test/cs_test_1", status: "open", payment_status: "unpaid", amount_total: 1000, currency: "usd", customer: null };
+              },
+            },
+          },
+        }),
+    ...(opts?.noRefunds
+      ? {}
+      : {
+          refunds: {
+            async create() { return { id: "re_test_1", status: "pending" }; },
+          },
+        }),
   };
   return new StripeAdapter({
     createClient: () => client,
@@ -85,6 +109,45 @@ describe("stripe adapter getBalance", () => {
 
   it("throws a safe error when no secret is configured", async () => {
     await expect(makeAdapter({ secretForConnection: null }).getBalance(ctx)).rejects.toThrow(/No secret configured/);
+  });
+});
+
+describe("stripe adapter write capabilities", () => {
+  it("creates a hosted payment Checkout Session and normalizes the result", async () => {
+    const result = await makeAdapter().createHostedPayment(ctx, {
+      externalId: "inv-ext-1",
+      amount: 2500000,
+      currency: "IDR",
+      mode: "TEST",
+    });
+    expect(result).toEqual({
+      id: "cs_test_1",
+      checkoutUrl: "https://checkout.stripe.test/cs_test_1",
+      status: "unpaid",
+      externalId: "inv-ext-1",
+      provider: "stripe",
+    });
+  });
+
+  it("throws a safe error when Checkout Sessions is not available", async () => {
+    await expect(makeAdapter({ noCheckout: true }).createHostedPayment(ctx, { externalId: "x", amount: 1, currency: "IDR", mode: "TEST" })).rejects.toThrow(/Checkout Sessions/);
+  });
+
+  it("creates a refund", async () => {
+    const result = await makeAdapter().createRefund(ctx, {
+      idempotencyKey: "op-abcdef",
+      paymentId: "pi_123",
+      amount: 2500000,
+      currency: "IDR",
+    });
+    expect(result).toEqual({ id: "re_test_1", status: "pending", provider: "stripe" });
+  });
+
+  it("creates a connected account and never accepts a client-supplied account id", async () => {
+    const result = await makeAdapter().createConnectedAccount(ctx, { email: "merchant@example.com", type: "express" });
+    expect(result.provider).toBe("stripe");
+    expect(result.id).toMatch(/^acct_/);
+    expect(result.id).not.toContain("Stripe-Account");
   });
 });
 

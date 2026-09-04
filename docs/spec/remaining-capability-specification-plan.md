@@ -30,8 +30,8 @@ It intentionally replaces a "one big implementation" impulse with the module-by-
 | Better Auth models / `LedgerEntry` / mock facades | untouched | ✅ |
 | Provider SDK imports | only `apps/web/src/lib/xendit.ts` | ✅ |
 | `xendit-node@7.0.0` mapping audit | `docs/audit/xendit-mapping-audit.md` (5 iterations, `MISSING_COUNT = 0`) | ✅ historical; must be re-run per-capability after implementation |
-| Stripe SDK | not present | ⛔ not started |
-| Stripe ADR | not present | ⛔ required before `stripe-adapter` |
+| Stripe SDK | `apps/web/src/lib/stripe.ts` (server-only boundary; SDK v22.6.1 pinned API version `2026-08-26.dahlia`) | ✅ implemented |
+| Stripe ADR | `docs/adr/0028-stripe-connect-architecture.md` | ✅ Accepted (gate closed) |
 
 **Known baseline (from `provider-domain-verification-matrix.md`, not re-run here because node_modules is not installed in this sandbox):** focused domain/repository tests pass (51/51 at split-rule point); full suite `329/331` with two independently reproduced pre-existing `getBalanceTrend` failures; one isolated UI-dialog test has been observed flaky in the historical sweep. This gate does not rely on those numbers for approval; it flags them so the next module compares against the same baseline.
 
@@ -42,22 +42,36 @@ It intentionally replaces a "one big implementation" impulse with the module-by-
 - Focused `provider-domain` domain/repository tests: 54 passed.
 - Full suite: baseline 337/340 (2 pre-existing `getBalanceTrend` + 1 flaky `balance-dialogs`). After Wave 0 implementation added, **433 passed / 2 failed** (only the 2 `getBalanceTrend`; the flaky dialog passed this run).
 - Typecheck (`tsc --noEmit`) exit 0; eslint exit 0 on all new files.
-- Prisma CLI engine binary **cannot be downloaded** in this sandbox (network to `binaries.prisma.sh` blocked) and **no PostgreSQL service** is present. Therefore `prisma validate`, `prisma generate`, `prisma migrate`, and DB-backed integration tests **were not run here**. Schema/db work must run in an environment with the Prisma engine + a PostgreSQL instance.
+- Prisma CLI engine binary **cannot be downloaded** in this sandbox (network to `binaries.prisma.sh` blocked) and **no PostgreSQL service** is present. The migration SQL chain is instead validated by running it on a real Postgres engine via `@electric-sql/pglite` (WASM) in `apps/web/src/server/repositories/wave0-persistence.integration.test.ts` (**10 tests green**). `prisma validate` / `prisma generate` / `prisma migrate status` still cannot run here and must be re-run in a Prisma-enabled environment.
 
 ### Wave 0 implementation progress
 
-| Module | Domain/service contract | Committed | Persistence + adapter (blocked here) |
+| Module | Domain/service contract | Committed | Persistence + adapter |
 |---|---|---|---|
-| `provider-connections` | state machine + capability manifest + provider registry | `88269f3` | connection `capabilityManifest`/requirements/webhook-health/`lastVerifiedAt` columns — next migration |
-| `provider-secrets` | SecretStore abstraction + local AES-256-GCM adapter + redaction | `f83b203` | `secret_ref`/`credential_version`/rotation columns + KMS SDK wiring |
-| `organization-access` | org roles + least-privilege permission matrix | `bea2906` | membership model + session→org resolution |
-| `financial-step-up` | challenge binding + dual-control policy | `bea2906` | persisted challenge/proof records + WebAuthn/TOTP integration |
-| `durable-operations` | operation state machine + stable idempotency + request hash + UNKNOWN reconcile | `b3c5686` | durable operation table + outbox worker |
-| `audit-ledger` | strict AuditEvent + redaction + dedupe id | `b3c5686` | immutable audit table + sink |
-| `webhook-ingress` | Xendit token / Stripe signature verify + dedupe + redacted envelope | `56f6aea` | durable webhook_delivery table + route wiring |
-| `event-projection` | canonical status map + optimistic-version projector guard | `56f6aea` | projector jobs + outbox |
+| `provider-connections` | state machine + capability manifest + provider registry | `d787268` | connection verification columns + PGlite-validated migration (`d0214ad`) |
+| `provider-secrets` | SecretStore abstraction + local AES-256-GCM adapter + redaction | `15a89c0` | `SecretRecord` model + migration (`d0214ad`) |
+| `organization-access` | org roles + least-privilege permission matrix | `53a8324` | session→org resolution on membership |
+| `financial-step-up` | challenge binding + dual-control policy | `53a8324` | operation-bound proof binding |
+| `durable-operations` | operation state machine + stable idempotency + request hash + UNKNOWN reconcile | `1fb5b00` | `DurableOperation` table + migration (`d0214ad`) |
+| `audit-ledger` | strict AuditEvent + redaction + dedupe id | `1fb5b00` | immutable `AuditEvent` table + migration (`d0214ad`) |
+| `webhook-ingress` | Xendit token / Stripe signature verify + dedupe + redacted envelope | `b11b6e7` | `WebhookDelivery` table + migration (`d0214ad`) |
+| `event-projection` | canonical status map + optimistic-version projector guard | `b11b6e7` | idempotent projector guards |
 
 Specs/matrices: `SPEC-provider-connections.md`, `SPEC-provider-secrets.md`, `SPEC-organization-access.md`, `SPEC-financial-step-up.md`; verification evidence in `provider-connections-verification-matrix.md`, `provider-secrets-verification-matrix.md`.
+
+### Wave 1 adapter + TEST-mode write orchestration progress
+
+| Item | Evidence | Status |
+|---|---|---|
+| Xendit adapter read+write boundary | `apps/web/src/server/providers/xendit.ts` (Invoice/Refund/Payout write clients + normalized DTOs) | ✅ implemented |
+| Stripe adapter read+write boundary | `apps/web/src/server/providers/stripe.ts` (Checkout Session/Refund/Connect account writes + normalized DTOs) | ✅ implemented |
+| Registry capability gate | `apps/web/src/server/providers/registry.ts` (invokeCapability gates on `supported` + `configured`; no mock fallback) | ✅ implemented |
+| TEST-mode write orchestration | `apps/web/src/server/payment-flows/payment-flow.ts` (`PaymentFlowService`: idempotency key + durable-operation state machine + org RBAC + step-up/dual-control + audit) | ✅ implemented |
+| Write capabilities marked configured in TEST | adapters report write `configured: true` for `mode === "TEST"`; LIVE writes remain blocked until KMS-backed secret store + live-activation gates | ✅ implemented |
+| Adapter write tests | `xendit.test.ts` (14) + `stripe.test.ts` (15) incl. normalized create paths + safe-error branches | ✅ green |
+| Flow orchestration tests | `payment-flow.test.ts` (9): authz deny, dual-control require/distinct, idempotency DUPLICATE, capability-not-configured no-retry, audit + state transitions | ✅ green |
+
+Notes: provider (`xendit`/`stripe`) write methods are only invoked through the registry `invokeCapability` boundary; the SDK is imported solely in the server-only `apps/web/src/lib/{xendit,stripe}.ts` boundaries, and provider SDK models never leak to UI/application services. No real money movement in any test; only in-memory fakes / test keys. Focused suite for these modules: **177 tests green** (domain/payments + security + organization + providers + repositories + webhooks + payment-flows), plus the earlier Wave 0 + adapters baseline.
 
 ## 3. Which existing research documents feed which module
 

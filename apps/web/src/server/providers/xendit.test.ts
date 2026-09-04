@@ -10,6 +10,9 @@ const makeAdapter = (opts?: {
   balance?: { balance: number; currency: string };
   failWith?: unknown;
   secretForConnection?: string | null;
+  noInvoice?: boolean;
+  noRefund?: boolean;
+  noPayout?: boolean;
 }): XenditAdapter => {
   const client: XenditClientLike = {
     Balance: {
@@ -20,6 +23,36 @@ const makeAdapter = (opts?: {
         return opts?.balance ?? { balance: 1234567, currency: "IDR" };
       },
     },
+    ...(opts?.noInvoice
+      ? {}
+      : {
+          Invoice: {
+            async createInvoice(args: Record<string, unknown>) {
+              if (opts?.failWith) throw opts.failWith;
+              return { id: `inv_${String(args.externalId)}`, invoiceUrl: `https://xendit.test/inv/${String(args.externalId)}`, status: "OPEN" };
+            },
+          },
+        }),
+    ...(opts?.noRefund
+      ? {}
+      : {
+          Refund: {
+            async createRefund(args: { data: Record<string, unknown>; idempotencyKey?: string }) {
+              if (opts?.failWith) throw opts.failWith;
+              return { id: `ref_${String(args.idempotencyKey ?? "").slice(0, 8)}`, status: "PENDING" };
+            },
+          },
+        }),
+    ...(opts?.noPayout
+      ? {}
+      : {
+          Payout: {
+            async createPayout(args: { idempotencyKey: string; data: Record<string, unknown> }) {
+              if (opts?.failWith) throw opts.failWith;
+              return { id: `po_${String(args.idempotencyKey).slice(0, 8)}`, status: "REQUESTED" };
+            },
+          },
+        }),
   };
   return new XenditAdapter({
     createClient: () => client,
@@ -77,6 +110,55 @@ describe("xendit adapter getBalance", () => {
   it("throws a safe error when no secret is configured for the connection", async () => {
     const adapter = makeAdapter({ secretForConnection: null });
     await expect(adapter.getBalance(ctx)).rejects.toThrow(/No secret configured/);
+  });
+});
+
+describe("xendit adapter write capabilities", () => {
+  it("creates a hosted payment link (invoice) and normalizes the result", async () => {
+    const result = await makeAdapter().createHostedPayment(ctx, {
+      externalId: "inv-ext-1",
+      amount: 2500000,
+      currency: "IDR",
+      description: "test",
+    });
+    expect(result).toEqual({
+      id: "inv_inv-ext-1",
+      checkoutUrl: "https://xendit.test/inv/inv-ext-1",
+      status: "OPEN",
+      externalId: "inv-ext-1",
+      provider: "xendit",
+    });
+  });
+
+  it("fails safely when the invoice client is not present on the connection", async () => {
+    const adapter = makeAdapter({ noInvoice: true });
+    await expect(adapter.createHostedPayment(ctx, { externalId: "x", amount: 1, currency: "IDR" })).rejects.toThrow(/Invoice capability/);
+  });
+
+  it("creates a refund with an idempotency key", async () => {
+    const result = await makeAdapter().createRefund(ctx, {
+      idempotencyKey: "op-abcdef",
+      paymentId: "pay_1",
+      amount: 2500000,
+      currency: "IDR",
+    });
+    expect(result.provider).toBe("xendit");
+    expect(result.id).toMatch(/^ref_/);
+    expect(result.status).toBe("PENDING");
+  });
+
+  it("creates a payout with an idempotency key", async () => {
+    const result = await makeAdapter().createPayout(ctx, {
+      idempotencyKey: "op-abcdef",
+      referenceId: "recpt-1",
+      channelCode: "BRI",
+      accountNumber: "1234567890",
+      amount: 5000000,
+      currency: "IDR",
+    });
+    expect(result.provider).toBe("xendit");
+    expect(result.id).toMatch(/^po_/);
+    expect(result.status).toBe("REQUESTED");
   });
 });
 

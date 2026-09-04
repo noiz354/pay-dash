@@ -107,9 +107,24 @@ export interface XenditTransactionClient {
   getTransactionByID(args: { id: string }): Promise<unknown>;
 }
 
+export interface XenditInvoiceClient {
+  createInvoice(args: Record<string, unknown>): Promise<{ id: string; invoiceUrl?: string; status?: string }>;
+}
+
+export interface XenditRefundClient {
+  createRefund(args: { data: Record<string, unknown>; idempotencyKey?: string }): Promise<{ id: string; status?: string }>;
+}
+
+export interface XenditPayoutClient {
+  createPayout(args: { idempotencyKey: string; data: Record<string, unknown> }): Promise<{ id: string; status?: string }>;
+}
+
 export interface XenditClientLike {
   readonly Balance: XenditBalanceClient;
   readonly Transaction?: XenditTransactionClient;
+  readonly Invoice?: XenditInvoiceClient;
+  readonly Refund?: XenditRefundClient;
+  readonly Payout?: XenditPayoutClient;
 }
 
 export interface XenditAdapterDeps {
@@ -207,8 +222,14 @@ export class XenditAdapter implements PaymentProviderAdapter {
     }
   }
 
-  async getCapabilities(_ctx: ProviderConnectionContext): Promise<CapabilityManifest> {
+  async getCapabilities(ctx: ProviderConnectionContext): Promise<CapabilityManifest> {
     const configuredRead = true; // a verified connection can read balance/transactions
+    // Write capabilities are executed through the payment-flow orchestration
+    // (idempotency + durable-operation state machine + access/step-up + audit),
+    // which is now wired. TEST-mode writes are configured and routed; LIVE-mode
+    // writes stay blocked until a KMS-backed secret store and live-activation
+    // gates are in place.
+    const writesConfigured = ctx.mode === "TEST";
     const manifest = {} as CapabilityManifest;
     const build = (state: Omit<CapabilityState, "available">): CapabilityState => deriveCapabilityState(state);
 
@@ -229,12 +250,14 @@ export class XenditAdapter implements PaymentProviderAdapter {
       const isRead = key === "balanceRead" || key === "transactionRead";
       manifest[key] = build({
         supported,
-        configured: isRead ? configuredRead : false,
-        mode: "TEST",
+        configured: isRead ? configuredRead : supported ? writesConfigured : false,
+        mode: ctx.mode,
         reason: supported
           ? isRead
             ? null
-            : "Requires durable-operation + access/MFA/audit wiring before execution"
+            : ctx.mode === "TEST"
+              ? "TEST-mode write is routed through the payment-flow orchestration"
+              : "Required for LIVE activation: KMS-backed secret store + live-activation gates"
           : "Not supported by the Xendit SDK; requires an approved direct HTTP integration",
         requirements: supported
           ? isRead
@@ -247,7 +270,7 @@ export class XenditAdapter implements PaymentProviderAdapter {
     manifest.webhookHealth = build({
       supported: true,
       configured: false,
-      mode: "TEST",
+      mode: ctx.mode,
       reason: "Webhook callback is not yet verified",
       requirements: ["Configure the Xendit callback endpoint"],
       lastVerifiedAt: null,
@@ -255,13 +278,86 @@ export class XenditAdapter implements PaymentProviderAdapter {
     return manifest;
   }
 
-  async getBalance(ctx: ProviderConnectionContext): Promise<{ available: number; currency: string; source: "xendit-live"; asOf: string }> {
-    const secret = await this.deps.resolveSecretForConnection(ctx.connectionId);
+  private async clientForConnection(connectionId: string): Promise<XenditClientLike> {
+    const secret = await this.deps.resolveSecretForConnection(connectionId);
     if (!secret) {
-      throw normalizeXenditError(new Error("No secret configured for this connection"), "xendit.getBalance");
+      throw normalizeXenditError(new Error("No secret configured for this connection"), "xendit.invoke");
     }
-    const client = this.deps.createClient(secret);
+    return this.deps.createClient(secret);
+  }
+
+  async getBalance(ctx: ProviderConnectionContext): Promise<{ available: number; currency: string; source: "xendit-live"; asOf: string }> {
+    const client = await this.clientForConnection(ctx.connectionId);
     const balance = await client.Balance.getBalance({ accountType: "CASH", currency: "IDR" });
     return { available: balance.balance, currency: balance.currency, source: "xendit-live", asOf: new Date().toISOString() };
+  }
+
+  async createHostedPayment(
+    ctx: ProviderConnectionContext,
+    input: { externalId: string; amount: number; currency: string; description?: string; payerEmail?: string | null },
+  ): Promise<{ id: string; checkoutUrl: string; status: string; externalId: string; provider: "xendit" }> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.Invoice) {
+      throw normalizeXenditError(new Error("Invoice capability not available on the client"), "xendit.createHostedPayment");
+    }
+    const invoice = await client.Invoice.createInvoice({
+      externalId: input.externalId,
+      amount: input.amount,
+      currency: input.currency,
+      description: input.description,
+      payerEmail: input.payerEmail ?? undefined,
+    });
+    if (!invoice?.invoiceUrl) {
+      throw normalizeXenditError(new Error("Invalid invoice response: missing invoiceUrl"), "xendit.createHostedPayment");
+    }
+    return {
+      id: invoice.id,
+      checkoutUrl: invoice.invoiceUrl,
+      status: invoice.status ?? "OPEN",
+      externalId: input.externalId,
+      provider: "xendit",
+    };
+  }
+
+  async createRefund(
+    ctx: ProviderConnectionContext,
+    input: { idempotencyKey: string; paymentId: string; amount: number; currency: string; reason?: string | null },
+  ): Promise<{ id: string; status: string; provider: "xendit" }> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.Refund) {
+      throw normalizeXenditError(new Error("Refund capability not available on the client"), "xendit.createRefund");
+    }
+    const refund = await client.Refund.createRefund({
+      idempotencyKey: input.idempotencyKey,
+      data: {
+        id: input.paymentId,
+        amount: input.amount,
+        currency: input.currency,
+        reason: input.reason ?? undefined,
+      },
+    });
+    return { id: refund.id, status: refund.status ?? "PENDING", provider: "xendit" };
+  }
+
+  async createPayout(
+    ctx: ProviderConnectionContext,
+    input: { idempotencyKey: string; referenceId: string; channelCode: string; accountNumber: string; accountHolderName?: string; amount: number; currency: string; description?: string },
+  ): Promise<{ id: string; status: string; provider: "xendit" }> {
+    const client = await this.clientForConnection(ctx.connectionId);
+    if (!client.Payout) {
+      throw normalizeXenditError(new Error("Payout capability not available on the client"), "xendit.createPayout");
+    }
+    const payout = await client.Payout.createPayout({
+      idempotencyKey: input.idempotencyKey,
+      data: {
+        referenceId: input.referenceId,
+        channelCode: input.channelCode,
+        channelProperties: { accountNumber: input.accountNumber, accountHolderName: input.accountHolderName },
+        amount: input.amount,
+        currency: input.currency,
+        description: input.description,
+      },
+    });
+    return { id: payout.id, status: payout.status ?? "REQUESTED", provider: "xendit" };
   }
 }
