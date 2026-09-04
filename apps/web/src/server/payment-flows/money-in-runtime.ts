@@ -53,8 +53,9 @@ export type HostedPaymentInput = {
   organizationId?: string;
 };
 
-/** Build the provider registry with real SDK clients + real secret resolution. */
-function buildDefaultRegistry(resolver: RuntimeConnectionResolver): ProviderRegistry {
+/** Build the provider registry with real SDK clients + real secret resolution.
+ *  Shared by the money-in flow and the provider write/read helpers. */
+export function buildProviderRuntimeRegistry(resolver: RuntimeConnectionResolver): ProviderRegistry {
   const resolveSecretForConnection = async (connectionId: string): Promise<string | null> => {
     const resolved = await resolver.resolveForConnection(connectionId);
     return resolved?.secret ?? null;
@@ -96,7 +97,7 @@ export async function createMoneyInRuntime(deps: MoneyInRuntimeDeps = {}) {
       };
     });
 
-  const registry = deps.registry ?? buildDefaultRegistry(resolver);
+  const registry = deps.registry ?? buildProviderRuntimeRegistry(resolver);
   const operations = deps.operations ?? (await buildOperationStore());
   const audit = deps.audit ?? (await buildAuditStore());
   const actor: FlowActor = deps.actor ?? { id: "system", roles: ["OWNER"] };
