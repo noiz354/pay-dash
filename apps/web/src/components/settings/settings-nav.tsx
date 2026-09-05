@@ -12,6 +12,7 @@ export const SETTINGS_LINKS = [
   { href: "/settings/notifications", label: "Notifications", icon: "notifications" },
   { href: "/settings/api-keys", label: "API Keys", icon: "key" },
   { href: "/settings/developer", label: "Developer", icon: "code" },
+  { href: "/settings/mcp", label: "MCP & Data", icon: "hub" },
 ] as const;
 
 export function SettingsNav({ className }: { className?: string }) {

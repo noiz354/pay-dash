@@ -20,6 +20,10 @@ export const env = createEnv({
     SECRET_STORE_KMS_KEY_ID: z.string().optional(),
     // Trusted public origin for webhook callback URLs / redirects / OAuth.
     PAYMENTS_PUBLIC_ORIGIN: z.string().url().optional(),
+    // Data-source toggle for the MCP server + dashboard stores.
+    PAYDASH_DATA_SOURCE: z.enum(["memory", "postgres"]).default("memory"),
+    // Bootstrap MCP bearer token fallback (runtime settings override it).
+    MCP_ACCESS_TOKEN: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().optional(),
@@ -40,6 +44,8 @@ export const env = createEnv({
     SECRET_STORE_KEY: process.env.SECRET_STORE_KEY,
     SECRET_STORE_KMS_KEY_ID: process.env.SECRET_STORE_KMS_KEY_ID,
     PAYMENTS_PUBLIC_ORIGIN: process.env.PAYMENTS_PUBLIC_ORIGIN,
+    PAYDASH_DATA_SOURCE: process.env.PAYDASH_DATA_SOURCE,
+    MCP_ACCESS_TOKEN: process.env.MCP_ACCESS_TOKEN,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_UMAMI_URL: process.env.NEXT_PUBLIC_UMAMI_URL,
     NEXT_PUBLIC_UMAMI_WEBSITE_ID: process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID,
