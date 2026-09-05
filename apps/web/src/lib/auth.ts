@@ -7,13 +7,16 @@ import { env } from "@/lib/env";
 
 // Reusable Better Auth — NEXTJS #103, ADR-0004 (swappable to Clerk via lib/auth.ts + proxy.ts)
 // Postgres + Prisma adapter, session via DB (no secondaryStorage), emailAndPassword enabled
+// baseURL resolves from env; when unset Better Auth falls back to the request origin
+// (never a hardcoded localhost — that breaks Cloud Run behind a public origin).
+const baseURL = env.BETTER_AUTH_URL ?? env.NEXT_PUBLIC_APP_URL;
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
   // Secret/URL from env (validated via @t3-oss/env-nextjs, fallback for dev)
   secret: env.BETTER_AUTH_SECRET,
-  baseURL: env.BETTER_AUTH_URL ?? env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  baseURL,
   emailAndPassword: {
     enabled: true,
     // Require email verification in prod, auto-verify in dev
@@ -41,7 +44,7 @@ export const auth = betterAuth({
       },
     },
   },
-  trustedOrigins: env.NEXT_PUBLIC_APP_URL ? [env.NEXT_PUBLIC_APP_URL] : undefined,
+  trustedOrigins: baseURL ? [baseURL] : undefined,
 });
 
 // Types for DAL usage
