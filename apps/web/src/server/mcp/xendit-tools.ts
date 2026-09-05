@@ -2,57 +2,27 @@ import "server-only";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { env } from "@/lib/env";
-import { getRuntimeSettingsStore, type RuntimeSettingsStore } from "@/server/settings/runtime-settings";
-import { textResult } from "./handlers";
+import {
+  buildXenditReadDeps,
+  executeXenditReadTool,
+  type MinimalXenditClient,
+  type XenditReadDeps,
+} from "@/server/ai-journal/xendit-read";
+import { textResult, type McpToolResult } from "./handlers";
 
-export type MinimalXenditClient = {
-  Balance: { getBalance(opts: { accountType: string; currency: string }): Promise<{ balance: number; currency: string }> };
-  Invoice: { createInvoice(opts: Record<string, unknown>): Promise<{ id: string; invoice_url?: string; status?: string }> };
-  Transaction: { getAllTransactions(opts?: Record<string, unknown>): Promise<Array<Record<string, unknown>>> };
-};
+export type { MinimalXenditClient };
+export type XenditToolDeps = XenditReadDeps;
+export const buildXenditToolDeps = buildXenditReadDeps;
 
-export type XenditToolDeps = {
-  store: RuntimeSettingsStore;
-  getSecret: () => string | null;
-  createClient: (secret: string) => MinimalXenditClient | Promise<MinimalXenditClient>;
-};
-
-export function buildXenditToolDeps(overrides: Partial<XenditToolDeps> = {}): XenditToolDeps {
-  return {
-    store: overrides.store ?? getRuntimeSettingsStore(),
-    getSecret: overrides.getSecret ?? (() => env.XENDIT_SECRET_KEY ?? null),
-    createClient:
-      overrides.createClient ??
-      (async (secret) => {
-        const { createXenditClient } = await import("@/lib/xendit");
-        return createXenditClient(secret) as unknown as MinimalXenditClient;
-      }),
-  };
-}
-
-export async function xenditGetBalance(deps: XenditToolDeps): Promise<{ content: Array<{ type: "text"; text: string }> }> {
-  const settings = await deps.store.get();
-  if (!settings.xenditEnabled) {
-    return textResult({ error: "Xendit live calls are disabled in runtime settings." });
-  }
-  const secret = deps.getSecret();
-  if (!secret) {
-    return textResult({ error: "Xendit secret key is not configured." });
-  }
-  try {
-    const client = await deps.createClient(secret);
-    const balance = await client.Balance.getBalance({ accountType: "CASH", currency: "IDR" });
-    return textResult({ available: balance.balance, currency: balance.currency, source: "xendit-live" });
-  } catch (error) {
-    return textResult({ error: error instanceof Error ? error.message : "Xendit balance call failed." });
-  }
+export async function xenditGetBalance(deps: XenditToolDeps): Promise<McpToolResult> {
+  const result = await executeXenditReadTool("xendit_get_balance", {}, deps);
+  return textResult(result.ok ? result.data : { error: result.error });
 }
 
 export async function xenditCreateInvoice(
   deps: XenditToolDeps,
   input: { externalId: string; amount: number; description?: string; payerEmail?: string }
-): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+): Promise<McpToolResult> {
   const settings = await deps.store.get();
   if (!settings.xenditEnabled) {
     return textResult({ error: "Xendit live calls are disabled in runtime settings." });
@@ -75,26 +45,9 @@ export async function xenditCreateInvoice(
   }
 }
 
-export async function xenditListTransactions(
-  deps: XenditToolDeps,
-  input: { limit?: number }
-): Promise<{ content: Array<{ type: "text"; text: string }> }> {
-  const settings = await deps.store.get();
-  if (!settings.xenditEnabled) {
-    return textResult({ error: "Xendit live calls are disabled in runtime settings." });
-  }
-  const secret = deps.getSecret();
-  if (!secret) {
-    return textResult({ error: "Xendit secret key is not configured." });
-  }
-  try {
-    const client = await deps.createClient(secret);
-    const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
-    const transactions = await client.Transaction.getAllTransactions({ limit: String(limit) });
-    return textResult({ count: Array.isArray(transactions) ? transactions.length : 0, source: "xendit-live" });
-  } catch (error) {
-    return textResult({ error: error instanceof Error ? error.message : "Xendit transactions call failed." });
-  }
+export async function xenditListTransactions(deps: XenditToolDeps, input: { limit?: number }): Promise<McpToolResult> {
+  const result = await executeXenditReadTool("xendit_list_transactions", { limit: input.limit }, deps);
+  return textResult(result.ok ? result.data : { error: result.error });
 }
 
 export function registerXenditTools(server: McpServer, deps: XenditToolDeps = buildXenditToolDeps()): void {

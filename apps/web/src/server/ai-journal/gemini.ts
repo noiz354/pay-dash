@@ -2,10 +2,12 @@ import "server-only";
 
 import { buildSystemInstruction, messagesToGeminiContents, type PromptMessage } from "@/lib/ai-journal/prompt";
 import type { JournalMode } from "@/lib/ai-journal/types";
+import { executeXenditReadTool, XENDIT_READ_FUNCTIONS } from "./xendit-read";
 import { getGeminiApiKey } from "./secrets";
 
 const RECOVERABLE_GEMINI_STATUS = new Set([404, 429, 500, 503]);
 const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
+const MAX_TOOL_ROUNDS = 3;
 
 export const GEMINI_MODEL_FALLBACKS = [
   process.env.GEMINI_MODEL ?? "gemini-3.6-flash",
@@ -14,9 +16,14 @@ export const GEMINI_MODEL_FALLBACKS = [
   "gemini-3.7-flash",
 ].filter((model, index, models) => models.indexOf(model) === index);
 
+type GeminiPart =
+  | { text?: string }
+  | { functionCall?: { name: string; args?: Record<string, unknown>; id?: string }; thoughtSignature?: string }
+  | { functionResponse?: { name: string; response: Record<string, unknown> } };
+
 type GeminiCandidate = {
   content?: {
-    parts?: Array<{ text?: string }>;
+    parts?: GeminiPart[];
   };
   finishReason?: string;
 };
@@ -28,6 +35,11 @@ type GeminiGenerateResponse = {
   };
 };
 
+type GeminiTurn = {
+  role: "user" | "model";
+  parts: GeminiPart[];
+};
+
 export type GenerateJournalReplyInput = {
   mode: JournalMode;
   messages: PromptMessage[];
@@ -36,12 +48,13 @@ export type GenerateJournalReplyInput = {
 export type GenerateJournalReplyResult = {
   text: string;
   model: string;
+  toolCalls?: string[];
 };
 
 function extractText(response: GeminiGenerateResponse): string {
   const text = response.candidates
     ?.flatMap((candidate) => candidate.content?.parts ?? [])
-    .map((part) => part.text ?? "")
+    .map((part) => ("text" in part ? part.text ?? "" : ""))
     .join("\n")
     .trim();
 
@@ -60,36 +73,73 @@ async function generateWithModel({
   mode,
   messages,
   model,
-}: GenerateJournalReplyInput & { apiKey: string; model: string }) {
+}: GenerateJournalReplyInput & { apiKey: string; model: string }): Promise<GenerateJournalReplyResult> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const timeout = setTimeout(() => controller.abort(), 45_000);
 
   try {
-    const response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
-      signal: controller.signal,
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: buildSystemInstruction(mode) }],
-        },
-        contents: messagesToGeminiContents(messages),
-        generationConfig: {
-          temperature: mode === "brainstorm" ? 0.75 : 0.35,
-          topP: 0.95,
-          maxOutputTokens: mode === "submission-review" ? 1_200 : 900,
-        },
-      }),
-    });
+    let contents: GeminiTurn[] = messagesToGeminiContents(messages);
+    const toolCalls: string[] = [];
 
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      const error = new Error(`Gemini ${model} failed with ${response.status}: ${detail.slice(0, 240)}`);
-      error.name = response.status.toString();
-      throw error;
+    for (let round = 0; round <= MAX_TOOL_ROUNDS; round += 1) {
+      const response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        signal: controller.signal,
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: buildSystemInstruction(mode) }],
+          },
+          contents,
+          generationConfig: {
+            temperature: mode === "brainstorm" ? 0.75 : 0.35,
+            topP: 0.95,
+            maxOutputTokens: mode === "submission-review" ? 1_200 : 900,
+          },
+          tools: [{ functionDeclarations: XENDIT_READ_FUNCTIONS }],
+          toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+        }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        const error = new Error(`Gemini ${model} failed with ${response.status}: ${detail.slice(0, 240)}`);
+        error.name = response.status.toString();
+        throw error;
+      }
+
+      const parsed = (await response.json()) as GeminiGenerateResponse;
+      const parts = parsed.candidates?.[0]?.content?.parts ?? [];
+      const call = parts.find(
+        (part): part is { functionCall: { name: string; args?: Record<string, unknown>; id?: string }; thoughtSignature?: string } =>
+          "functionCall" in part && Boolean(part.functionCall)
+      );
+
+      if (call?.functionCall) {
+        const { name, args, id } = call.functionCall;
+        const thoughtSignature = call.thoughtSignature;
+        toolCalls.push(name);
+        const result = await executeXenditReadTool(name, args ?? {});
+        contents = [
+          ...contents,
+          {
+            role: "model",
+            parts: [
+              {
+                functionCall: { name, args: args ?? {}, ...(id ? { id } : {}) },
+                ...(thoughtSignature ? { thoughtSignature } : {}),
+              },
+            ],
+          },
+          { role: "user", parts: [{ functionResponse: { name, response: result.ok ? result.data : { error: result.error } } }] },
+        ];
+        continue;
+      }
+
+      return { text: extractText(parsed), model, toolCalls };
     }
 
-    return extractText((await response.json()) as GeminiGenerateResponse);
+    throw new Error("Gemini exceeded the maximum number of tool rounds.");
   } finally {
     clearTimeout(timeout);
   }
@@ -107,8 +157,7 @@ export async function generateJournalReply(input: GenerateJournalReplyInput): Pr
 
   for (const model of GEMINI_MODEL_FALLBACKS) {
     try {
-      const text = await generateWithModel({ apiKey, model, ...input });
-      return { text, model };
+      return await generateWithModel({ apiKey, model, ...input });
     } catch (error) {
       lastError = error;
       if (!isRecoverable(error)) break;
