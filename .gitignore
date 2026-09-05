@@ -14,8 +14,12 @@ apps/web/tsconfig.tsbuildinfo
 .env
 .env.*
 !.env.example
+!.env.gcp.example
 *.pem
 *.key
+
+# payment provider key material (never commit)
+xendit-key/
 
 # os / editor
 .DS_Store

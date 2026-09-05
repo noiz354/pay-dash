@@ -107,7 +107,6 @@ model Organization {
   secretRecords       SecretRecord[]
   durableOperations   DurableOperation[]
   auditEvents         AuditEvent[]
-  webhookDeliveries   WebhookDelivery[]
 }
 
 // Organization membership (organization-access). Links a signed-in user to an

@@ -1,0 +1,23 @@
+.git
+.gitignore
+.gcloudignore
+node_modules
+apps/web/node_modules
+apps/web/.next
+**/.next
+*.log
+
+# never upload secrets / key material into Cloud Build
+.env
+.env.*
+!.env.example
+!.env.gcp.example
+!.env.production
+xendit-key/
+**/.env
+**/.env.*
+!.env.example
+!.env.gcp.example
+!.env.production
+*.pem
+*.key

@@ -9,7 +9,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 FROM base AS deps
 RUN corepack enable pnpm && corepack prepare pnpm@9.12.0 --activate
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY apps/web/package.json ./apps/web/package.json
+COPY apps/web/package.json apps/web/prisma ./apps/web/
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
@@ -35,8 +35,8 @@ RUN apk add --no-cache curl \
  && adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/apps/web/.next/standalone/apps/web ./apps/web
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 RUN mkdir -p ./apps/web/public
 
