@@ -15,7 +15,7 @@ const handleI18nRouting = createMiddleware(routing);
 const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/ai-journal", "/api/auth", "/api/health", "/_next", "/favicon", "/static"];
 const PUBLIC_API_PREFIXES = ["/api/auth", "/api/health", "/api/webhooks", "/api/vitals"];
 
-function authMode(): "strict" | "preview" | "off" {
+export function authMode(): "strict" | "preview" | "off" {
   const raw = process.env.AUTH_ENFORCED;
   if (raw === "off" || raw === "0" || raw === "false") return "off";
   if (raw === "preview") return "preview";
@@ -26,7 +26,7 @@ function isPreviewBypass(request: NextRequest): boolean {
   return request.headers.get("x-preview-bypass") === "1" || request.nextUrl.searchParams.get("preview_bypass") === "1";
 }
 
-function shouldEnforceAuth(request: NextRequest): boolean {
+export function shouldEnforceAuth(request: NextRequest): boolean {
   const mode = authMode();
   if (mode === "off") return false;
   if (mode === "preview" && isPreviewBypass(request)) return false;
