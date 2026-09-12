@@ -1,5 +1,7 @@
 import "server-only";
-import { createTransaction, getLedgerRows } from "./transactions";
+import { createTransaction } from "./transactions";
+import type { OrganizationContext } from "@/domain/tenancy/organization-context";
+import { legacyLedgerRows } from "./transactions-unscoped";
 import { LINK_STATUSES } from "@/lib/link-status";
 import type { LinkStatus } from "@/lib/link-status";
 
@@ -190,7 +192,7 @@ export function deriveLinkStatus(link: PaymentLink, paidReferenceIds: ReadonlySe
 
 function paidReferenceIds(): Set<string> {
   const ids = new Set<string>();
-  for (const t of getLedgerRows()) {
+  for (const t of legacyLedgerRows("links")) {
     if (t.status === "SUCCEEDED" && t.referenceId) ids.add(t.referenceId);
   }
   return ids;
@@ -273,14 +275,20 @@ export function expireLink(id: string): PaymentLink {
  * which is what flips the derived status to PAID. The mutation mirrors how
  * `retryTransaction`/`refundTransaction` update rows in place.
  */
-export async function recordLinkPayment(id: string): Promise<{ link: PaymentLink; transactionId: string; total: number }> {
+export async function recordLinkPayment(
+  ctx: OrganizationContext,
+  id: string,
+): Promise<{ link: PaymentLink; transactionId: string; total: number }> {
   const link = store().links.find((l) => l.id === id.trim());
   if (!link) throw new Error("Unknown payment link.");
   const status = deriveLinkStatus(link, paidReferenceIds());
   if (status !== "OPEN") throw new Error(`Only open links can be paid — this one is ${status.toLowerCase()}.`);
 
   const total = totalOf(link);
-  const tx = await createTransaction({
+  // Wave 7A: paying a link writes into the transaction ledger, so the tenant is
+  // a required argument here too — a link store that is not yet scoped must not
+  // become a way to credit another organization.
+  const tx = await createTransaction(ctx, {
     amount: total,
     currency: CURRENCY,
     channel: "CARD",

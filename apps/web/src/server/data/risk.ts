@@ -14,7 +14,8 @@ import "server-only";
 // ---------------------------------------------------------------------------
 
 import { HIGH_RISK_SCORE, VOLUME_ALERT_PCT } from "@/lib/risk-options";
-import { getLedgerRows, type Transaction } from "./transactions";
+import { type Transaction } from "./transactions";
+import { legacyLedgerRows } from "./transactions-unscoped";
 
 export { HIGH_RISK_SCORE, VOLUME_ALERT_PCT } from "@/lib/risk-options";
 
@@ -201,7 +202,7 @@ export function deriveAlerts(settings: RiskSettings, rows: Transaction[]): RiskA
 
 export async function getRiskOverview(): Promise<RiskOverview> {
   const s = store();
-  const rows = getLedgerRows();
+  const rows = legacyLedgerRows("risk");
 
   const dailyVolume24h = settleVolumeSince(rows, DAY_MS);
   const monthlyVolume30d = settleVolumeSince(rows, 30 * DAY_MS);

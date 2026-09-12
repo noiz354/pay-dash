@@ -22,8 +22,9 @@ import { describe, expect, it } from "vitest";
 
 import { InMemoryPaymentProjectionStore, projectProviderEvent } from "@/server/repositories/payment-projection-store";
 import type { CanonicalStatusMap } from "@/domain/payments/projection";
-import { scopeRecord, scopeRecords, tenantScope } from "@/domain/security/tenant";
-import { getLedgerRows } from "@/server/data/transactions";
+import { scopeRecord, scopeRecords, tenantScope, TenantIsolationError } from "@/domain/security/tenant";
+import { getLedgerRows, listTransactions, countLedgerTenants, seedDemoLedgerForOrganization } from "@/server/data/transactions";
+import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
 import { getPayoutBatches } from "@/server/data/payouts";
 
 const ORG_A = "org-a";
@@ -92,25 +93,57 @@ describe("tenant isolation matrix — durable / domain surfaces", () => {
   });
 });
 
-describe("tenant isolation matrix — legacy in-memory data layer", () => {
+describe("tenant isolation matrix — in-memory data layer", () => {
   /**
-   * CURRENT GAP. `getLedgerRows()` takes no organization argument, so there is
-   * no parameter through which isolation *could* be expressed. Every caller
-   * sees the same process-wide rows.
+   * CLOSED in Wave 7A. The Wave 6 probe asserted the *opposite* of this test —
+   * `expect(getLedgerRows.length).toBe(0)` — as a tripwire that would fire the
+   * day someone added a scope parameter. It fired, and this row is the response:
+   * the ledger now requires an organization at the boundary and answers a
+   * foreign id with the same `∅` the durable stores do.
+   *
+   * Kept in this file, deliberately: the matrix is the measurement, and a
+   * closed gap has to be visible as closed rather than deleted from history.
    */
-  it("CURRENT GAP — getLedgerRows() is process-wide and accepts no tenant scope", () => {
-    const rows = getLedgerRows();
-    expect(Array.isArray(rows)).toBe(true);
-    expect(rows.length).toBeGreaterThan(0);
-    // The function's own arity is the evidence: nothing to scope by.
-    expect(getLedgerRows.length).toBe(0);
-    // And no row carries an owning organization.
-    expect(Object.keys(rows[0] ?? {})).not.toContain("organizationId");
+  it("Wave 7A — server/data/transactions requires a tenant scope on every read", async () => {
+    (globalThis as unknown as { __kineticTxStore?: unknown }).__kineticTxStore = undefined;
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+    seedDemoLedgerForOrganization(scopeA, { count: 3 });
+    seedDemoLedgerForOrganization(scopeB, { count: 3 });
+
+    const rows = getLedgerRows(scopeA);
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.organizationId === ORG_A)).toBe(true);
+    // Arity is the evidence in the other direction now: a scope is required.
+    expect(getLedgerRows.length).toBe(1);
+    expect(await listTransactions(scopeB, { pageSize: 50 })).toMatchObject({ total: 3 });
+    expect(countLedgerTenants()).toBe(3); // A, B and the dev/demo bootstrap tenant
+
     record({
-      surface: "server/data/transactions.getLedgerRows",
-      isolated: false,
-      mechanism: "NONE — single-tenant demo store (D-09 / Wave 7)",
+      surface: "server/data/transactions (list/get/rows)",
+      isolated: true,
+      mechanism: "required OrganizationContext + (org, id) partition",
     });
+  });
+
+  it("Wave 7A — a foreign transaction id reads as ∅ and a foreign write throws", async () => {
+    (globalThis as unknown as { __kineticTxStore?: unknown }).__kineticTxStore = undefined;
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+    const { createTransaction, retryTransaction, getTransaction } = await import("@/server/data/transactions");
+    const foreign = await createTransaction(scopeB, {
+      amount: 250_000,
+      currency: "IDR",
+      channel: "CARD",
+      customerName: "Beta Customer",
+      customerEmail: "beta@corp-b.example",
+      referenceId: "txn_probe_foreign",
+    });
+
+    expect(await getTransaction(scopeA, foreign.id)).toBeNull();
+    await expect(retryTransaction(scopeA, foreign.id)).rejects.toBeInstanceOf(TenantIsolationError);
+
+    record({ surface: "server/data/transactions detail + retry", isolated: true, mechanism: "read ∅ / write throws" });
   });
 
   it("CURRENT GAP — getPayoutBatches() is process-wide and rows carry no owner", () => {
@@ -139,6 +172,10 @@ describe("tenant isolation matrix — legacy in-memory data layer", () => {
 
     expect(isolated.length).toBeGreaterThan(0);
     // The assertion that matters: gaps are KNOWN and counted, never zero-by-accident.
-    expect(gaps.length).toBe(2);
+    // Wave 6 measured 2; Wave 7A closed the Transactions half, so the only
+    // remaining gap is payouts — and this number must move with reality, which is
+    // why `TRANSACTIONS_TENANT_ISOLATION_MATRIX.md` prints the same table.
+    expect(gaps.length).toBe(1);
+    expect(gaps.map((g) => g.surface)).toEqual(["server/data/payouts.getPayoutBatches"]);
   });
 });

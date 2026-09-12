@@ -55,3 +55,9 @@ One file per decision: **Context / Decision / Alternatives / Trade-offs / Conseq
 | [0038](./0038-stale-ux.md) | Stale UX — age always shown, >60 s labeled | W3/W4 |
 | [0039](./0039-conflict-recovery.md) | 409 conflict recovery — never auto-apply | W3/W4 |
 | [0040](./0040-role-aware-command-palette.md) | Role-aware, safe-only command palette (⌘K) | W3, rebuilt W4 |
+
+## Hardening decisions (Wave 6–7)
+
+| ADR | Decision | Wave |
+|---|---|---|
+| [0041](./0041-canonical-tenant-scoping.md) | Canonical tenant scoping — required `OrganizationContext` at the data boundary, remainder quarantined fail-closed | W7A |

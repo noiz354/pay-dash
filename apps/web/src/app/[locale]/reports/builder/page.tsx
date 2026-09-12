@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ReportBuilder } from "@/components/reports/report-builder";
-import { getLedgerRows } from "@/server/data/transactions";
+import { legacyLedgerRows } from "@/server/data/transactions-unscoped";
 import { getPayoutBatches } from "@/server/data/payouts";
 import { listCustomers } from "@/server/data/customers";
 
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 
 export default async function ReportsBuilderPage() {
   const [transactions, batches, customersPage] = await Promise.all([
-    getLedgerRows(),
+    legacyLedgerRows("reports"),
     getPayoutBatches(),
     listCustomers({ pageSize: 500 }),
   ]);

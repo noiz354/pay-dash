@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { OrgContextError } from "@/server/services/org-context";
-import { requireStrictOrgContext, resolveSessionOrgContext } from "@/server/services/session-org-context";
+
+import {
+  NOT_FOUND_MESSAGE,
+  requireTransactionOrganizationContext,
+  resolveTransactionOrganizationContext,
+  transactionAccessDeniedState,
+} from "@/server/services/transaction-organization-context";
 import { hasPermission } from "@/domain/organization/roles";
 import { requiresDualControl, isApproverDistinct } from "@/domain/security/step-up";
 import {
@@ -53,9 +59,13 @@ export async function createTransactionAction(
   _prev: ActionState<{ id: string }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string }>> {
-  // BE-003/BE-002: enforce money-in permission fail-closed (JRN-002)
+  // BE-003/BE-002: enforce money-in permission fail-closed (JRN-002).
+  // Wave 7A: the same resolution also yields the tenant the row is written into
+  // — permission answers "may this actor create a payment", the context answers
+  // "…in whose ledger". Both come from the session, never from the form.
+  let access;
   try {
-    await requireStrictOrgContext("money_in.create");
+    access = await requireTransactionOrganizationContext("money_in.create");
   } catch (e) {
     if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to create payments." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
@@ -78,7 +88,7 @@ export async function createTransactionAction(
   }
 
   try {
-    const tx = await createTransaction(parsed.data);
+    const tx = await createTransaction(access.context, parsed.data);
     revalidatePath("/[locale]/dashboard", "page");
     revalidatePath("/[locale]/transactions", "page");
     return {
@@ -119,8 +129,24 @@ export async function refundTransactionAction(
     };
   }
 
-  const existing = await getTransaction(parsed.data.id);
-  if (!existing) return { status: "error", message: "Transaction not found." };
+  // Wave 7A — resolve the tenant *before* the row is read. Reading first and
+  // authorizing after is the shape of every IDOR this wave removes: the read has
+  // already decided the id is real.
+  let access;
+  try {
+    access = await resolveTransactionOrganizationContext();
+  } catch (e) {
+    return transactionAccessDeniedState(e);
+  }
+
+  let existing;
+  try {
+    existing = await getTransaction(access.context, parsed.data.id);
+  } catch (e) {
+    return transactionAccessDeniedState(e);
+  }
+  // A foreign id and an unknown id take the same branch, with the same message.
+  if (!existing) return { status: "error", message: NOT_FOUND_MESSAGE };
   if (existing.status === "FAILED") {
     return { status: "error", message: "Failed payments cannot be refunded — retry it instead." };
   }
@@ -134,9 +160,12 @@ export async function refundTransactionAction(
   }
 
   // BE-002/BE-003: refund permission + dual-control enforcement (JRN-003)
-  // Backend is final enforcement point — initiator != approver for threshold amounts
+  // Backend is final enforcement point — initiator != approver for threshold
+  // amounts. The roles/actor come from the *same* resolved access as the row
+  // scope, so the permission check and the tenant predicate cannot disagree
+  // about who is asking.
   try {
-    const ctx = await resolveSessionOrgContext();
+    const ctx = { organizationId: access.context.organizationId, roles: access.roles, userId: access.actorId, isDemoFallback: access.demoFallback };
     const canPrepare = ctx.roles.some((r) => hasPermission(r, "refund.prepare"));
     const canExecute = ctx.roles.some((r) => hasPermission(r, "refund.execute"));
     if (!canPrepare && !canExecute) {
@@ -203,7 +232,11 @@ export async function refundTransactionAction(
     return { status: "error", message: error instanceof Error ? error.message : "Refund failed." };
   }
 
-  await refundTransaction(parsed.data.id, parsed.data.amount, parsed.data.reason ?? "");
+  try {
+    await refundTransaction(access.context, parsed.data.id, parsed.data.amount, parsed.data.reason ?? "");
+  } catch (e) {
+    return transactionAccessDeniedState(e);
+  }
   revalidatePath("/[locale]/transactions/[id]", "page");
   revalidatePath("/[locale]/transactions", "page");
   revalidatePath("/[locale]/dashboard", "page");
@@ -214,9 +247,11 @@ export async function retryTransactionAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
-  // BE-003: retry requires money-in permission (resubmit)
+  // BE-003: retry requires money-in permission (resubmit). Strict + tenant in one
+  // step, so the mutation below cannot be addressed by id alone.
+  let access;
   try {
-    await requireStrictOrgContext("money_in.create");
+    access = await requireTransactionOrganizationContext("money_in.create");
   } catch (e) {
     if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payments." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
@@ -228,7 +263,7 @@ export async function retryTransactionAction(
   // rendered. If the row moved since then, the server refuses with a conflict
   // payload instead of applying a blind mutation.
   const expectedUpdatedAt = (formData.get("expectedUpdatedAt") as string | null) || null;
-  const result = await retryTransactionWithVersion(id, expectedUpdatedAt);
+  const result = await retryTransactionWithVersion(access.context, id, expectedUpdatedAt, access.actorId);
   if (!result.ok) {
     if (result.code === "CONFLICT") {
       return {
@@ -304,7 +339,7 @@ export async function requestRefundAction(
 ): Promise<ActionState<{ awaitingApproval: boolean }>> {
   let ctx;
   try {
-    ctx = await requireStrictOrgContext("refund.prepare");
+    ctx = await requireTransactionOrganizationContext("refund.prepare");
   } catch (e) {
     return { status: "error", message: denyMessage(e, "You don't have permission to request refunds.") };
   }
@@ -322,13 +357,14 @@ export async function requestRefundAction(
     };
   }
 
-  const result = await requestRefund({
+  const result = await requestRefund(ctx.context, {
     transactionId: parsed.data.id,
     amount: parsed.data.amount,
     reason: parsed.data.reason ?? "",
     // The actor comes from the session, never from the form — otherwise a client
-    // could name itself as its own approver.
-    requestedBy: ctx.userId ?? "unknown",
+    // could name itself as its own approver. The tenant comes from the same
+    // place, which is what stops that actor from naming someone else's row.
+    requestedBy: ctx.actorId ?? "unknown",
   });
 
   if (!result.ok) return { status: "error", message: result.message };
@@ -350,7 +386,7 @@ export async function approveRefundAction(
 ): Promise<ActionState> {
   let ctx;
   try {
-    ctx = await requireStrictOrgContext("refund.execute");
+    ctx = await requireTransactionOrganizationContext("refund.execute");
   } catch (e) {
     return { status: "error", message: denyMessage(e, "You don't have permission to approve refunds.") };
   }
@@ -364,7 +400,7 @@ export async function approveRefundAction(
     };
   }
 
-  const result = await approveRefund({ transactionId: parsed.data.id, approvedBy: ctx.userId ?? "unknown" });
+  const result = await approveRefund(ctx.context, { transactionId: parsed.data.id, approvedBy: ctx.actorId ?? "unknown" });
   if (!result.ok) return { status: "error", message: result.message };
 
   revalidateRefundSurfaces();
@@ -378,7 +414,7 @@ export async function rejectRefundAction(
 ): Promise<ActionState> {
   let ctx;
   try {
-    ctx = await requireStrictOrgContext("refund.execute");
+    ctx = await requireTransactionOrganizationContext("refund.execute");
   } catch (e) {
     return { status: "error", message: denyMessage(e, "You don't have permission to decide refunds.") };
   }
@@ -392,9 +428,9 @@ export async function rejectRefundAction(
     };
   }
 
-  const result = await rejectRefund({
+  const result = await rejectRefund(ctx.context, {
     transactionId: parsed.data.id,
-    rejectedBy: ctx.userId ?? "unknown",
+    rejectedBy: ctx.actorId ?? "unknown",
     reason: parsed.data.reason,
   });
   if (!result.ok) return { status: "error", message: result.message };

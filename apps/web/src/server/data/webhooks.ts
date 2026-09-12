@@ -1,5 +1,5 @@
 import "server-only";
-import { getLedgerRows } from "./transactions";
+import { legacyLedgerRows } from "./transactions-unscoped";
 import { KNOWN_WEBHOOK_EVENTS } from "@/lib/webhook-status";
 import type { WebhookStatus, WebhookSource } from "@/lib/webhook-status";
 
@@ -75,7 +75,7 @@ const daysAgo = (n: number, hours = 0) =>
 // traceable through its webhook_event_id), the duplicate is a provider retry
 // of the first, and the two rejections are the endpoint's refusal paths.
 function seed(): WebhookEvent[] {
-  const ledger = getLedgerRows();
+  const ledger = legacyLedgerRows("webhooks");
   const succeeded = ledger.find((t) => t.status === "SUCCEEDED");
   const refunded = ledger.find((t) => t.status === "REFUNDED");
 

@@ -8,6 +8,7 @@ import { getBalanceOverview } from "@/server/data/balance";
 import { getPayoutsOverview } from "@/server/data/payouts";
 import { getRiskOverview } from "@/server/data/risk";
 import { getLedgerMetrics, listTransactions } from "@/server/data/transactions";
+import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
 
 export const dynamic = "force-dynamic";
@@ -30,13 +31,17 @@ function SignalCard({ label, value, detail, icon }: { label: string; value: stri
 }
 
 export default async function MerchantOpsCopilotPage() {
+  // Wave 7A: the agent's context block is built from tenant-scoped reads. An
+  // assistant that can see another organization's failed payments is a leak with
+  // a prompt attached, so the model only ever receives this tenant's rows.
+  const { context } = await resolveTransactionOrganizationContext();
   const [metrics, balance, payouts, risk, webhooks, failed] = await Promise.all([
-    getLedgerMetrics(),
+    getLedgerMetrics(context),
     getBalanceOverview(),
     getPayoutsOverview(),
     getRiskOverview(),
     Promise.resolve(getSystemWebhookSummary()),
-    listTransactions({ status: "FAILED", pageSize: 5 }),
+    listTransactions(context, { status: "FAILED", pageSize: 5 }),
   ]);
 
   const failedRows = failed.rows

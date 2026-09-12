@@ -9,7 +9,7 @@ import { getPayoutBatches } from "./payouts";
 import { getRiskOverview } from "./risk";
 import { listApiKeys } from "./settings";
 import { listMembers } from "./team";
-import { getLedgerRows } from "./transactions";
+import { legacyLedgerRows } from "./transactions-unscoped";
 import { listWebhooks } from "./webhooks";
 
 // ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ function syncEvents(): AuditEvent[] {
   const events: AuditEvent[] = [];
 
   // --- payments ← ledger transaction timelines ------------------------------
-  for (const tx of getLedgerRows()) {
+  for (const tx of legacyLedgerRows("audit")) {
     for (const ev of tx.events) {
       events.push({
         id: ev.id,
