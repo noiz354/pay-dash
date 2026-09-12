@@ -35,6 +35,7 @@ describe("catalog completeness — spec §26 (ANA-001..014)", () => {
     "stale_seen",
     "conflict_recovered",
     "sla_breached",
+    "sla_filter_applied",
   ])("emits the Wave 4 event %s", (event) => {
     expect(ANALYTICS_EVENTS).toHaveProperty(event);
     expect(ANALYTICS_EVENTS[event as AnalyticsEventKey].name).toBe(event);
@@ -52,6 +53,7 @@ describe("catalog completeness — spec §26 (ANA-001..014)", () => {
 
   it("exposes registry ids for traceability", () => {
     expect(registryOf("sla_breached")).toBe("W4-SLA");
+    expect(registryOf("sla_filter_applied")).toBe("W4-SLA");
     expect(registryOf("palette_invoked")).toBe("ANA-010");
   });
 });

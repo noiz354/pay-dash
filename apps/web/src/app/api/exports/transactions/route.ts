@@ -2,8 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { guardExport } from "@/server/services/export-guard";
 import {
   listTransactions,
+  normalizeSlaFilter,
   toCsv,
   type Channel,
+  type RefundState,
   type TransactionStatus,
 } from "@/server/data/transactions";
 
@@ -20,6 +22,10 @@ export async function GET(request: NextRequest) {
     channel: (sp.get("channel") as Channel | "ALL") ?? "ALL",
     range: (sp.get("range") as "7d" | "30d" | "90d" | "all") ?? "all",
     q: sp.get("q") ?? "",
+    refundState: (sp.get("refundState") as RefundState | "ALL") ?? "ALL",
+    // Fail-safe parse: unknown values fall back to ALL — the export may only
+    // ever be broader than requested, never leak a different slice.
+    sla: normalizeSlaFilter(sp.get("sla")),
     page: 1,
     pageSize: 100,
   });

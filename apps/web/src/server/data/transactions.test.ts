@@ -60,3 +60,189 @@ describe("getAnalyticsSeries", () => {
     expect(series.every((p) => p.total === 0 && p.succeeded === 0 && p.failed === 0)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave 4 §3 — SLA wiring (band derivation, filter, sort)
+// ---------------------------------------------------------------------------
+// The seeded ledger anchors to wall-clock "today", so band-exact assertions
+// hand-build rows with fixed timestamps and inject `now` — the same single
+// evaluation instant the server aggregation passes.
+
+import { evaluateTransactionSla, normalizeSlaFilter, slaForTransaction, type Transaction } from "./transactions";
+
+const HOUR = 3_600_000;
+/** The single evaluation instant every SLA test asserts against. */
+const FIXED_NOW = new Date("2026-09-12T09:00:00.000Z");
+
+function tx(partial: Partial<Transaction> & Pick<Transaction, "id" | "status" | "createdAt">): Transaction {
+  return {
+    referenceId: partial.id,
+    updatedAt: partial.createdAt,
+    amount: 100_000,
+    currency: "IDR",
+    fee: 2_900,
+    net: 97_100,
+    channel: "CARD",
+    methodLabel: "Visa •••• 4242",
+    customerName: "Test Customer",
+    customerEmail: "test@example.com",
+    description: "test",
+    riskScore: 0,
+    refundedAmount: 0,
+    refundState: "NONE",
+    refundRequest: null,
+    events: [],
+    ...partial,
+  };
+}
+
+/** Install a fixed ledger and read it back through the public list API,
+ *  evaluated at FIXED_NOW so band assertions never depend on the wall clock. */
+async function withLedger(rows: Transaction[], filters: Parameters<typeof listTransactions>[0]) {
+  await listTransactions({ pageSize: 1 });
+  const g = globalThis as unknown as { __kineticTxStore: { rows: Transaction[] } };
+  g.__kineticTxStore.rows = rows;
+  return listTransactions(filters, { now: FIXED_NOW });
+}
+
+describe("SLA band derivation (Wave 4 ledger wiring)", () => {
+  const now = new Date("2026-09-12T09:00:00.000Z");
+
+  it("terminal rows carry no SLA — no invented clocks", async () => {
+    expect(slaForTransaction({ status: "SUCCEEDED", createdAt: now.toISOString(), updatedAt: now.toISOString() })).toBeNull();
+    expect(slaForTransaction({ status: "REFUNDED", createdAt: now.toISOString(), updatedAt: now.toISOString() })).toBeNull();
+  });
+
+  it.each([
+    ["PENDING", "transaction_settlement"],
+    ["PROCESSING", "transaction_settlement"],
+    ["FAILED", "failed_payment"],
+  ] as const)("maps %s to the %s policy", (status, entityType) => {
+    expect(slaForTransaction({ status, createdAt: now.toISOString(), updatedAt: now.toISOString() })?.entityType).toBe(entityType);
+  });
+
+  it.each([
+    ["NORMAL", 1],
+    ["APPROACHING", 3.5],
+    ["OVERDUE", 5],
+    ["CRITICAL", 30],
+  ] as const)("a PENDING row %s hours after creation lands in %s", (band, hours) => {
+    const createdAt = new Date(now.getTime() - hours * HOUR).toISOString();
+    const view = evaluateTransactionSla({ status: "PENDING", createdAt, updatedAt: createdAt }, now);
+    expect(view.slaBand).toBe(band);
+    expect(view.slaEntityType).toBe("transaction_settlement");
+    expect(view.slaDueAt).toBeTruthy();
+  });
+
+  it("a FAILED row is triaged on the failed_payment clock from updatedAt", () => {
+    const createdAt = new Date(now.getTime() - 10 * HOUR).toISOString();
+    const failedAt = new Date(now.getTime() - 5 * HOUR).toISOString();
+    const view = evaluateTransactionSla({ status: "FAILED", createdAt, updatedAt: failedAt }, now);
+    expect(view.slaEntityType).toBe("failed_payment");
+    expect(view.slaBand).toBe("OVERDUE");
+    // Anchor is the failure instant, not creation: 5h elapsed of a 4h window.
+    expect(view.slaAgeSeconds).toBe(5 * 3600);
+  });
+
+  it("an unparseable anchor degrades to 'no SLA', never to NORMAL", () => {
+    const view = evaluateTransactionSla({ status: "PENDING", createdAt: "not-a-date", updatedAt: "not-a-date" }, now);
+    expect(view.slaBand).toBeNull();
+  });
+});
+
+describe("SLA ledger filter + sort (server-side)", () => {
+  const now = new Date("2026-09-12T09:00:00.000Z");
+  const iso = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * HOUR).toISOString();
+
+  const ledger: Transaction[] = [
+    tx({ id: "txn_settled", status: "SUCCEEDED", createdAt: iso(1) }),
+    tx({ id: "txn_normal", status: "PENDING", createdAt: iso(1) }),
+    tx({ id: "txn_approaching", status: "PROCESSING", createdAt: iso(3.5) }),
+    tx({ id: "txn_overdue", status: "PENDING", createdAt: iso(5) }),
+    tx({ id: "txn_critical", status: "PENDING", createdAt: iso(30) }),
+    tx({ id: "txn_failed_overdue", status: "FAILED", createdAt: iso(10), updatedAt: iso(5) }),
+  ];
+
+  it("sla=OVERDUE returns exactly the OVERDUE rows — CRITICAL is a distinct band", async () => {
+    const { rows, total, isFiltered } = await withLedger(ledger, { sla: "OVERDUE", pageSize: 50 });
+    expect(total).toBe(2);
+    expect(rows.map((r) => r.id).sort()).toEqual(["txn_failed_overdue", "txn_overdue"]);
+    expect(isFiltered).toBe(true);
+  });
+
+  it("sla=CRITICAL isolates the escalation band", async () => {
+    const { rows } = await withLedger(ledger, { sla: "CRITICAL", pageSize: 50 });
+    expect(rows.map((r) => r.id)).toEqual(["txn_critical"]);
+  });
+
+  it("sla=NORMAL shows only open rows inside the window — never settled ones", async () => {
+    const { rows } = await withLedger(ledger, { sla: "NORMAL", pageSize: 50 });
+    expect(rows.map((r) => r.id)).toEqual(["txn_normal"]);
+  });
+
+  it("sla=APPROACHING shows the pre-due warning band", async () => {
+    const { rows } = await withLedger(ledger, { sla: "APPROACHING", pageSize: 50 });
+    expect(rows.map((r) => r.id)).toEqual(["txn_approaching"]);
+  });
+
+  it("sla=ALL is the unfiltered view and isFiltered stays false", async () => {
+    const { total, isFiltered } = await withLedger(ledger, { sla: "ALL", pageSize: 50 });
+    expect(total).toBe(6);
+    expect(isFiltered).toBe(false);
+  });
+
+  it("sort=sla desc puts the most urgent band first, oldest within a band", async () => {
+    const { rows } = await withLedger(ledger, { sla: "ALL", sort: "sla", direction: "desc", pageSize: 50 });
+    expect(rows.map((r) => r.id)).toEqual([
+      "txn_critical",
+      // Both OVERDUE with a 5h age — compareSla ties and the sort is stable, so
+      // ledger order decides: the pending row was seeded first.
+      "txn_overdue",
+      "txn_failed_overdue",
+      "txn_approaching",
+      "txn_normal",
+      "txn_settled",
+    ]);
+  });
+
+  it("sort=sla asc reverses to least-urgent first", async () => {
+    const { rows } = await withLedger(ledger, { sla: "ALL", sort: "sla", direction: "asc", pageSize: 50 });
+    expect(rows[rows.length - 1]?.slaBand).toBe("CRITICAL");
+  });
+
+  it("bands are evaluated against the injected instant, not the wall clock", async () => {
+    const { rows } = await withLedger(ledger, { sla: "ALL", sort: "sla", direction: "desc", pageSize: 50 });
+    expect(rows.some((r) => r.slaBand === "CRITICAL")).toBe(true);
+    // Re-evaluate the same ledger 24h later: txn_normal (1h old, 4h window) is
+    // then 25h past creation → 21h overdue, past the 20h critical threshold.
+    // The clock moved, the bands followed.
+    const later = new Date(now.getTime() + 24 * HOUR);
+    const atLater = await listTransactions({ sla: "ALL", sort: "sla", direction: "desc", pageSize: 50 }, { now: later });
+    expect(atLater.rows.find((r) => r.id === "txn_normal")?.slaBand).toBe("CRITICAL");
+  });
+
+  it("isFiltered flips on for every non-ALL band", async () => {
+    for (const band of ["NORMAL", "APPROACHING", "OVERDUE", "CRITICAL"] as const) {
+      const { isFiltered } = await withLedger(ledger, { sla: band, pageSize: 50 });
+      expect(isFiltered, band).toBe(true);
+    }
+  });
+});
+
+describe("normalizeSlaFilter (?sla= contract)", () => {
+  it("accepts the canonical vocabulary case-insensitively", () => {
+    expect(normalizeSlaFilter("overdue")).toBe("OVERDUE");
+    expect(normalizeSlaFilter(" Critical ")).toBe("CRITICAL");
+    expect(normalizeSlaFilter("all")).toBe("ALL");
+    expect(normalizeSlaFilter("normal")).toBe("NORMAL");
+    expect(normalizeSlaFilter("approaching")).toBe("APPROACHING");
+  });
+
+  it("fails open to ALL on garbage, arrays take the first value", () => {
+    expect(normalizeSlaFilter("bogus")).toBe("ALL");
+    expect(normalizeSlaFilter(undefined)).toBe("ALL");
+    expect(normalizeSlaFilter("")).toBe("ALL");
+    expect(normalizeSlaFilter(["CRITICAL", "OVERDUE"])).toBe("CRITICAL");
+    expect(normalizeSlaFilter("DROP TABLE")).toBe("ALL");
+  });
+});

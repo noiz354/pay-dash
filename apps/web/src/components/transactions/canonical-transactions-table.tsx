@@ -8,11 +8,17 @@ import { SearchInput } from "@/components/data-table/search-input";
 import { FilterBar, FilterSheet, type FilterChip } from "@/components/data-table/filter-bar";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/transactions/status-pill";
+import { SlaBadge } from "@/components/command-center/sla-badge";
+import { SLA_BANDS, SLA_BAND_LABELS } from "@/lib/sla";
+import { reportSlaBreaches } from "@/lib/sla-telemetry";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { track } from "@/lib/analytics";
+import { trackEvent } from "@/lib/analytics-events";
 import { parseTableUrlState, activeFilterCount, toFilterChips } from "@/lib/table-url-state";
-import type { Transaction } from "@/server/data/transactions";
+import type { LedgerRow } from "@/server/data/transactions";
 import Link from "next/link";
+
+const SLA_SCREEN_ID = "SCR-005";
 
 export function CanonicalTransactionsTable({
   rows,
@@ -22,7 +28,7 @@ export function CanonicalTransactionsTable({
   pageSize,
   isFiltered,
 }: {
-  rows: Transaction[];
+  rows: LedgerRow[];
   total: number;
   page: number;
   pageCount: number;
@@ -81,6 +87,37 @@ export function CanonicalTransactionsTable({
     track("sort_changed", { journey_id: "JRN-002", sort, direction });
   };
 
+  // Wave 4 §3 — SLA band filter. Same URL-backed contract as every other
+  // filter: canonical value in the URL, page reset, analytics with the
+  // resulting slice size. `ALL` clears the param.
+  const onSlaFilter = React.useCallback(
+    (band: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (band === "ALL") params.delete("sla");
+      else params.set("sla", band);
+      params.delete("page");
+      const qs = params.toString();
+      startTransition(() => router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false }));
+      trackEvent("sla_filter_applied", { band, result_count: total, scr: SLA_SCREEN_ID });
+    },
+    [searchParams, pathname, router, total],
+  );
+
+  // `sla_breached` — exactly once per item per band per session, for the rows
+  // the operator was actually shown (see lib/sla-telemetry.ts).
+  React.useEffect(() => {
+    reportSlaBreaches(
+      rows.map((r) => ({
+        id: r.id,
+        entityType: r.slaEntityType ?? "transaction",
+        band: r.slaBand ?? "NORMAL",
+        ageSeconds: r.slaAgeSeconds,
+        dueSeconds: null,
+      })),
+      { scr: SLA_SCREEN_ID },
+    );
+  }, [rows]);
+
   const onPageChange = (next: number) => {
     const params = new URLSearchParams(searchParams.toString());
     if (next <= 1) params.delete("page");
@@ -119,7 +156,7 @@ export function CanonicalTransactionsTable({
     track("bulk_action_completed", { journey_id: "JRN-002", action: "export", count: selected.length, success: selected.length, failed: 0 });
   };
 
-  const columns: Column<Transaction>[] = [
+  const columns: Column<LedgerRow>[] = [
     {
       id: "referenceId",
       header: "Reference ID",
@@ -163,6 +200,22 @@ export function CanonicalTransactionsTable({
       sortable: true,
       sortKey: "status",
       priority: 0,
+      className: "text-right",
+    },
+    {
+      id: "sla",
+      header: "SLA",
+      accessor: (r) =>
+        r.slaBand ? (
+          <SlaBadge band={r.slaBand} remainingSeconds={r.slaRemainingSeconds} compact className="max-w-[150px]" />
+        ) : (
+          // Terminal rows have no open commitment — say so instead of leaving
+          // the cell blank, which would read as "missing data".
+          <span className="text-xs text-[var(--on-surface-variant)] whitespace-nowrap">Settled</span>
+        ),
+      sortable: true,
+      sortKey: "sla",
+      priority: 1,
       className: "text-right",
     },
   ];
@@ -239,6 +292,11 @@ export function CanonicalTransactionsTable({
               {r.customerName} · {formatMoney(r.amount, r.currency)}
             </div>
             <div className="text-xs text-[var(--on-surface-variant)]">{formatDateTime(r.createdAt)}</div>
+            {r.slaBand ? (
+              <div>
+                <SlaBadge band={r.slaBand} remainingSeconds={r.slaRemainingSeconds} compact />
+              </div>
+            ) : null}
             <Link href={`/transactions/${r.id}`} className="text-xs text-[var(--primary)] hover:underline">
               View details →
             </Link>
@@ -319,6 +377,24 @@ export function CanonicalTransactionsTable({
                 <option value="30d">Last 30 days</option>
                 <option value="90d">Last 90 days</option>
               </select>
+            </label>
+            <label className="block text-sm">
+              SLA
+              <select
+                value={state.sla}
+                onChange={(e) => onSlaFilter(e.target.value)}
+                className="mt-1 w-full rounded border border-[var(--outline-variant)] p-2 text-sm"
+              >
+                <option value="ALL">All SLA bands</option>
+                {SLA_BANDS.map((band) => (
+                  <option key={band} value={band}>
+                    {SLA_BAND_LABELS[band]}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-[var(--on-surface-variant)]">
+                Open payments only — settled rows carry no SLA commitment.
+              </span>
             </label>
           </div>
           <Button variant="outline" className="w-full" onClick={onClearAll}>

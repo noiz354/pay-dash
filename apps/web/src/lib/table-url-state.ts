@@ -13,6 +13,8 @@ export type TableUrlState = {
   // Payout-specific
   batchStatus: string;
   batchSort: string;
+  // Wave 4 — SLA band filter (transactions ledger); canonical vocabulary ALL|NORMAL|APPROACHING|OVERDUE|CRITICAL
+  sla: string;
 };
 
 export type ParseOptions = {
@@ -24,6 +26,7 @@ export type ParseOptions = {
   defaultDirection?: "asc" | "desc";
   defaultPageSize?: number;
   allowedPageSizes?: number[];
+  allowedSlaBands?: string[];
 };
 
 const DEFAULT_OPTS: Required<ParseOptions> = {
@@ -35,6 +38,7 @@ const DEFAULT_OPTS: Required<ParseOptions> = {
   defaultDirection: "desc",
   defaultPageSize: 10,
   allowedPageSizes: [10, 25, 50],
+  allowedSlaBands: ["ALL", "NORMAL", "APPROACHING", "OVERDUE", "CRITICAL"],
 };
 
 // Legacy param aliases (old → canonical)
@@ -106,7 +110,13 @@ export function parseTableUrlState(search: string | URLSearchParams, opts: Parse
   let batchSort = one(params.get("batchSort")) ?? "recent";
   if (!["recent", "amount", "recipients"].includes(batchSort)) batchSort = "recent";
 
-  return { page, pageSize, q, sort, direction, status, channel, range, batchStatus, batchSort };
+  // Wave 4 — SLA band filter. Case-insensitive canonicalization (users and
+  // links may carry `?sla=overdue`); anything unknown falls back to ALL so a
+  // malformed URL can only ever widen back to the permitted full view.
+  const rawSla = (one(params.get("sla")) ?? "ALL").trim().toUpperCase();
+  const sla = o.allowedSlaBands!.includes(rawSla) ? rawSla : "ALL";
+
+  return { page, pageSize, q, sort, direction, status, channel, range, batchStatus, batchSort, sla };
 }
 
 export function serializeTableUrlState(state: Partial<TableUrlState>, opts: ParseOptions = {}): string {
@@ -122,6 +132,7 @@ export function serializeTableUrlState(state: Partial<TableUrlState>, opts: Pars
   if (state.range && state.range !== "all") p.set("range", state.range);
   if (state.batchStatus && state.batchStatus !== "ALL") p.set("batchStatus", state.batchStatus);
   if (state.batchSort && state.batchSort !== "recent") p.set("batchSort", state.batchSort);
+  if (state.sla && state.sla !== "ALL") p.set("sla", state.sla);
   const s = p.toString();
   return s ? `?${s}` : "";
 }
@@ -134,8 +145,17 @@ export function activeFilterCount(state: TableUrlState): number {
   if (state.range !== "all") n++;
   if (state.q) n++;
   if (state.batchStatus !== "ALL") n++;
+  if (state.sla !== "ALL") n++;
   return n;
 }
+
+/** Human label per SLA band — chip text matches the badge vocabulary exactly. */
+const SLA_CHIP_LABELS: Record<string, string> = {
+  NORMAL: "On track",
+  APPROACHING: "Approaching SLA",
+  OVERDUE: "Overdue",
+  CRITICAL: "Critically overdue",
+};
 
 export function toFilterChips(state: TableUrlState): Array<{ key: string; label: string; value: string }> {
   const chips: Array<{ key: string; label: string; value: string }> = [];
@@ -144,5 +164,6 @@ export function toFilterChips(state: TableUrlState): Array<{ key: string; label:
   if (state.range !== "all") chips.push({ key: "range", label: `Date: ${state.range}`, value: state.range });
   if (state.q) chips.push({ key: "q", label: `Search: "${state.q}"`, value: state.q });
   if (state.batchStatus !== "ALL") chips.push({ key: "batchStatus", label: `Batch: ${state.batchStatus}`, value: state.batchStatus });
+  if (state.sla !== "ALL") chips.push({ key: "sla", label: `SLA: ${SLA_CHIP_LABELS[state.sla] ?? state.sla}`, value: state.sla });
   return chips;
 }

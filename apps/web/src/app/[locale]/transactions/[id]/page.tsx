@@ -13,11 +13,12 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { StatusPill } from "@/components/transactions/status-pill";
+import { SlaBadge } from "@/components/command-center/sla-badge";
 import { RefundDialog } from "@/components/transactions/refund-dialog";
 import { RetryButton } from "@/components/transactions/retry-button";
 import { CopyButton } from "@/components/common/copy-button";
 import { formatDateLong, formatDateTime, formatMoney } from "@/lib/format";
-import { getTransaction } from "@/server/data/transactions";
+import { getTransactionWithSla } from "@/server/data/transactions";
 import { customerIdFromEmail } from "@/server/data/customers";
 
 // Transaction detail — the destination for every ledger row / row-action.
@@ -58,7 +59,9 @@ export default async function TransactionDetailPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const tx = await getTransaction(id);
+  // Same server-side evaluation as the ledger, so a badge here and a badge in
+  // the table can never disagree about the band.
+  const tx = await getTransactionWithSla(id);
   if (!tx) notFound();
 
   const refundable = tx.amount - tx.refundedAmount;
@@ -88,6 +91,9 @@ export default async function TransactionDetailPage({
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="headline-xl data-mono text-[var(--on-surface)] break-all">{tx.referenceId}</h1>
             <StatusPill status={tx.status} />
+            {tx.slaBand ? (
+              <SlaBadge band={tx.slaBand} remainingSeconds={tx.slaRemainingSeconds} />
+            ) : null}
             <CopyButton value={tx.referenceId} label="Copy ID" />
           </div>
           <p className="body-md text-[var(--on-surface-variant)] mt-1">

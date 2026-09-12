@@ -36,6 +36,7 @@ export const SLA_ENTITY_TYPES = [
   "invoice",
   "team_invite",
   "blocked_payment",
+  "transaction_settlement",
 ] as const;
 export type SlaEntityType = (typeof SLA_ENTITY_TYPES)[number];
 
@@ -73,6 +74,11 @@ export const SLA_POLICIES: Record<SlaEntityType, SlaPolicy> = {
   invoice: { entityType: "invoice", dueSeconds: 0, approachingAt: 0.75, criticalAfterSeconds: 7 * DAY, commitment: "Pay by due date" },
   // Spec §32: team invites expire after 7 days; nudge before that.
   team_invite: { entityType: "team_invite", dueSeconds: 5 * DAY, approachingAt: 0.8, criticalAfterSeconds: 2 * DAY, commitment: "Accept within 7d" },
+  // Wave 4 ledger wiring: an open payment (PENDING/PROCESSING) carries a
+  // settlement commitment. Without it the transactions table could not speak
+  // the same four-band vocabulary as the Command Center — "Overdue" would mean
+  // one thing on a card and another on a ledger row.
+  transaction_settlement: { entityType: "transaction_settlement", dueSeconds: 4 * HOUR, approachingAt: 0.75, criticalAfterSeconds: 20 * HOUR, commitment: "Confirm settlement within 4h" },
 };
 
 export function slaPolicyFor(entityType: SlaEntityType): SlaPolicy {

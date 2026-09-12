@@ -1,6 +1,6 @@
 import * as React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 /**
  * The balance dialogs drive real server actions through <form> submission,
@@ -105,7 +105,8 @@ describe("TopUpDialog", () => {
     await screen.findByText("New available balance");
     expect(dialog).toHaveTextContent("Rp 2.500.000.000");
     expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
-    expect(mockToast.success).toHaveBeenCalled();
+    // Toast fires from a post-render effect — assert without racing it.
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
   });
 });
 
@@ -140,7 +141,8 @@ describe("WithdrawDialog", () => {
       "href",
       "/payouts/BATCH-2026-09-015"
     );
-    expect(mockToast.success).toHaveBeenCalled();
+    // Toast fires from a post-render effect — assert without racing it.
+    await waitFor(() => expect(mockToast.success).toHaveBeenCalled());
   });
 
   it("shows the rejection inline with a link to the rejected batch", async () => {
@@ -164,6 +166,7 @@ describe("WithdrawDialog", () => {
       "href",
       "/payouts/BATCH-2026-09-016"
     );
-    expect(mockToast.error).toHaveBeenCalled();
+    // Toast fires from a post-render effect — assert without racing it.
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalled());
   });
 });

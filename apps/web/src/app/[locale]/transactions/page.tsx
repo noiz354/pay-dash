@@ -9,6 +9,7 @@ import { formatCompactMoney, formatNumber, formatPercent } from "@/lib/format";
 import {
   getLedgerMetrics,
   listTransactions,
+  normalizeSlaFilter,
   type Channel,
   type TransactionStatus,
 } from "@/server/data/transactions";
@@ -68,8 +69,11 @@ async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const page = Number(one(sp.page) ?? 1) || 1;
   const pageSize = Number(one(sp.pageSize) ?? 10) || 10;
-  const sort = (one(sp.sort) as "date" | "amount" | "status") ?? "date";
+  const sort = (one(sp.sort) as "date" | "amount" | "status" | "sla") ?? "date";
   const direction = (one(sp.direction) as "asc" | "desc") ?? "desc";
+  // Server-side SLA filter: parsed and allow-listed here so a malformed
+  // `?sla=` can never change which slice of the permitted ledger is shown.
+  const sla = normalizeSlaFilter(one(sp.sla));
   const result = await listTransactions({
     status: (one(sp.status) as TransactionStatus | "ALL") ?? "ALL",
     channel: (one(sp.channel) as Channel | "ALL") ?? "ALL",
@@ -79,6 +83,7 @@ async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
     pageSize,
     sort,
     direction,
+    sla,
   });
 
   return (
