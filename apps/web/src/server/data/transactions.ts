@@ -854,6 +854,48 @@ export async function retryTransaction(id: string): Promise<Transaction | null> 
   return tx;
 }
 
+export type RetryResult =
+  | { ok: true; transaction: Transaction }
+  | { ok: false; code: "NOT_FOUND"; message: string }
+  /**
+   * Optimistic-concurrency rejection (the 409 path, CMP-020). The row changed
+   * since the viewer rendered it — the mutation is refused and the *latest*
+   * row is returned so the UI can show what actually happened. Never silently
+   * overwritten, never double-submitted.
+   */
+  | { ok: false; code: "CONFLICT"; message: string; latest: Transaction };
+
+/**
+ * Version-checked retry: when `expectedUpdatedAt` is given and the row has
+ * moved since the viewer saw it, refuse with CONFLICT instead of applying a
+ * blind mutation on top of someone else's change.
+ */
+export async function retryTransactionWithVersion(id: string, expectedUpdatedAt?: string | null): Promise<RetryResult> {
+  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+  if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
+  if (expectedUpdatedAt && tx.updatedAt !== expectedUpdatedAt) {
+    return {
+      ok: false,
+      code: "CONFLICT",
+      message: "This payment changed since you opened it — review the latest state before retrying.",
+      latest: { ...tx },
+    };
+  }
+  const retried = await retryTransaction(id);
+  if (!retried) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
+  return { ok: true, transaction: retried };
+}
+
+/** Canonical `?refundState=` vocabulary for the dual-control queue filter. */
+export const REFUND_STATE_FILTER_VALUES = ["ALL", "AWAITING_APPROVAL", "APPROVED", "REJECTED"] as const;
+export type RefundStateFilterValue = (typeof REFUND_STATE_FILTER_VALUES)[number];
+
+/** Normalize a raw `?refundState=` param. Unknown → ALL (fail-open to the permitted full view). */
+export function normalizeRefundStateFilter(raw: string | string[] | undefined | null): RefundStateFilterValue {
+  const v = (Array.isArray(raw) ? raw[0] : raw)?.trim().toUpperCase() ?? "";
+  return (REFUND_STATE_FILTER_VALUES as readonly string[]).includes(v) ? (v as RefundStateFilterValue) : "ALL";
+}
+
 export function toCsv(rows: Transaction[]) {
   const header = [
     "reference_id",
