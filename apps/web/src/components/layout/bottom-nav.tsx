@@ -1,8 +1,11 @@
-import { Link } from "@/i18n/navigation";
+"use client";
+
+import { Link, usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 
 // Reusable BottomNav — fixed bottom-0 h-16 lg:hidden (balance_history:359, dashboard_home:315)
 // Addy Osmani — shell bottom nav, 5 items per mobile prototypes (dashboard_home:315-336, webhook_logs:318-340)
+// FE-015: fix active state (was ===, now prefix match like Sidebar) — JRN-001
 const items = [
   { href: "/dashboard", label: "Home", icon: "home" },
   { href: "/transactions", label: "Transact", icon: "receipt_long" },
@@ -12,10 +15,12 @@ const items = [
 ];
 
 export function BottomNav({ activeHref }: { activeHref?: string }) {
+  const pathname = usePathname();
+  const current = activeHref ?? pathname ?? "";
   return (
     <nav className="fixed bottom-0 z-50 flex h-16 w-full items-center justify-around border-t bg-[var(--surface-container-highest)] shadow-[0_-4px_6px_rgba(0,0,0,0.05)] md:hidden" aria-label="Mobile navigation">
       {items.map((item) => {
-        const active = activeHref === item.href;
+        const active = current === item.href || current.startsWith(item.href + "/") || (item.href === "/settings/developer" && current.startsWith("/settings"));
         return (
           <Link
             key={item.href}
