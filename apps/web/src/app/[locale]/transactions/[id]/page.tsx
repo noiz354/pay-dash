@@ -14,9 +14,11 @@ import {
 } from "@/components/ui/breadcrumb";
 import { StatusPill } from "@/components/transactions/status-pill";
 import { SlaBadge } from "@/components/command-center/sla-badge";
-import { RefundDialog } from "@/components/transactions/refund-dialog";
+import { RefundWorkflow, RefundDecisionPanel } from "@/components/transactions/refund-workflow";
 import { RetryButton } from "@/components/transactions/retry-button";
 import { CopyButton } from "@/components/common/copy-button";
+import { authorizeRoles } from "@/domain/organization/roles";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { formatDateLong, formatDateTime, formatMoney } from "@/lib/format";
 import { getTransactionWithSla } from "@/server/data/transactions";
 import { customerIdFromEmail } from "@/server/data/customers";
@@ -66,6 +68,12 @@ export default async function TransactionDetailPage({
 
   const refundable = tx.amount - tx.refundedAmount;
   const refundDisabled = refundable <= 0 || tx.status === "FAILED" || tx.status === "PENDING";
+
+  // Permission-aware refund UI: flags come from the session (persona-aware in
+  // dev/E2E), never from the browser. The server actions re-enforce everything.
+  const ctx = await resolveSessionOrgContext();
+  const canRequest = authorizeRoles(ctx.roles, "refund.prepare") || authorizeRoles(ctx.roles, "refund.execute");
+  const canApprove = authorizeRoles(ctx.roles, "refund.execute");
 
   return (
     <main className="mx-auto w-full max-w-container-max p-gutter space-y-6 pb-12">
@@ -117,11 +125,13 @@ export default async function TransactionDetailPage({
           {tx.status === "FAILED" ? (
             <RetryButton id={tx.id} />
           ) : (
-            <RefundDialog
+            <RefundWorkflow
               transactionId={tx.id}
+              refundState={tx.refundState}
               refundable={refundable}
               currency={tx.currency}
               disabled={refundDisabled}
+              canRequest={canRequest}
               autoOpen={sp.refund === "1"}
             />
           )}
@@ -150,6 +160,15 @@ export default async function TransactionDetailPage({
 
         {/* Customer + timeline */}
         <div className="lg:col-span-7 space-y-6">
+          {/* JRN-003 — the dual-control refund surface (self-hides when no request exists). */}
+          <RefundDecisionPanel
+            transactionId={tx.id}
+            refundState={tx.refundState}
+            refundRequest={tx.refundRequest}
+            currency={tx.currency}
+            viewerActorId={ctx.userId}
+            canApprove={canApprove}
+          />
           <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
