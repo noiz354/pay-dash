@@ -161,6 +161,21 @@ describe("CanonicalTransactionsTable — SLA filter (URL contract)", () => {
     fireEvent.click(screen.getByRole("button", { name: /Open filters/i }));
     expect((screen.getByRole("combobox", { name: /SLA/i }) as HTMLSelectElement).value).toBe("APPROACHING");
   });
+
+  it("Escape closes the filter sheet (overlay dismissal)", () => {
+    renderTable();
+    fireEvent.click(screen.getByRole("button", { name: /Open filters/i }));
+    expect(screen.getByRole("dialog", { name: "Filters" })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Filters" })).not.toBeInTheDocument();
+  });
+
+  it("the overlay click target and the close button both dismiss the sheet", () => {
+    renderTable();
+    fireEvent.click(screen.getByRole("button", { name: /Open filters/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Close filters" }));
+    expect(screen.queryByRole("dialog", { name: "Filters" })).not.toBeInTheDocument();
+  });
 });
 
 describe("CanonicalTransactionsTable — SLA sort (URL contract)", () => {
