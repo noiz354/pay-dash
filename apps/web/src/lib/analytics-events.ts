@@ -99,6 +99,12 @@ export const ANALYTICS_EVENTS = {
     registry: "W4-SLA",
     props: ["entity_type", "band", "age_sec", "sla_sec", "scr"],
   },
+  /** The ledger's SLA band filter was engaged (`ALL` = cleared back to every band). */
+  sla_filter_applied: {
+    name: "sla_filter_applied",
+    registry: "W4-SLA",
+    props: ["band", "result_count", "scr"],
+  },
   /** A Command Center lane card was acted on (proves cards are actionable). */
   command_center_action: {
     name: "command_center_action",

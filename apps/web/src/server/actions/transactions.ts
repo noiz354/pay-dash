@@ -10,7 +10,7 @@ import {
   CHANNELS,
   createTransaction,
   refundTransaction,
-  retryTransaction,
+  retryTransactionWithVersion,
   getTransaction,
   requestRefund,
   approveRefund,
@@ -26,6 +26,12 @@ export type ActionState<T = undefined> = {
   message: string;
   fieldErrors?: Record<string, string[]>;
   data?: T;
+  /** 409 recovery payload (CMP-020) — present when the mutation lost a race. */
+  conflict?: {
+    description: string;
+    currentState: Record<string, unknown>;
+    detectedAt: string;
+  };
 };
 
 const CreateTransactionSchema = z.object({
@@ -218,8 +224,29 @@ export async function retryTransactionAction(
 
   const id = String(formData.get("id") ?? "");
   if (!id) return { status: "error", message: "Missing transaction id." };
-  const tx = await retryTransaction(id);
-  if (!tx) return { status: "error", message: "Transaction not found." };
+  // Optimistic concurrency (CMP-020): the client sends the updatedAt it
+  // rendered. If the row moved since then, the server refuses with a conflict
+  // payload instead of applying a blind mutation.
+  const expectedUpdatedAt = (formData.get("expectedUpdatedAt") as string | null) || null;
+  const result = await retryTransactionWithVersion(id, expectedUpdatedAt);
+  if (!result.ok) {
+    if (result.code === "CONFLICT") {
+      return {
+        status: "error",
+        message: result.message,
+        conflict: {
+          description: "The payment was modified by someone else while you were viewing it.",
+          currentState: {
+            status: result.latest.status,
+            "last updated": result.latest.updatedAt,
+            "refund state": result.latest.refundState,
+          },
+          detectedAt: new Date().toISOString(),
+        },
+      };
+    }
+    return { status: "error", message: result.message };
+  }
   revalidatePath("/[locale]/transactions/[id]", "page");
   revalidatePath("/[locale]/transactions", "page");
   return { status: "success", message: "Payment re-submitted to the processor" };

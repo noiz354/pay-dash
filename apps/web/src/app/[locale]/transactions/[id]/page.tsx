@@ -13,11 +13,14 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { StatusPill } from "@/components/transactions/status-pill";
-import { RefundDialog } from "@/components/transactions/refund-dialog";
+import { SlaBadge } from "@/components/command-center/sla-badge";
+import { RefundWorkflow, RefundDecisionPanel } from "@/components/transactions/refund-workflow";
 import { RetryButton } from "@/components/transactions/retry-button";
 import { CopyButton } from "@/components/common/copy-button";
+import { authorizeRoles } from "@/domain/organization/roles";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { formatDateLong, formatDateTime, formatMoney } from "@/lib/format";
-import { getTransaction } from "@/server/data/transactions";
+import { getTransactionWithSla } from "@/server/data/transactions";
 import { customerIdFromEmail } from "@/server/data/customers";
 
 // Transaction detail — the destination for every ledger row / row-action.
@@ -58,11 +61,19 @@ export default async function TransactionDetailPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const tx = await getTransaction(id);
+  // Same server-side evaluation as the ledger, so a badge here and a badge in
+  // the table can never disagree about the band.
+  const tx = await getTransactionWithSla(id);
   if (!tx) notFound();
 
   const refundable = tx.amount - tx.refundedAmount;
   const refundDisabled = refundable <= 0 || tx.status === "FAILED" || tx.status === "PENDING";
+
+  // Permission-aware refund UI: flags come from the session (persona-aware in
+  // dev/E2E), never from the browser. The server actions re-enforce everything.
+  const ctx = await resolveSessionOrgContext();
+  const canRequest = authorizeRoles(ctx.roles, "refund.prepare") || authorizeRoles(ctx.roles, "refund.execute");
+  const canApprove = authorizeRoles(ctx.roles, "refund.execute");
 
   return (
     <main className="mx-auto w-full max-w-container-max p-gutter space-y-6 pb-12">
@@ -88,6 +99,9 @@ export default async function TransactionDetailPage({
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="headline-xl data-mono text-[var(--on-surface)] break-all">{tx.referenceId}</h1>
             <StatusPill status={tx.status} />
+            {tx.slaBand ? (
+              <SlaBadge band={tx.slaBand} remainingSeconds={tx.slaRemainingSeconds} />
+            ) : null}
             <CopyButton value={tx.referenceId} label="Copy ID" />
           </div>
           <p className="body-md text-[var(--on-surface-variant)] mt-1">
@@ -109,13 +123,15 @@ export default async function TransactionDetailPage({
             </Button>
           </Link>
           {tx.status === "FAILED" ? (
-            <RetryButton id={tx.id} />
+            <RetryButton id={tx.id} expectedUpdatedAt={tx.updatedAt} />
           ) : (
-            <RefundDialog
+            <RefundWorkflow
               transactionId={tx.id}
+              refundState={tx.refundState}
               refundable={refundable}
               currency={tx.currency}
               disabled={refundDisabled}
+              canRequest={canRequest}
               autoOpen={sp.refund === "1"}
             />
           )}
@@ -144,6 +160,15 @@ export default async function TransactionDetailPage({
 
         {/* Customer + timeline */}
         <div className="lg:col-span-7 space-y-6">
+          {/* JRN-003 — the dual-control refund surface (self-hides when no request exists). */}
+          <RefundDecisionPanel
+            transactionId={tx.id}
+            refundState={tx.refundState}
+            refundRequest={tx.refundRequest}
+            currency={tx.currency}
+            viewerActorId={ctx.userId}
+            canApprove={canApprove}
+          />
           <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">

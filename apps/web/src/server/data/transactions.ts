@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { ProviderReadResult, ProviderTransaction } from "@/domain/payments/provider-read";
+import { SLA_BANDS, compareSla, evaluateSla, type SlaBand, type SlaEntityType } from "@/lib/sla";
 
 // ---------------------------------------------------------------------------
 // Transactions data source
@@ -89,13 +90,90 @@ export type TransactionFilters = {
   q?: string;
   page?: number;
   pageSize?: number;
-  sort?: "date" | "amount" | "status";
+  sort?: "date" | "amount" | "status" | "sla";
   direction?: "asc" | "desc";
   /** Wave 4 — filter the ledger by dual-control refund state (JRN-003 queue). */
   refundState?: RefundState | "ALL";
-  /** Wave 4 — SLA band filter, applied to the row's SLA anchor. */
-  sla?: "ALL" | "APPROACHING" | "OVERDUE" | "CRITICAL";
+  /**
+   * Wave 4 — SLA band filter. Bands are **mutually exclusive** and match the
+   * badge vocabulary exactly: NORMAL = open rows still inside the window,
+   * APPROACHING = ≥75% of the window consumed, OVERDUE = past due but not yet
+   * critical, CRITICAL = past the escalation threshold. Terminal rows
+   * (SUCCEEDED/REFUNDED) carry no SLA and match no band, including NORMAL.
+   */
+  sla?: SlaFilterValue;
 };
+
+/** Canonical `?sla=` vocabulary — every surface (URL, chips, server) shares it. */
+export const SLA_FILTER_VALUES = ["ALL", ...SLA_BANDS] as const;
+export type SlaFilterValue = "ALL" | SlaBand;
+
+/** Normalize a raw `?sla=` param. Unknown or malformed → "ALL" (fail-open: a
+ * filter may only ever narrow, so the safe default is the unfiltered view). */
+export function normalizeSlaFilter(raw: string | string[] | undefined | null): SlaFilterValue {
+  const v = (Array.isArray(raw) ? raw[0] : raw)?.trim().toUpperCase() ?? "";
+  return (SLA_FILTER_VALUES as readonly string[]).includes(v) ? (v as SlaFilterValue) : "ALL";
+}
+
+/**
+ * SLA evaluation projected onto a ledger row, computed **server-side against a
+ * single instant** so a badge, a lane count and a sort order can never disagree.
+ * `slaBand === null` marks terminal rows with no open commitment.
+ */
+export type TransactionSlaView = {
+  slaEntityType: SlaEntityType | null;
+  slaBand: SlaBand | null;
+  slaAgeSeconds: number | null;
+  slaRemainingSeconds: number | null;
+  /** ISO instant the commitment is/was due — rendered in tooltips, never invented client-side. */
+  slaDueAt: string | null;
+};
+
+/** A ledger row plus its server-computed SLA view. */
+export type LedgerRow = Transaction & TransactionSlaView;
+
+/**
+ * Which SLA policy governs a transaction, and from which real backend timestamp
+ * the clock runs. Terminal states have no open commitment — no invented clocks.
+ * - PENDING / PROCESSING → `transaction_settlement` from `createdAt`
+ * - FAILED              → `failed_payment` (triage) from `updatedAt`, the moment
+ *                         the failure was recorded
+ */
+export function slaForTransaction(
+  tx: Pick<Transaction, "status" | "createdAt" | "updatedAt">,
+): { entityType: SlaEntityType; anchor: string } | null {
+  switch (tx.status) {
+    case "PENDING":
+    case "PROCESSING":
+      return { entityType: "transaction_settlement", anchor: tx.createdAt };
+    case "FAILED":
+      return { entityType: "failed_payment", anchor: tx.updatedAt };
+    default:
+      return null;
+  }
+}
+
+/** Evaluate the SLA view for one row against `now`. Pure — no reads, no clock. */
+export function evaluateTransactionSla(
+  tx: Pick<Transaction, "status" | "createdAt" | "updatedAt">,
+  now: Date,
+): TransactionSlaView {
+  const mapping = slaForTransaction(tx);
+  if (!mapping) {
+    return { slaEntityType: null, slaBand: null, slaAgeSeconds: null, slaRemainingSeconds: null, slaDueAt: null };
+  }
+  const sla = evaluateSla(mapping.entityType, mapping.anchor, { now });
+  if (!sla) {
+    return { slaEntityType: mapping.entityType, slaBand: null, slaAgeSeconds: null, slaRemainingSeconds: null, slaDueAt: null };
+  }
+  return {
+    slaEntityType: mapping.entityType,
+    slaBand: sla.band,
+    slaAgeSeconds: sla.ageSeconds,
+    slaRemainingSeconds: sla.remainingSeconds,
+    slaDueAt: sla.dueAt,
+  };
+}
 
 export type Paginated<T> = {
   rows: T[];
@@ -297,10 +375,10 @@ function providerTransactionToRow(p: ProviderTransaction): Transaction {
   };
 }
 
-function withinRange(iso: string, range: TransactionFilters["range"]): boolean {
+function withinRange(iso: string, range: TransactionFilters["range"], now: Date = new Date()): boolean {
   if (range === "all" || !range) return true;
   const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
-  return Date.now() - new Date(iso).getTime() <= days * 24 * 60 * 60 * 1000;
+  return now.getTime() - new Date(iso).getTime() <= days * 24 * 60 * 60 * 1000;
 }
 
 /** Lazily attempt a provider transaction read. The provider read module pulls
@@ -317,34 +395,54 @@ async function tryProviderTransactions(): Promise<ProviderReadResult<ProviderTra
   }
 }
 
-export async function listTransactions(filters: TransactionFilters = {}): Promise<Paginated<Transaction>> {
-  const { status = "ALL", channel = "ALL", range = "all", q = "", sort = "date", direction = "desc", refundState = "ALL" } = filters;
+export type ListTransactionsOptions = {
+  /**
+   * The single instant every SLA band in this pass is evaluated against — the
+   * same discipline the Command Center aggregation uses, so a ledger badge and
+   * a lane count can never disagree. Tests inject a fixed `now` for
+   * determinism; production evaluates once per call.
+   */
+  now?: Date;
+};
+
+const SLA_SORT_KEYS = ["date", "amount", "status", "sla"] as const;
+
+export async function listTransactions(filters: TransactionFilters = {}, options: ListTransactionsOptions = {}): Promise<Paginated<LedgerRow>> {
+  const { status = "ALL", channel = "ALL", range = "all", q = "", sort = "date", direction = "desc", refundState = "ALL", sla = "ALL" } = filters;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
-  const sortKey = ["date", "amount", "status"].includes(sort) ? sort : "date";
+  const sortKey = (SLA_SORT_KEYS as readonly string[]).includes(sort) ? sort : "date";
   const dir = direction === "asc" ? 1 : -1;
+  // One evaluation instant for the whole pass — SLA bands, range window and
+  // sort order all derive from it. Never two clocks in one aggregation.
+  const now = options.now ?? new Date();
 
-  // Live provider read (rekomendasi #4). When a configured TEST connection +
-  // secret resolves for the org, provider transactions are authoritative. A
-  // configured-but-failing provider propagates (never mocked); with no
-  // connection the in-memory dev/demo ledger is the fallback.
-  const providerResult = await tryProviderTransactions();
-  if (providerResult.connected) {
-    const filtered = providerResult.data
-      .map(providerTransactionToRow)
-      .filter((t) => {
-        if (status !== "ALL" && t.status !== status) return false;
-        if (channel !== "ALL" && t.channel !== channel) return false;
-        if (refundState !== "ALL" && t.refundState !== refundState) return false;
-        if (!withinRange(t.createdAt, range)) return false;
-        if (needle) {
-          const hay = `${t.referenceId} ${t.customerName} ${t.customerEmail} ${t.methodLabel} ${t.description}`.toLowerCase();
-          if (!hay.includes(needle)) return false;
-        }
-        return true;
-      });
+  /** Decorate + filter + sort + page one candidate list. Shared by both data
+   *  paths so provider-sourced and in-memory rows behave identically. */
+  const finalize = (candidates: Transaction[]): Paginated<LedgerRow> => {
+    const decorated = candidates.map((t) => ({ ...t, ...evaluateTransactionSla(t, now) }));
+    const filtered = decorated.filter((t) => {
+      if (status !== "ALL" && t.status !== status) return false;
+      if (channel !== "ALL" && t.channel !== channel) return false;
+      if (refundState !== "ALL" && t.refundState !== refundState) return false;
+      // SLA band is an exact match; terminal rows (slaBand === null) match no band.
+      if (sla !== "ALL" && t.slaBand !== sla) return false;
+      if (!withinRange(t.createdAt, range, now)) return false;
+      if (needle) {
+        const hay = `${t.referenceId} ${t.customerName} ${t.customerEmail} ${t.methodLabel} ${t.description}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
     const sorted = [...filtered].sort((a, b) => {
+      if (sortKey === "sla") {
+        // compareSla already returns most-urgent-first (worst band, then
+        // oldest). The ledger's default "desc" keeps that reading; "asc"
+        // reverses to least-urgent-first like any other column sort.
+        const bySla = compareSla({ band: a.slaBand ?? "NORMAL", ageSeconds: a.slaAgeSeconds ?? 0 }, { band: b.slaBand ?? "NORMAL", ageSeconds: b.slaAgeSeconds ?? 0 });
+        return dir * -bySla;
+      }
       if (sortKey === "date") return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       if (sortKey === "amount") return dir * (a.amount - b.amount);
       return dir * a.status.localeCompare(b.status);
@@ -357,41 +455,32 @@ export async function listTransactions(filters: TransactionFilters = {}): Promis
       page: safePage,
       pageSize,
       pageCount,
-      isFiltered: status !== "ALL" || channel !== "ALL" || range !== "all" || refundState !== "ALL" || needle.length > 0 || sortKey !== "date" || dir !== -1,
+      isFiltered:
+        status !== "ALL" || channel !== "ALL" || range !== "all" || refundState !== "ALL" || sla !== "ALL" || needle.length > 0 || sortKey !== "date" || dir !== -1,
     };
+  };
+
+  // Live provider read (rekomendasi #4). When a configured TEST connection +
+  // secret resolves for the org, provider transactions are authoritative. A
+  // configured-but-failing provider propagates (never mocked); with no
+  // connection the in-memory dev/demo ledger is the fallback.
+  const providerResult = await tryProviderTransactions();
+  if (providerResult.connected) {
+    return finalize(providerResult.data.map(providerTransactionToRow));
   }
 
-  const filtered = store().rows.filter((t) => {
-    if (status !== "ALL" && t.status !== status) return false;
-    if (channel !== "ALL" && t.channel !== channel) return false;
-    if (refundState !== "ALL" && t.refundState !== refundState) return false;
-    if (!withinRange(t.createdAt, range)) return false;
-    if (needle) {
-      const hay = `${t.referenceId} ${t.customerName} ${t.customerEmail} ${t.methodLabel} ${t.description}`.toLowerCase();
-      if (!hay.includes(needle)) return false;
-    }
-    return true;
-  });
-
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortKey === "date") return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    if (sortKey === "amount") return dir * (a.amount - b.amount);
-    return dir * a.status.localeCompare(b.status);
-  });
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const safePage = Math.min(page, pageCount);
-  return {
-    rows: sorted.slice((safePage - 1) * pageSize, safePage * pageSize),
-    total: sorted.length,
-    page: safePage,
-    pageSize,
-    pageCount,
-    isFiltered: status !== "ALL" || channel !== "ALL" || range !== "all" || refundState !== "ALL" || needle.length > 0 || sortKey !== "date" || dir !== -1,
-  };
+  return finalize(store().rows);
 }
 
 export async function getTransaction(id: string): Promise<Transaction | null> {
   return store().rows.find((t) => t.id === id || t.referenceId === id) ?? null;
+}
+
+/** Detail-page read: the row plus its SLA view against one server instant. */
+export async function getTransactionWithSla(id: string, now: Date = new Date()): Promise<LedgerRow | null> {
+  const tx = await getTransaction(id);
+  if (!tx) return null;
+  return { ...tx, ...evaluateTransactionSla(tx, now) };
 }
 
 /**
@@ -763,6 +852,48 @@ export async function retryTransaction(id: string): Promise<Transaction | null> 
     },
   ];
   return tx;
+}
+
+export type RetryResult =
+  | { ok: true; transaction: Transaction }
+  | { ok: false; code: "NOT_FOUND"; message: string }
+  /**
+   * Optimistic-concurrency rejection (the 409 path, CMP-020). The row changed
+   * since the viewer rendered it — the mutation is refused and the *latest*
+   * row is returned so the UI can show what actually happened. Never silently
+   * overwritten, never double-submitted.
+   */
+  | { ok: false; code: "CONFLICT"; message: string; latest: Transaction };
+
+/**
+ * Version-checked retry: when `expectedUpdatedAt` is given and the row has
+ * moved since the viewer saw it, refuse with CONFLICT instead of applying a
+ * blind mutation on top of someone else's change.
+ */
+export async function retryTransactionWithVersion(id: string, expectedUpdatedAt?: string | null): Promise<RetryResult> {
+  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+  if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
+  if (expectedUpdatedAt && tx.updatedAt !== expectedUpdatedAt) {
+    return {
+      ok: false,
+      code: "CONFLICT",
+      message: "This payment changed since you opened it — review the latest state before retrying.",
+      latest: { ...tx },
+    };
+  }
+  const retried = await retryTransaction(id);
+  if (!retried) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
+  return { ok: true, transaction: retried };
+}
+
+/** Canonical `?refundState=` vocabulary for the dual-control queue filter. */
+export const REFUND_STATE_FILTER_VALUES = ["ALL", "AWAITING_APPROVAL", "APPROVED", "REJECTED"] as const;
+export type RefundStateFilterValue = (typeof REFUND_STATE_FILTER_VALUES)[number];
+
+/** Normalize a raw `?refundState=` param. Unknown → ALL (fail-open to the permitted full view). */
+export function normalizeRefundStateFilter(raw: string | string[] | undefined | null): RefundStateFilterValue {
+  const v = (Array.isArray(raw) ? raw[0] : raw)?.trim().toUpperCase() ?? "";
+  return (REFUND_STATE_FILTER_VALUES as readonly string[]).includes(v) ? (v as RefundStateFilterValue) : "ALL";
 }
 
 export function toCsv(rows: Transaction[]) {

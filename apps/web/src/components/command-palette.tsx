@@ -79,7 +79,9 @@ export function fuzzyScore(query: string, text: string): number | null {
   if (t.startsWith(q)) return 900 - Math.min(100, t.length - q.length);
 
   const wordIndex = t.search(new RegExp(`\\b${escapeRegExp(q)}`));
-  if (wordIndex > 0) return 800 - Math.min(200, wordIndex);
+  // >= 0: position 0 is a word start too — without it the first word of a
+  // multi-word label fell through to the subsequence tier.
+  if (wordIndex >= 0) return 800 - Math.min(200, wordIndex);
 
   const subIndex = t.indexOf(q);
   if (subIndex > 0) return 700 - Math.min(200, subIndex);
