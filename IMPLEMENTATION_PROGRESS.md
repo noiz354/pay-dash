@@ -13,14 +13,14 @@
 ## Ticket Registry
 | Ticket | IDs | Scope | Status | Commit | Tests | Notes |
 |--------|-----|-------|--------|--------|-------|-------|
-| BE-001 | JRN-001 SCR-001..004 | Auth fail-closed proxy strict+preview | TODO | — | — | `src/proxy.ts:134-139` opt-in → strict default |
-| BE-002 | JRN-003 SCR-006 INT-005 | Refund dual-control initiator!=approver | TODO | — | — | `server/actions/transactions.ts:48` no check |
-| BE-003 | JRN-006 SCR-013 INT-009/010 | Payout RBAC requireOrgContext | TODO | — | — | `payouts.ts:52` missing guard |
-| BE-004 | JRN-017 SCR-025 INT-018 | Exports streaming guard | TODO | — | — | 10 export routes no auth |
-| FE-015 | JRN-001 SCR-004 CMP-001 | Bottom-nav === bug | TODO | — | — | `bottom-nav.tsx:17` === vs startsWith |
-| FE-001 | JRN-001 SCR-001..045 | Navigation alias safety + grouped nav | TODO | — | — | `sidebar.tsx` 30 flat, `next.config.ts` rewrites |
-| FE-016 | — SCR-025/021/029/023 | Loading skeletons consistency | TODO | — | — | audit/fraud/kyc/system/risk missing loading.tsx |
-| DSN-004 | — | Success token AA fix | TODO | — | — | `--success #10b981` 2.5:1 → #0e7a5b |
+| BE-001 | JRN-001 SCR-001..004 | Auth fail-closed proxy strict+preview | DONE | 9bf01dd | proxy.test.ts 7/7 | `src/proxy.ts` strict default + api 401 + preview bypass |
+| BE-002 | JRN-003 SCR-006 INT-005 | Refund dual-control initiator!=approver | DONE | db4c615 | payment-flow.test.ts + manual | `transactions.ts` requiresDualControl + distinct |
+| BE-003 | JRN-006 SCR-013 INT-009/010 | Payout RBAC requireOrgContext | DONE | db4c615 | export-guard + manual | 9 actions payout.create/release/cancel/retry |
+| BE-004 | JRN-017 SCR-025 INT-018 | Exports streaming guard | DONE | fbae269 | export-guard.test.ts 5/5 | 11 routes + helper per-resource |
+| FE-015 | JRN-001 SCR-004 CMP-001 | Bottom-nav === bug | DONE | 5e4f6af | bottom-nav.test.tsx 4/4 | startsWith + settings wildcard |
+| FE-001 | JRN-001 SCR-001..045 | Navigation alias safety + grouped nav | DONE | 6f7f0af | nav-config.ts + alias map | grouped IA config + rewrites preserved |
+| FE-016 | — SCR-025/021/029/023 | Loading skeletons consistency | DONE | 5e4f6af | visual CLS | 7 skeletons 5 rows 44px |
+| DSN-005 | — | Success token AA + DSN foundation | DONE | 6f7f0af | visual AA 5.1:1 | --success #0e7a5b + space/radius/motion tokens + focus 2px |
 | BE-005 | JRN-003/006 | Idempotency dedupe | BACKLOG | — | — | Phase 3 |
 | BE-006 | JRN-015 | Invite 7d expiry | BACKLOG | — | — |  |
 | BE-007 | JRN-006 | Optimistic locking 409 | BACKLOG | — | — | Phase 4 |
