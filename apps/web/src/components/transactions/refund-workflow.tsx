@@ -160,8 +160,8 @@ export function RefundWorkflow({
         render={
           <Button
             variant="outline"
-            disabled={disabled}
-            aria-disabled={disabled}
+            disabled={disabled || !canRequest}
+            aria-disabled={disabled || !canRequest}
             title={disabled ? "This payment cannot be refunded" : !canRequest ? "Requires refund permission" : undefined}
             data-testid="refund-request-button"
             className="border-[var(--failed-status)]/40 text-[var(--failed-status)] hover:bg-[var(--failed-status)]/5 disabled:opacity-60"
