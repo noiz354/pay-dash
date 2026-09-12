@@ -15,6 +15,8 @@ export type TableUrlState = {
   batchSort: string;
   // Wave 4 — SLA band filter (transactions ledger); canonical vocabulary ALL|NORMAL|APPROACHING|OVERDUE|CRITICAL
   sla: string;
+  // Wave 4 — dual-control refund state (JRN-003 queue); ALL|AWAITING_APPROVAL|APPROVED|REJECTED
+  refundState: string;
 };
 
 export type ParseOptions = {
@@ -27,6 +29,7 @@ export type ParseOptions = {
   defaultPageSize?: number;
   allowedPageSizes?: number[];
   allowedSlaBands?: string[];
+  allowedRefundStates?: string[];
 };
 
 const DEFAULT_OPTS: Required<ParseOptions> = {
@@ -39,6 +42,7 @@ const DEFAULT_OPTS: Required<ParseOptions> = {
   defaultPageSize: 10,
   allowedPageSizes: [10, 25, 50],
   allowedSlaBands: ["ALL", "NORMAL", "APPROACHING", "OVERDUE", "CRITICAL"],
+  allowedRefundStates: ["ALL", "AWAITING_APPROVAL", "APPROVED", "REJECTED"],
 };
 
 // Legacy param aliases (old → canonical)
@@ -116,7 +120,13 @@ export function parseTableUrlState(search: string | URLSearchParams, opts: Parse
   const rawSla = (one(params.get("sla")) ?? "ALL").trim().toUpperCase();
   const sla = o.allowedSlaBands!.includes(rawSla) ? rawSla : "ALL";
 
-  return { page, pageSize, q, sort, direction, status, channel, range, batchStatus, batchSort, sla };
+  // Wave 4 — dual-control refund state (JRN-003). Same contract: canonical
+  // uppercase vocabulary, unknown values fall back to ALL (fail-open, a filter
+  // may only narrow).
+  const rawRefundState = (one(params.get("refundState")) ?? "ALL").trim().toUpperCase();
+  const refundState = o.allowedRefundStates!.includes(rawRefundState) ? rawRefundState : "ALL";
+
+  return { page, pageSize, q, sort, direction, status, channel, range, batchStatus, batchSort, sla, refundState };
 }
 
 export function serializeTableUrlState(state: Partial<TableUrlState>, opts: ParseOptions = {}): string {
@@ -133,6 +143,7 @@ export function serializeTableUrlState(state: Partial<TableUrlState>, opts: Pars
   if (state.batchStatus && state.batchStatus !== "ALL") p.set("batchStatus", state.batchStatus);
   if (state.batchSort && state.batchSort !== "recent") p.set("batchSort", state.batchSort);
   if (state.sla && state.sla !== "ALL") p.set("sla", state.sla);
+  if (state.refundState && state.refundState !== "ALL") p.set("refundState", state.refundState);
   const s = p.toString();
   return s ? `?${s}` : "";
 }
@@ -146,6 +157,7 @@ export function activeFilterCount(state: TableUrlState): number {
   if (state.q) n++;
   if (state.batchStatus !== "ALL") n++;
   if (state.sla !== "ALL") n++;
+  if (state.refundState !== "ALL") n++;
   return n;
 }
 
@@ -157,6 +169,13 @@ const SLA_CHIP_LABELS: Record<string, string> = {
   CRITICAL: "Critically overdue",
 };
 
+/** Human label per dual-control refund state (JRN-003 queue chips). */
+const REFUND_STATE_CHIP_LABELS: Record<string, string> = {
+  AWAITING_APPROVAL: "Awaiting approval",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+};
+
 export function toFilterChips(state: TableUrlState): Array<{ key: string; label: string; value: string }> {
   const chips: Array<{ key: string; label: string; value: string }> = [];
   if (state.status !== "ALL") chips.push({ key: "status", label: `Status: ${state.status}`, value: state.status });
@@ -165,5 +184,6 @@ export function toFilterChips(state: TableUrlState): Array<{ key: string; label:
   if (state.q) chips.push({ key: "q", label: `Search: "${state.q}"`, value: state.q });
   if (state.batchStatus !== "ALL") chips.push({ key: "batchStatus", label: `Batch: ${state.batchStatus}`, value: state.batchStatus });
   if (state.sla !== "ALL") chips.push({ key: "sla", label: `SLA: ${SLA_CHIP_LABELS[state.sla] ?? state.sla}`, value: state.sla });
+  if (state.refundState !== "ALL") chips.push({ key: "refundState", label: `Refund: ${REFUND_STATE_CHIP_LABELS[state.refundState] ?? state.refundState}`, value: state.refundState });
   return chips;
 }

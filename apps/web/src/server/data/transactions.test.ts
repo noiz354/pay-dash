@@ -68,7 +68,7 @@ describe("getAnalyticsSeries", () => {
 // hand-build rows with fixed timestamps and inject `now` — the same single
 // evaluation instant the server aggregation passes.
 
-import { evaluateTransactionSla, normalizeSlaFilter, slaForTransaction, type Transaction } from "./transactions";
+import { evaluateTransactionSla, normalizeRefundStateFilter, normalizeSlaFilter, slaForTransaction, type Transaction } from "./transactions";
 
 const HOUR = 3_600_000;
 /** The single evaluation instant every SLA test asserts against. */
@@ -244,5 +244,28 @@ describe("normalizeSlaFilter (?sla= contract)", () => {
     expect(normalizeSlaFilter("")).toBe("ALL");
     expect(normalizeSlaFilter(["CRITICAL", "OVERDUE"])).toBe("CRITICAL");
     expect(normalizeSlaFilter("DROP TABLE")).toBe("ALL");
+  });
+});
+
+describe("refundState ledger filter (JRN-003 queue)", () => {
+  const now = new Date("2026-09-12T09:00:00.000Z");
+  const iso = (h: number) => new Date(now.getTime() - h * HOUR).toISOString();
+
+  it("refundState=AWAITING_APPROVAL isolates the dual-control queue", async () => {
+    const awaiting = tx({ id: "txn_awaiting", status: "SUCCEEDED", createdAt: iso(2), refundState: "AWAITING_APPROVAL" });
+    const ledger = [
+      awaiting,
+      tx({ id: "txn_clean", status: "SUCCEEDED", createdAt: iso(3) }),
+      tx({ id: "txn_rejected", status: "SUCCEEDED", createdAt: iso(4), refundState: "REJECTED" }),
+    ];
+    const { rows, total } = await withLedger(ledger, { refundState: "AWAITING_APPROVAL", pageSize: 50 });
+    expect(total).toBe(1);
+    expect(rows[0]?.id).toBe("txn_awaiting");
+    expect(rows[0]?.refundRequest).toBeNull(); // store row untouched by decoration
+  });
+
+  it("an unknown refundState value is impossible through the normalizer", () => {
+    expect(normalizeRefundStateFilter("awaiting_approval")).toBe("AWAITING_APPROVAL");
+    expect(normalizeRefundStateFilter("bogus")).toBe("ALL");
   });
 });

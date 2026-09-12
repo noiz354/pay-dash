@@ -9,6 +9,7 @@ import { formatCompactMoney, formatNumber, formatPercent } from "@/lib/format";
 import {
   getLedgerMetrics,
   listTransactions,
+  normalizeRefundStateFilter,
   normalizeSlaFilter,
   type Channel,
   type TransactionStatus,
@@ -74,6 +75,9 @@ async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
   // Server-side SLA filter: parsed and allow-listed here so a malformed
   // `?sla=` can never change which slice of the permitted ledger is shown.
   const sla = normalizeSlaFilter(one(sp.sla));
+  // Dual-control refund queue (JRN-003): same fail-open normalization for
+  // `?refundState=` — the Role B deep link lands here.
+  const refundState = normalizeRefundStateFilter(one(sp.refundState));
   const result = await listTransactions({
     status: (one(sp.status) as TransactionStatus | "ALL") ?? "ALL",
     channel: (one(sp.channel) as Channel | "ALL") ?? "ALL",
@@ -84,6 +88,7 @@ async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
     sort,
     direction,
     sla,
+    refundState,
   });
 
   return (

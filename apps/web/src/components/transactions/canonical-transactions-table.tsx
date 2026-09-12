@@ -103,6 +103,22 @@ export function CanonicalTransactionsTable({
     [searchParams, pathname, router, total],
   );
 
+  // Wave 4 §4 — dual-control refund state (JRN-003 queue). Same URL-backed
+  // contract; the Role B queue deep link (/transactions?refundState=…)
+  // round-trips through here.
+  const onRefundStateFilter = React.useCallback(
+    (value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "ALL") params.delete("refundState");
+      else params.set("refundState", value);
+      params.delete("page");
+      const qs = params.toString();
+      startTransition(() => router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false }));
+      track("filter_applied", { journey_id: "JRN-002", filterKey: "refundState", value });
+    },
+    [searchParams, pathname, router],
+  );
+
   // `sla_breached` — exactly once per item per band per session, for the rows
   // the operator was actually shown (see lib/sla-telemetry.ts).
   React.useEffect(() => {
@@ -394,6 +410,22 @@ export function CanonicalTransactionsTable({
               </select>
               <span className="mt-1 block text-xs text-[var(--on-surface-variant)]">
                 Open payments only — settled rows carry no SLA commitment.
+              </span>
+            </label>
+            <label className="block text-sm">
+              Refund state
+              <select
+                value={state.refundState}
+                onChange={(e) => onRefundStateFilter(e.target.value)}
+                className="mt-1 w-full rounded border border-[var(--outline-variant)] p-2 text-sm"
+              >
+                <option value="ALL">All refunds</option>
+                <option value="AWAITING_APPROVAL">Awaiting approval</option>
+                <option value="APPROVED">Approved</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+              <span className="mt-1 block text-xs text-[var(--on-surface-variant)]">
+                The dual-control queue — refunds waiting on a second approver.
               </span>
             </label>
           </div>

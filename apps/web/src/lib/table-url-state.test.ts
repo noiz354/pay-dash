@@ -141,3 +141,46 @@ describe("table-url-state SLA contract (Wave 4)", () => {
     expect(s.sort).toBe("sla");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Wave 4 §4 — dual-control refund state contract (?refundState=, JRN-003)
+// ---------------------------------------------------------------------------
+
+describe("table-url-state refundState contract (Wave 4)", () => {
+  it("parses canonical values, case-insensitively", () => {
+    expect(parseTableUrlState("?refundState=AWAITING_APPROVAL").refundState).toBe("AWAITING_APPROVAL");
+    expect(parseTableUrlState("?refundState=awaiting_approval").refundState).toBe("AWAITING_APPROVAL");
+    expect(parseTableUrlState("?refundState=approved").refundState).toBe("APPROVED");
+    expect(parseTableUrlState("?refundState=rejected").refundState).toBe("REJECTED");
+    expect(parseTableUrlState("?refundState=ALL").refundState).toBe("ALL");
+  });
+
+  it("unknown or malformed values fall back to ALL (fail-open)", () => {
+    expect(parseTableUrlState("?refundState=bogus").refundState).toBe("ALL");
+    expect(parseTableUrlState("?refundState=").refundState).toBe("ALL");
+    expect(parseTableUrlState("?refundState=DROP%20TABLE").refundState).toBe("ALL");
+    expect(parseTableUrlState("?refundState=REJECTED&refundState=ALL").refundState).toBe("ALL"); // last wins
+    expect(parseTableUrlState("").refundState).toBe("ALL");
+  });
+
+  it("serializes only non-ALL values and round-trips", () => {
+    expect(serializeTableUrlState({ refundState: "ALL" })).toBe("");
+    expect(serializeTableUrlState({ refundState: "AWAITING_APPROVAL" })).toBe("?refundState=AWAITING_APPROVAL");
+    expect(parseTableUrlState(serializeTableUrlState({ refundState: "APPROVED" })).refundState).toBe("APPROVED");
+  });
+
+  it("participates in the combined URL round-trip (Role B queue link)", () => {
+    const s = parseTableUrlState("?refundState=AWAITING_APPROVAL&sla=OVERDUE&status=FAILED");
+    expect(s.refundState).toBe("AWAITING_APPROVAL");
+    expect(s.sla).toBe("OVERDUE");
+    expect(s.status).toBe("FAILED");
+    expect(serializeTableUrlState(s)).toBe("?status=FAILED&sla=OVERDUE&refundState=AWAITING_APPROVAL");
+  });
+
+  it("chips render the human label and clear by key", () => {
+    const chips = toFilterChips(parseTableUrlState("?refundState=AWAITING_APPROVAL"));
+    expect(chips).toEqual([{ key: "refundState", label: "Refund: Awaiting approval", value: "AWAITING_APPROVAL" }]);
+    expect(activeFilterCount(parseTableUrlState("?refundState=REJECTED"))).toBe(1);
+    expect(toFilterChips(parseTableUrlState(""))).toEqual([]);
+  });
+});
