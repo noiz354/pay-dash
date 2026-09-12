@@ -1,0 +1,76 @@
+{
+  "startedAt": "2026-09-12T13:47:38.405Z",
+  "steps": {
+    "build": {
+      "ms": 2982.5,
+      "migrationsApplied": 12
+    },
+    "seed": {
+      "ms": 15.2,
+      "tables": 32,
+      "seeded": [
+        "Organization",
+        "PaymentProviderConnection",
+        "DurableOperation",
+        "DurableOperation",
+        "DurableOperation",
+        "WebhookDelivery",
+        "WebhookDelivery",
+        "AuditEvent",
+        "AuditEvent"
+      ]
+    },
+    "backup": {
+      "ms": 36.4,
+      "bytes": 46916,
+      "rows": 9,
+      "tables": 32,
+      "fkOrdered": true,
+      "cyclicTables": [],
+      "path": "/tmp/paydash-dr-KMqDwK/backup.sql"
+    },
+    "destroy": {
+      "ms": 3.1,
+      "mode": "full engine teardown"
+    },
+    "restore": {
+      "ms": 2001.2
+    },
+    "verify": {
+      "ms": 13.7,
+      "smoke": {
+        "indexCount": 102,
+        "durableOperationIdempotencyUnique": true,
+        "webhookDeliveryProviderEventUnique": true,
+        "tablesRestored": 32,
+        "tablesExpected": 32,
+        "rowsRestored": 7
+      },
+      "mismatches": []
+    }
+  },
+  "result": "PASS",
+  "failures": [],
+  "migrations": 12,
+  "checksumBefore": {
+    "DurableOperation": 3,
+    "WebhookDelivery": 2,
+    "AuditEvent": 2,
+    "__amountMinorTotal": "46700000",
+    "__amountMinorRows": 3
+  },
+  "checksumAfter": {
+    "DurableOperation": 3,
+    "WebhookDelivery": 2,
+    "AuditEvent": 2,
+    "__amountMinorTotal": "46700000",
+    "__amountMinorRows": 3
+  },
+  "objectives": {
+    "measuredRtoSeconds": 2.015,
+    "measuredRpoSeconds": 0.044,
+    "note": "Measured against PGlite with a logical dump. This validates the restore PROCEDURE and the schema/constraint integrity, not production hardware timings or Cloud SQL PITR. Production RPO is bounded by the backup schedule: with PITR disabled that is up to 24h (see DR_RESTORE_REPORT.md)."
+  },
+  "finishedAt": "2026-09-12T13:47:43.479Z",
+  "restoredAt": "2026-09-12T13:47:43.464Z"
+}
