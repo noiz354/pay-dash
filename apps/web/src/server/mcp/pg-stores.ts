@@ -55,15 +55,36 @@ export async function getTransactionPostgres(id: string) {
   return { ...mapLedgerRow(row), source: "postgres" };
 }
 
+/**
+ * Projected shape of the balance query. Annotated explicitly rather than
+ * inferred from the Prisma client so this module typechecks whether or not the
+ * generated client is present (CI generates it; a fresh checkout may not) and so
+ * the Decimal-or-number union is handled in exactly one place.
+ */
+type LedgerAmountRow = {
+  amount: { toNumber(): number } | number;
+  status: string;
+  currency: string;
+};
+
+function toAmount(value: LedgerAmountRow["amount"]): number {
+  return typeof value === "number" ? value : value.toNumber();
+}
+
 export async function getBalanceOverviewPostgres() {
-  const rows = await prisma.ledgerEntry.findMany({ select: { amount: true, status: true, currency: true } });
-  const amounts = rows.map((row) => (typeof row.amount === "number" ? row.amount : row.amount.toNumber()));
-  const total = amounts.reduce((sum, amount) => sum + amount, 0);
-  const byStatus = rows.reduce<Record<string, number>>((acc, row, index) => {
-    const status = LedgerStatus.safeParse(row.status).success ? (row.status as string) : "PENDING";
-    acc[status] = (acc[status] ?? 0) + (amounts[index] ?? 0);
-    return acc;
-  }, {});
+  const rows = (await prisma.ledgerEntry.findMany({
+    select: { amount: true, status: true, currency: true },
+  })) as LedgerAmountRow[];
+  const amounts = rows.map((row) => toAmount(row.amount));
+  const total = amounts.reduce((sum: number, amount: number) => sum + amount, 0);
+  const byStatus = rows.reduce(
+    (acc: Record<string, number>, row: LedgerAmountRow, index: number) => {
+      const status = LedgerStatus.safeParse(row.status).success ? row.status : "PENDING";
+      acc[status] = (acc[status] ?? 0) + (amounts[index] ?? 0);
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
   return {
     available: byStatus["SUCCEEDED"] ?? 0,
     pending: byStatus["PENDING"] ?? 0,

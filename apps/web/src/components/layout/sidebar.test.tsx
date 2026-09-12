@@ -46,8 +46,8 @@ describe("Sidebar grouped IA (Wave1)", () => {
     expect(payouts).toHaveAttribute("aria-current", "page");
   });
 
-  it("permission-aware: VIEWER hides Team/Audit", () => {
-    render(<Sidebar roles={["VIEWER"]} />);
+  it("permission-aware: SUPPORT hides Team/Audit", () => {
+    render(<Sidebar roles={["SUPPORT"]} />);
     expect(screen.queryByRole("link", { name: /^Team$/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Audit Log/ })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Transactions/ })).toBeInTheDocument();

@@ -1,6 +1,10 @@
 import { Suspense } from "react";
 import { Link } from "@/i18n/navigation";
 import { AnalyticsChart } from "@/components/dashboard/analytics-chart";
+import { CommandCenter, CommandCenterSkeleton } from "@/components/command-center/command-center";
+import { COMMAND_CENTER_LANES, type CommandCenterLane } from "@/lib/command-center";
+import { getCommandCenter, toDto } from "@/server/data/command-center";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { BalanceStrip } from "@/components/dashboard/balance-strip";
 import { ChartRangeTabs, type ChartRange } from "@/components/dashboard/chart-range-tabs";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
@@ -32,6 +36,29 @@ const CHART_RANGE_DAYS: Record<ChartRange, number> = { "7d": 7, "30d": 30, "90d"
 function chartRangeOf(searchParams: Record<string, string | string[] | undefined>): ChartRange {
   const v = searchParams.range;
   return v === "30d" || v === "90d" ? v : "7d";
+}
+
+/** `/dashboard?lane=critical` focuses one exception lane (Wave 4 §2). */
+function laneOf(searchParams: Record<string, string | string[] | undefined>): CommandCenterLane | null {
+  const v = Array.isArray(searchParams.lane) ? searchParams.lane[0] : searchParams.lane;
+  return v && (COMMAND_CENTER_LANES as readonly string[]).includes(v) ? (v as CommandCenterLane) : null;
+}
+
+/**
+ * The Command Center is the dashboard's primary content (Wave 4 §2): exceptions
+ * first, summary second. Roles come from the session so `canAct` on every card is
+ * computed server-side — the client never decides its own authority.
+ */
+async function CommandCenterSection({ lane }: { lane: CommandCenterLane | null }) {
+  let roles: Awaited<ReturnType<typeof resolveSessionOrgContext>>["roles"] = [];
+  try {
+    const ctx = await resolveSessionOrgContext();
+    roles = ctx.roles;
+  } catch {
+    roles = [];
+  }
+  const snapshot = await getCommandCenter(roles);
+  return <CommandCenter initialData={toDto(snapshot)} focusLane={lane} />;
 }
 
 function MetricTile({
@@ -150,11 +177,18 @@ async function RecentTransactions() {
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const range = chartRangeOf(sp);
+  const lane = laneOf(sp);
 
   return (
     <main className="mx-auto max-w-container-max p-gutter space-y-6 pb-12">
       {/* Welcome Section — greeting derived from the merchant profile */}
       <DashboardHeader />
+
+      {/* Command Center — exception lanes first (Wave 4 §2). Keyed on the lane
+          param so focusing a lane re-renders the section deterministically. */}
+      <Suspense fallback={<CommandCenterSkeleton />}>
+        <CommandCenterSection lane={lane} />
+      </Suspense>
 
       {/* Bento Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

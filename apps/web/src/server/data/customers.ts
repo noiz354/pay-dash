@@ -40,7 +40,12 @@ export type Customer = {
 export type CustomerFilters = {
   q?: string;
   status?: CustomerStatus | "ALL";
-  sort?: "recent" | "ltv" | "name";
+  /**
+   * `recent` sorts by last activity, `added` by record creation — they differ
+   * for a long-dormant customer, so both are offered in the URL state.
+   */
+  sort?: "recent" | "ltv" | "name" | "added";
+  direction?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 };
@@ -52,6 +57,8 @@ export type PaginatedCustomers = {
   pageSize: number;
   pageCount: number;
   isFiltered: boolean;
+  /** ISO instant this page was read — the freshness anchor for CMP-008. */
+  fetchedAt: string;
 };
 
 type ManualRecord = {
@@ -231,7 +238,11 @@ async function buildDirectory(): Promise<Customer[]> {
 }
 
 export async function listCustomers(filters: CustomerFilters = {}): Promise<PaginatedCustomers> {
-  const { q = "", status = "ALL", sort = "recent" } = filters;
+  const { q = "", status = "ALL", sort = "recent", direction } = filters;
+  // Each sort key has a natural reading order: names go A-Z, everything else is
+  // newest/largest first. An explicit `direction` from the URL overrides it; when
+  // omitted we keep the natural order so existing callers see no change.
+  const dir = direction ? (direction === "asc" ? 1 : -1) : sort === "name" ? 1 : -1;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
@@ -247,9 +258,11 @@ export async function listCustomers(filters: CustomerFilters = {}): Promise<Pagi
   });
 
   filtered.sort((a, b) => {
-    if (sort === "ltv") return b.lifetimeValue - a.lifetimeValue;
-    if (sort === "name") return a.name.localeCompare(b.name);
-    return (b.lastSeenAt ?? b.createdAt).localeCompare(a.lastSeenAt ?? a.createdAt);
+    if (sort === "ltv") return dir * (a.lifetimeValue - b.lifetimeValue);
+    // Name always sorts alphabetically; `direction` flips A-Z / Z-A.
+    if (sort === "name") return dir * a.name.localeCompare(b.name);
+    if (sort === "added") return dir * a.createdAt.localeCompare(b.createdAt);
+    return dir * (a.lastSeenAt ?? a.createdAt).localeCompare(b.lastSeenAt ?? b.createdAt);
   });
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -260,7 +273,10 @@ export async function listCustomers(filters: CustomerFilters = {}): Promise<Pagi
     page: safePage,
     pageSize,
     pageCount,
+    // Sorting is a *view* preference, not a filter — `isFiltered` drives the
+    // "no data" vs "no results" empty state, so it stays keyed on q/status.
     isFiltered: needle.length > 0 || status !== "ALL",
+    fetchedAt: new Date().toISOString(),
   };
 }
 

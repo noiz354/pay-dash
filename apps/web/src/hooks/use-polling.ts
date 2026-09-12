@@ -1,209 +1,170 @@
 "use client";
-import { useEffect, useRef, useState, useCallback } from "react";
+import * as React from "react";
 
-/**
- * usePolling hook — Real freshness with polling
- * 
- * Features:
- * - Poll at specified interval (default 20s)
- * - Track last updated timestamp
- * - Respect prefers-reduced-motion (pauses polling)
- * - Pause when tab not visible (Page Visibility API)
- * - Manual refresh trigger
- * - Stale threshold check (>60s)
- */
+// Wave 4 §2/§8 — freshness backbone.
+//
+// Rewritten. The previous version had three defects that made "real freshness"
+// unverifiable:
+//
+//   1. It gated polling on `prefers-reduced-motion`. A motion preference is about
+//      animation, not data currency — disabling polling there served *stale*
+//      financial data to users with vestibular disorders. Motion is now handled
+//      where it belongs (CSS), and polling is unconditional.
+//   2. `ageSeconds` was computed during render with no timer, so nothing ever
+//      re-rendered and the stale threshold could never trip on its own.
+//   3. Two effects both called `start()`, racing the timeout chain.
+//
+// Contract now: poll on an interval while the tab is visible, tick the age every
+// second so staleness is detected without a fetch, expose failures as state
+// (never swallow them), and never blank the UI while refreshing.
 
 export interface PollingConfig {
-  /** Poll interval in milliseconds (default: 20000 = 20s) */
+  /** Poll interval in milliseconds. Default 20s (spec §7). */
   interval?: number;
-  /** Stale threshold in seconds (default: 60) */
+  /** Age in seconds after which data is declared stale. Default 60s (spec §7). */
   staleThreshold?: number;
-  /** Enable/disable polling (default: true) */
+  /** Enable/disable polling. Default true. */
   enabled?: boolean;
-  /** Callback to fetch fresh data */
+  /** Fetch immediately on mount rather than waiting for the first interval. */
+  immediate?: boolean;
+  /** Called to fetch fresh data. Throw to signal failure. */
   onRefresh: () => Promise<void> | void;
 }
 
 export interface PollingResult {
-  /** Last successful update timestamp */
+  /** Last *successful* update. Null until the first success. */
   lastUpdated: Date | null;
-  /** Age in seconds since last update */
+  /** Age in seconds since the last success; ticks without a fetch. */
   ageSeconds: number | null;
-  /** Whether data is considered stale (> staleThreshold) */
+  /** True once `ageSeconds` exceeds `staleThreshold`. */
   isStale: boolean;
-  /** Whether currently polling */
+  /** A refresh is in flight. */
   isPolling: boolean;
-  /** Manual refresh function */
+  /** Message from the most recent failed refresh, or null. */
+  error: string | null;
+  /** Trigger a refresh now (used by the banner's Refresh button). */
   refresh: () => Promise<void>;
-  /** Start polling */
   start: () => void;
-  /** Stop polling */
   stop: () => void;
 }
 
-/**
- * Hook for real-time data polling with freshness tracking
- * 
- * @param config - Polling configuration
- * @returns Polling state and controls
- * 
- * @example
- * ```tsx
- * const { lastUpdated, isStale, refresh } = usePolling({
- *   interval: 20000,
- *   staleThreshold: 60,
- *   onRefresh: async () => {
- *     const data = await fetchData();
- *     setData(data);
- *   }
- * });
- * 
- * // In render:
- * {isStale && <StaleBanner ageSeconds={ageSeconds} onRefresh={refresh} />}
- * ```
- */
 export function usePolling(config: PollingConfig): PollingResult {
-  const { 
-    interval = 20000, 
-    staleThreshold = 60, 
-    enabled = true,
-    onRefresh 
-  } = config;
-  
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isVisibleRef = useRef(true);
-  const prefersReducedMotion = useRef(false);
+  const { interval = 20_000, staleThreshold = 60, enabled = true, immediate = false, onRefresh } = config;
 
-  // Check prefers-reduced-motion
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-      prefersReducedMotion.current = mediaQuery.matches;
-      
-      const handler = () => {
-        prefersReducedMotion.current = mediaQuery.matches;
-      };
-      mediaQuery.addEventListener("change", handler);
-      return () => mediaQuery.removeEventListener("change", handler);
-    }
-  }, []);
+  const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
+  const [isPolling, setIsPolling] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  // Re-rendered every second while mounted so `ageSeconds` advances and the
+  // stale threshold trips on time even when no fetch happens.
+  const [, setTick] = React.useState(0);
 
-  // Page Visibility API
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      isVisibleRef.current = !document.hidden;
-      const handler = () => {
-        isVisibleRef.current = !document.hidden;
-      };
-      document.addEventListener("visibilitychange", handler);
-      return () => document.removeEventListener("visibilitychange", handler);
-    }
-  }, []);
-
-  // Calculate age
-  const ageSeconds = lastUpdated 
-    ? Math.floor((Date.now() - lastUpdated.getTime()) / 1000) 
-    : null;
-
-  // Check if stale
-  const isStale = ageSeconds !== null && ageSeconds > staleThreshold;
-
-  // Refresh function
-  const refresh = useCallback(async () => {
-    try {
-      setIsPolling(true);
-      await onRefresh();
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error("Polling refresh failed:", error);
-      // Don't update lastUpdated on failure
-    } finally {
-      setIsPolling(false);
-    }
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tickRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const inFlightRef = React.useRef(false);
+  // Keep the latest callback without re-arming the timer chain on every render.
+  const onRefreshRef = React.useRef(onRefresh);
+  React.useEffect(() => {
+    onRefreshRef.current = onRefresh;
   }, [onRefresh]);
 
-  // Start polling
-  const start = useCallback(() => {
-    // Clear existing timeout
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    
-    // Don't start if disabled, reduced motion, or not visible
-    if (!enabled || prefersReducedMotion.current || !isVisibleRef.current) {
-      return;
-    }
-
-    const poll = async () => {
-      if (!isVisibleRef.current || prefersReducedMotion.current) {
-        return;
-      }
-      
-      await refresh();
-      
-      // Schedule next poll
-      timeoutRef.current = setTimeout(poll, interval);
-    };
-
-    // Initial poll after first interval
-    timeoutRef.current = setTimeout(poll, interval);
-  }, [enabled, interval, refresh]);
-
-  // Stop polling
-  const stop = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+  const refresh = React.useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setIsPolling(true);
+    try {
+      await onRefreshRef.current();
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (e) {
+      // Surface the failure — silently keeping stale data is how a dashboard
+      // starts lying. `lastUpdated` is deliberately not advanced.
+      setError(e instanceof Error ? e.message : "Refresh failed");
+    } finally {
+      inFlightRef.current = false;
+      setIsPolling(false);
     }
   }, []);
 
-  // Auto-start on mount
-  useEffect(() => {
-    if (enabled) {
-      start();
-      // Set initial timestamp
-      setLastUpdated(new Date());
+  const clearTimers = React.useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
-    
-    return () => {
-      stop();
+    if (tickRef.current) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+  }, []);
+
+  const start = React.useCallback(() => {
+    clearTimers();
+    if (!enabled) return;
+
+    // Tick the age once a second so staleness is detected without a fetch.
+    tickRef.current = setInterval(() => setTick((t) => t + 1), 1_000);
+
+    const poll = async () => {
+      // Pause while the tab is hidden (battery/network), resume on return.
+      if (typeof document !== "undefined" && document.hidden) {
+        timerRef.current = setTimeout(poll, interval);
+        return;
+      }
+      await refresh();
+      timerRef.current = setTimeout(poll, interval);
     };
-  }, [enabled, start, stop]);
 
-  // Restart polling when visibility changes
-  useEffect(() => {
-    if (enabled && isVisibleRef.current && !prefersReducedMotion.current) {
-      start();
-    } else {
-      stop();
-    }
-  }, [enabled, start, stop]);
+    if (immediate) void poll();
+    else timerRef.current = setTimeout(poll, interval);
+  }, [clearTimers, enabled, immediate, interval, refresh]);
 
-  return {
-    lastUpdated,
-    ageSeconds,
-    isStale,
-    isPolling,
-    refresh,
-    start,
-    stop,
-  };
+  const stop = React.useCallback(() => {
+    clearTimers();
+  }, [clearTimers]);
+
+  React.useEffect(() => {
+    start();
+    return stop;
+  }, [start, stop]);
+
+  // Resume promptly when the tab becomes visible again.
+  React.useEffect(() => {
+    if (!enabled || typeof document === "undefined") return;
+    const onVisibility = () => {
+      if (!document.hidden) start();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [enabled, start]);
+
+  // Computed during render on purpose: the 1s tick above re-renders this hook's
+  // owner, so the age advances without a fetch and the stale threshold trips on
+  // schedule. Memoising it would freeze the value between refreshes.
+  const ageSeconds = lastUpdated ? Math.max(0, Math.floor((Date.now() - lastUpdated.getTime()) / 1000)) : null;
+  const isStale = ageSeconds !== null && ageSeconds > staleThreshold;
+
+  return { lastUpdated, ageSeconds, isStale, isPolling, error, refresh, start, stop };
 }
 
 /**
- * Simplified hook for components that just need stale detection
+ * Minimal hook for components that already receive a server timestamp and only
+ * need to know whether it has gone stale. Ticks once a second.
  */
-export function useStaleDetection(lastUpdated: Date | null, staleThreshold = 60): {
-  isStale: boolean;
-  ageSeconds: number | null;
-} {
-  const ageSeconds = lastUpdated 
-    ? Math.floor((Date.now() - lastUpdated.getTime()) / 1000) 
-    : null;
-  
-  const isStale = ageSeconds !== null && ageSeconds > staleThreshold;
-  
-  return { isStale, ageSeconds };
+export function useStaleDetection(
+  lastUpdated: Date | string | null,
+  staleThreshold = 60,
+): { isStale: boolean; ageSeconds: number | null } {
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const at = React.useMemo(() => {
+    if (!lastUpdated) return null;
+    const t = lastUpdated instanceof Date ? lastUpdated.getTime() : new Date(lastUpdated).getTime();
+    return Number.isFinite(t) ? t : null;
+  }, [lastUpdated]);
+
+  const ageSeconds = at === null ? null : Math.max(0, Math.floor((Date.now() - at) / 1000));
+  return { isStale: ageSeconds !== null && ageSeconds > staleThreshold, ageSeconds };
 }

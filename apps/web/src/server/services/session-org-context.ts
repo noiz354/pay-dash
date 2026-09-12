@@ -1,6 +1,7 @@
 import "server-only";
 
 import { authorizeOrgContext, demoOrgContext, PrismaOrgContextDb, buildOrgContext, type OrgContext } from "./org-context";
+import { DEFAULT_DEMO_ORG as DEMO_ORGANIZATION_ID } from "@/domain/payments/runtime-defaults";
 import type { Permission } from "@/domain/organization/roles";
 import { loadLazyPrisma } from "@/server/repositories/prisma-runtime";
 
@@ -22,6 +23,26 @@ async function membershipDb(): Promise<PrismaOrgContextDb> {
   return cachedDb;
 }
 
+/**
+ * The unauthenticated fallback. Normally the single-tenant demo OWNER context,
+ * but in `off`/`preview` mode an E2E persona cookie may select which role the
+ * fallback resolves to (see `./test-persona`). Strict mode never consults it, so
+ * a production request can never choose its own roles.
+ */
+async function unauthenticatedContext(): Promise<OrgContext> {
+  const { resolvePersonaFromCookies } = await import("./test-persona");
+  const persona = await resolvePersonaFromCookies();
+  if (!persona) return demoOrgContext();
+  return {
+    organizationId: DEMO_ORGANIZATION_ID,
+    roles: persona.roles,
+    userId: persona.actorId,
+    // Still a fallback: no real membership backs it, so `requireStrictOrgContext`
+    // keeps refusing to treat it as authenticated.
+    isDemoFallback: true,
+  };
+}
+
 export async function resolveSessionOrgContext(input?: { organizationId?: string }): Promise<OrgContext> {
   try {
     const { auth } = await import("@/lib/auth");
@@ -29,14 +50,14 @@ export async function resolveSessionOrgContext(input?: { organizationId?: string
     const session = await auth.api.getSession({ headers: await headers() });
     const userId = session?.user?.id ?? null;
     if (!userId) {
-      return demoOrgContext();
+      return unauthenticatedContext();
     }
     const db = await membershipDb();
     const memberships = await db.resolveMemberships(userId);
     return buildOrgContext(memberships, userId, input?.organizationId);
   } catch {
     // No session header, no DB, or auth not initialized → dev/demo fallback.
-    return demoOrgContext();
+    return unauthenticatedContext();
   }
 }
 

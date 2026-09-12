@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
-import { useSearchParams, usePathname, useRouter } from "@/i18n/navigation";
+import { usePathname, useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
 import { CanonicalDataTable, type Column } from "@/components/data-table/canonical-data-table";
 import { SearchInput } from "@/components/data-table/search-input";
 import { FilterBar, FilterSheet } from "@/components/data-table/filter-bar";

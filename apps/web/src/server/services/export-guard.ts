@@ -143,3 +143,64 @@ export async function guardExportAny(request: Request, permissions: Permission[]
   }
   return { ok: true, organizationId: ctx.organizationId };
 }
+
+/**
+ * Wave 4 — fail-closed guard for authenticated JSON reads (e.g. the Command
+ * Center polling endpoint). Same policy as `guardExport`: anonymous → 401,
+ * authenticated but unauthorized → 403, authorized → ok.
+ *
+ * `permission` is optional because some reads are legitimate for *any*
+ * authenticated actor (the dashboard aggregates per-item authority instead of
+ * gating the whole payload). Omitting it still requires a real session in strict
+ * mode, so the endpoint cannot become an anonymous data source.
+ */
+export async function guardApiRead(request: Request, permission?: Permission): Promise<GuardResult> {
+  if (!shouldEnforce(request)) {
+    try {
+      const ctx = await resolveSessionOrgContext();
+      return { ok: true, organizationId: ctx.organizationId };
+    } catch {
+      return { ok: true, organizationId: "unknown" };
+    }
+  }
+
+  let ctx;
+  try {
+    ctx = await resolveSessionOrgContext();
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } }),
+    };
+  }
+
+  if (ctx.isDemoFallback || !ctx.userId) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } }),
+    };
+  }
+
+  if (permission) {
+    const allowed = ctx.roles.some((r) => hasPermission(r, permission)) || ctx.roles.some((r) => hasPermission(r, "report.export"));
+    if (!allowed) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Forbidden" }, { status: 403, headers: { "Cache-Control": "no-store" } }),
+      };
+    }
+  }
+
+  return { ok: true, organizationId: ctx.organizationId };
+}
+
+/** Roles for the authenticated request, or `[]` when unauthenticated. */
+export async function rolesForRequest(request: Request): Promise<import("@/domain/organization/roles").OrganizationRole[]> {
+  void request;
+  try {
+    const ctx = await resolveSessionOrgContext();
+    return ctx.roles;
+  } catch {
+    return [];
+  }
+}
