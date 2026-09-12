@@ -123,7 +123,7 @@ export default async function TransactionDetailPage({
             </Button>
           </Link>
           {tx.status === "FAILED" ? (
-            <RetryButton id={tx.id} />
+            <RetryButton id={tx.id} expectedUpdatedAt={tx.updatedAt} />
           ) : (
             <RefundWorkflow
               transactionId={tx.id}
