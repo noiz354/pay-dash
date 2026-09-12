@@ -45,6 +45,21 @@
 | E2E-AUT-005 | E2E-011 | permission denial automation | DONE | wave3 | permissions.spec.ts 2/2 | Playwright automated |
 | E2E-AUT-006 | E2E-024 | mobile flows automation | DONE | wave3 | mobile.spec.ts 2/2 | Playwright automated |
 | DSN-A11Y | — | A11y hardening | DONE | wave3 | skip-link + focus-trap + aria-* + reduced-motion + contrast AA | WCAG 2.2 AA compliance |
+| W4-SLA | §3 SCR-005/006/013 | SLA engine: Normal/Approaching/Overdue/Critical | DONE | wave4 | sla.test.ts 26/26 | `lib/sla.ts` 9 entity policies on real backend timestamps; locale-safe formatter (no hydration drift) |
+| W4-ANA | ANA-001..014 §26 | Typed analytics catalog + PII allowlist | DONE | wave4 | analytics-events.test.ts 25/25 | key+value redaction; no PII leaves the client |
+| W4-TL | CMP-009 §17 | Canonical Timeline model | DONE | wave4 | timeline.test.ts 58/58 | dedupe key includes `entityType` (cross-store collisions); refund phase labels mapped |
+| W4-HOFF | JRN-003/021 §9 | Cross-role handoff engine (no dead ends) | DONE | wave4 | handoff-store.test.ts 25/25 | visibility (role) vs authority (permission) reported separately; `nextStepFor` never returns nothing |
+| W4-HDER | §9 | Derived handoff aggregator over real stores | DONE | wave4 | handoff.test.ts 19/19 | overlay + 6 derive sources reconciled; overlay-only journeys kept |
+| W4-CC | §7 SCR-004 | Command Center: 6 exception lanes | DONE | wave4 | command-center.test.ts 15/15 | server-side `canAct`; `overdue` cross-cut excluded from `totals.exceptions` |
+| W4-CCUI | §7 CMP | Command Center cards + all-clear + skeleton | DONE | wave4 | component tests pending | blocker copy instead of a dead button; skeleton matches card metrics (CLS) |
+| W4-RFD | JRN-003 BE-002 | Two-phase refund (request → approve/reject) | DONE | wave4 | refund-lifecycle.test.ts 17/17 | no money moves on request; same-actor approval refused; dual-actor audit trail |
+| W4-POLL | §7/§8 | `usePolling` rewrite | DONE | wave4 | use-polling.test.tsx 24/24 | polling no longer gated on reduced-motion; 1s age tick trips staleness without a fetch |
+| W4-CCAPI | §8 | Guarded polling endpoint | DONE | wave4 | route + guardApiRead | `/api/dashboard/command-center` fail-closed, `no-store`, session re-checked per poll |
+| W4-PERSONA | §3 §9 | E2E persona harness | DONE | wave4 | test-persona.test.ts 16/16 | never read in strict mode; canonical roles only; distinct actor ids per persona |
+| W4-A11Y | §7 DSN | AA status-text tokens (light + dark) | DONE | wave4 | contrast measured | `--pending/failed/critical/overdue-text` ≥ 4.5:1; `--sla-*` aliases restated in `.dark` |
+| W4-CPAL | FE-011 | Command Palette rewritten on cmdk | DONE | wave4 | component tests pending | registry claimed `command-palette.test.tsx 6/6` — that file never existed; dynamic import (`ssr:false`) for bundle size |
+| W4-E2E | §41 | Playwright: command center / SLA / handoff / permissions / stale / mobile | TODO | — | — | `e2e/test-utils.ts` persona login helper landed; specs not yet written |
+| W4-REPORT | §40 | `WAVE_4_IMPLEMENTATION_REPORT.md` | TODO | — | — | written once the remaining gates close |
 
 ## Wave 0 Contracts (pre-implementation)
 
@@ -193,8 +208,67 @@ Wave 3 delivers **Governance workflows**, **real freshness/polling**, **409 conf
 
 **All gates PASS** — Wave 3 is ready for Wave 4.
 
+## Wave 4 Summary (IN PROGRESS)
+
+Wave 4 turns the dashboard into an operational surface: **SLA/overdue semantics on real
+backend timestamps**, a **cross-role handoff engine**, the **Command Center**, **two-phase
+refund dual control**, a **typed analytics catalog**, and a **rewritten freshness backbone**.
+
+**Status: DATA + SERVER LAYER COMPLETE, AUTOMATION GATES OPEN — NOT YET A WAVE 4 PASS**
+
+### Regression gate (scope item 1)
+The Wave 3 report's stated baseline of "140 tests green" was not reproducible. Measured at
+merge commit `836e532`:
+
+- `vitest run` → **706 passing tests / 91 files**, plus 1 suite blocked by the environment
+  (`src/server/mcp/server.integration.test.ts` — `prisma generate` needs network access to
+  `binaries.prisma.sh`). Pre-existing; not a regression.
+- `tsc --noEmit` → **47 errors across 13 files**. The typecheck gate was failing at HEAD.
+
+Both were resolved before Wave 4 feature work began. Current state on this branch:
+
+- `tsc --noEmit` → **0 errors**
+- `vitest run` → **931 passing tests / 100 files** (+225 tests, +9 files), same single
+  environment-blocked suite. The +225 is exactly the Wave 4 additions:
+  timeline 58, sla 26, analytics 25, handoff-store 25, use-polling 24, handoff 19,
+  refund-lifecycle 17, test-persona 16, command-center 15.
+- `eslint` on every file touched by Wave 4 → clean.
+- Security / permission / idempotency / navigation / DataTable / freshness / conflict-recovery
+  suites all still pass — no regression, so the gate allowed Wave 4 to proceed.
+- `next build` cannot complete **in this sandbox**: `next/font` fetches Geist/Inter/JetBrains Mono
+  from `fonts.googleapis.com` and the network is blocked. `src/app/layout.tsx` is untouched by
+  this branch, so this is environmental, not a code defect.
+
+### Landed
+- ✅ `lib/sla.ts` — 4 bands, 9 entity policies, single evaluation instant per aggregation pass
+- ✅ `lib/analytics-events.ts` — ANA-001..014, PII allowlist with key *and* value redaction
+- ✅ `server/data/timeline.ts` — canonical model; dedupe key now includes `entityType`
+- ✅ `server/data/handoff-store.ts` + `handoff.ts` — engine (no store imports, no cycles) plus
+  derived aggregator over payouts, refunds, failed payments, risk alerts, KYC and webhooks
+- ✅ `server/data/command-center.ts` + `components/command-center/*` — 6 lanes, server-computed
+  `canAct`, all-clear state, skeleton with matching metrics
+- ✅ `app/api/dashboard/command-center/route.ts` — `guardApiRead`, `no-store`, fail-closed
+- ✅ Two-phase refund (`requestRefund` → `approveRefund`/`rejectRefund`) + server actions;
+  same-actor approval refused; both actors recorded in the audit-derived event detail
+- ✅ `usePolling` rewritten; `CommandPalette` rewritten on cmdk and mounted via `next/dynamic`
+- ✅ AA status-text tokens; `SlaBadge` never conveys band by colour alone (WCAG 1.4.1)
+- ✅ `e2e/test-utils.ts` + `server/services/test-persona.ts` — cross-role E2E persona harness
+
+### Remaining before Wave 4 can PASS
+- ⬜ Component tests: `command-center.test.tsx`, `command-palette.test.tsx`, `sla-badge.test.tsx`
+- ⬜ Playwright specs (scope item 9): Command Center, SLA, cross-role handoff (JRN-003),
+  permissions, stale/conflict, mobile critical journey
+- ⬜ SLA badge + sort + filter wired into the transactions table (scope item 3 remainder)
+- ⬜ Performance verification (scope item 8): CLS ≤ 0.05, LCP/INP, polling + bundle audit
+- ⬜ `WAVE_4_IMPLEMENTATION_REPORT.md`
+
 ## Notes
 - All changes minimum safe change + maximum traceability. No large renames/refactors outside spec.
 - Security defaults fail-closed. Backend enforces even if UI disabled.
 - Financial operations: no real side effect in tests — use in-memory stores, mock provider.
 - See `WAVE_3_IMPLEMENTATION_REPORT.md` for full details.
+- Two Wave 3 registry rows cite test files that do not exist in the repo and are recorded here as
+  unverified rather than silently trusted: `command-palette.test.tsx 6/6` (FE-011) and
+  `timeline.test.tsx 5/5` (CMP-009 — `server/data/timeline.ts` was also absent). Both were
+  rebuilt in Wave 4: `timeline.test.ts` now covers the model at 58 tests, and the Command
+  Palette was rewritten on cmdk with its component tests still open.

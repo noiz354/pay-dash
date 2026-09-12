@@ -12,6 +12,9 @@ import {
   refundTransaction,
   retryTransaction,
   getTransaction,
+  requestRefund,
+  approveRefund,
+  rejectRefund,
 } from "@/server/data/transactions";
 
 // Server Actions for the transaction journey.
@@ -220,4 +223,155 @@ export async function retryTransactionAction(
   revalidatePath("/[locale]/transactions/[id]", "page");
   revalidatePath("/[locale]/transactions", "page");
   return { status: "success", message: "Payment re-submitted to the processor" };
+}
+
+// ---------------------------------------------------------------------------
+// Wave 4 §4 — cross-role refund journey (JRN-003, spec §9 Refund dual-control)
+// ---------------------------------------------------------------------------
+//
+// `refundTransactionAction` above is the single-step path: one actor, one form,
+// an `approverId` text field. It stays for refunds below the dual-control
+// threshold. The three actions below are the journey that actually changes hands:
+//
+//   Role A (refund.prepare)  requestRefundAction  -> AWAITING_APPROVAL + handoff
+//                                                   + notification to Role B
+//   Role B (refund.execute)  approveRefundAction  -> money moves, handoff closed
+//                             rejectRefundAction  -> nothing moves, handoff closed
+//
+// Each action resolves the actor from the session (never from the form), enforces
+// its permission server-side, and revalidates the ledger, the detail screen and
+// the dashboard so Role B's queue and the Command Center lane update together.
+
+const RefundRequestSchema = z.object({
+  id: z.string().trim().min(1, "Missing transaction id"),
+  amount: z
+    .string()
+    .trim()
+    .transform((v) => Number(v.replace(/[^0-9.]/g, "")))
+    .refine((n) => Number.isFinite(n) && n > 0, "Refund amount must be greater than zero"),
+  reason: z.string().trim().min(3, "Give the approver a reason (at least 3 characters)").max(200).optional(),
+});
+
+const RefundDecisionSchema = z.object({
+  id: z.string().trim().min(1, "Missing transaction id"),
+  reason: z.string().trim().max(200).optional(),
+});
+
+function denyMessage(e: unknown, fallback: string): string {
+  if (e instanceof OrgContextError) {
+    return e.message.includes("Authentication") ? "Authentication required — please sign in." : fallback;
+  }
+  return e instanceof Error ? e.message : fallback;
+}
+
+function revalidateRefundSurfaces(): void {
+  revalidatePath("/[locale]/transactions/[id]", "page");
+  revalidatePath("/[locale]/transactions", "page");
+  revalidatePath("/[locale]/dashboard", "page");
+}
+
+/** Role A asks for a refund. No money moves; Role B is notified. */
+export async function requestRefundAction(
+  _prev: ActionState<{ awaitingApproval: boolean }> | undefined,
+  formData: FormData,
+): Promise<ActionState<{ awaitingApproval: boolean }>> {
+  let ctx;
+  try {
+    ctx = await requireStrictOrgContext("refund.prepare");
+  } catch (e) {
+    return { status: "error", message: denyMessage(e, "You don't have permission to request refunds.") };
+  }
+
+  const parsed = RefundRequestSchema.safeParse({
+    id: formData.get("id"),
+    amount: formData.get("amount"),
+    reason: formData.get("reason") ?? undefined,
+  });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
+    };
+  }
+
+  const result = await requestRefund({
+    transactionId: parsed.data.id,
+    amount: parsed.data.amount,
+    reason: parsed.data.reason ?? "",
+    // The actor comes from the session, never from the form — otherwise a client
+    // could name itself as its own approver.
+    requestedBy: ctx.userId ?? "unknown",
+  });
+
+  if (!result.ok) return { status: "error", message: result.message };
+
+  revalidateRefundSurfaces();
+  return {
+    status: "success",
+    message: result.created
+      ? "Refund requested — it now needs a second approval from a Finance Admin or Owner."
+      : "This refund is already awaiting approval.",
+    data: { awaitingApproval: true },
+  };
+}
+
+/** Role B approves the pending refund. Must be a different actor. */
+export async function approveRefundAction(
+  _prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  let ctx;
+  try {
+    ctx = await requireStrictOrgContext("refund.execute");
+  } catch (e) {
+    return { status: "error", message: denyMessage(e, "You don't have permission to approve refunds.") };
+  }
+
+  const parsed = RefundDecisionSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
+    };
+  }
+
+  const result = await approveRefund({ transactionId: parsed.data.id, approvedBy: ctx.userId ?? "unknown" });
+  if (!result.ok) return { status: "error", message: result.message };
+
+  revalidateRefundSurfaces();
+  return { status: "success", message: "Refund approved and issued." };
+}
+
+/** Role B rejects the pending refund. No money moves. */
+export async function rejectRefundAction(
+  _prev: ActionState | undefined,
+  formData: FormData,
+): Promise<ActionState> {
+  let ctx;
+  try {
+    ctx = await requireStrictOrgContext("refund.execute");
+  } catch (e) {
+    return { status: "error", message: denyMessage(e, "You don't have permission to decide refunds.") };
+  }
+
+  const parsed = RefundDecisionSchema.safeParse({ id: formData.get("id"), reason: formData.get("reason") ?? undefined });
+  if (!parsed.success) {
+    return {
+      status: "error",
+      message: "Please fix the highlighted fields.",
+      fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
+    };
+  }
+
+  const result = await rejectRefund({
+    transactionId: parsed.data.id,
+    rejectedBy: ctx.userId ?? "unknown",
+    reason: parsed.data.reason,
+  });
+  if (!result.ok) return { status: "error", message: result.message };
+
+  revalidateRefundSurfaces();
+  return { status: "success", message: "Refund rejected — no money moved." };
 }

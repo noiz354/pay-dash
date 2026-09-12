@@ -84,8 +84,8 @@ export function parseTableUrlState(search: string | URLSearchParams, opts: Parse
   if (!o.allowedSorts.includes(sort)) sort = o.defaultSort;
 
   // direction
-  let direction = one(params.get("direction")) ?? o.defaultDirection;
-  if (direction !== "asc" && direction !== "desc") direction = o.defaultDirection;
+  const rawDirection = one(params.get("direction"));
+  const direction: "asc" | "desc" = rawDirection === "asc" || rawDirection === "desc" ? rawDirection : o.defaultDirection;
 
   // status
   let status = one(params.get("status")) ?? "ALL";

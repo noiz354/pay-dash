@@ -1,45 +1,59 @@
 "use client";
 import * as React from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { CanonicalDataTable, type Column, type DataTableProps } from "@/components/data-table/canonical-data-table";
-import { FilterBar } from "@/components/data-table/filter-bar";
+import Link from "next/link";
+import { usePathname, useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
+import { CanonicalDataTable, type Column } from "@/components/data-table/canonical-data-table";
 import { SearchInput } from "@/components/data-table/search-input";
+import { FilterBar } from "@/components/data-table/filter-bar";
 import { BulkBar } from "@/components/data-table/bulk-bar";
 import { StaleBanner } from "@/components/data-table/stale-banner";
-import { parseTableUrlState, serializeTableUrlState, toFilterChips, activeFilterCount } from "@/lib/table-url-state";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { CustomerRowActions } from "./customer-row-actions";
+import { Button } from "@/components/ui/button";
 import { CustomerStatusPill } from "./customer-status-pill";
-import { formatIDR } from "@/lib/format";
+import { CustomerRowActions } from "./customer-row-actions";
+import { formatDateLong, formatMoney, formatNumber } from "@/lib/format";
+import { trackEvent } from "@/lib/analytics-events";
+import { activeFilterCount, parseTableUrlState, toFilterChips } from "@/lib/table-url-state";
 import type { Customer } from "@/server/data/customers";
 
-// Canonical Customers Table — CMP-005 integration for Customers (FE-012)
-// Supports: search, filter (status), sort, pagination, URL state, bulk export, mobile cards
+// FE-012 — Customers on the canonical DataTable (CMP-005).
+//
+// Rewritten in Wave 4: the first attempt was authored against APIs that do not
+// exist in this repo (`formatIDR`, `Customer.ref`, `Customer.transactionCount`,
+// a `FilterBar` that takes children, a `SearchInput` with `onClear`/`debounce`),
+// so the screen could not compile and `/customers` was effectively unshipped.
+// This version uses the same primitives as `canonical-payouts-table.tsx`, which
+// is the reference implementation for the pattern.
+//
+// URL state is the source of truth (CMP-004/FE-010): q, status, sort,
+// direction, page and pageSize all round-trip, so refresh/back/share preserve
+// the view and the "detail → back" journey restores the exact list.
 
-type CustomerTableProps = {
+const CUSTOMER_STATUS_OPTIONS = ["ALL", "ACTIVE", "REVIEW", "BLOCKED", "NEW"] as const;
+const CUSTOMER_SORT_OPTIONS = ["recent", "name", "ltv", "added"] as const;
+
+const PARSE_OPTS = {
+  allowedStatuses: [...CUSTOMER_STATUS_OPTIONS],
+  allowedSorts: [...CUSTOMER_SORT_OPTIONS],
+  defaultSort: "recent",
+  defaultDirection: "desc" as const,
+};
+
+/** Seconds after which the list is declared stale (CMP-008). */
+const STALE_AFTER_SECONDS = 60;
+
+export type CanonicalCustomersTableProps = {
   data: Customer[];
   total: number;
   page: number;
   pageCount: number;
   pageSize: number;
   isFiltered: boolean;
-  lastUpdated?: Date;
+  /** ISO instant the server read this page — the freshness anchor. */
+  lastUpdated?: string;
+  /** Export requires `customer.read`; the caller gates it from the session. */
+  canExport?: boolean;
 };
-
-const CUSTOMER_STATUSES = [
-  { value: "ALL", label: "All" },
-  { value: "ACTIVE", label: "Active" },
-  { value: "REVIEW", label: "Review" },
-  { value: "ARCHIVED", label: "Archived" },
-  { value: "BLOCKED", label: "Blocked" },
-] as const;
-
-const CUSTOMER_SORTS = [
-  { value: "recent", label: "Recent" },
-  { value: "name", label: "Name" },
-  { value: "ltv", label: "Lifetime Value" },
-  { value: "added", label: "Date Added" },
-] as const;
 
 export function CanonicalCustomersTable({
   data,
@@ -49,302 +63,297 @@ export function CanonicalCustomersTable({
   pageSize,
   isFiltered,
   lastUpdated,
-}: CustomerTableProps) {
-  const router = useRouter();
-  const pathname = usePathname();
+  canExport = true,
+}: CanonicalCustomersTableProps) {
   const searchParams = useSearchParams();
-  
-  // Parse URL state
-  const urlState = parseTableUrlState(searchParams.toString(), {
-    allowedStatuses: CUSTOMER_STATUSES.map(s => s.value),
-    allowedSorts: CUSTOMER_SORTS.map(s => s.value),
-    defaultSort: "recent",
-    defaultDirection: "desc",
-  });
+  const pathname = usePathname();
+  const router = useRouter();
 
-  // Sync with URL
-  const [state, setState] = React.useState(urlState);
-  
-  React.useEffect(() => {
-    setState(parseTableUrlState(searchParams.toString(), {
-      allowedStatuses: CUSTOMER_STATUSES.map(s => s.value),
-      allowedSorts: CUSTOMER_SORTS.map(s => s.value),
-      defaultSort: "recent",
-      defaultDirection: "desc",
-    }));
-  }, [searchParams]);
+  const state = React.useMemo(() => parseTableUrlState(searchParams.toString(), PARSE_OPTS), [searchParams]);
+  const [selected, setSelected] = React.useState<string[]>([]);
 
-  // Debounced search
+  // SearchInput owns its own 250ms debounce; we mirror the committed value so
+  // the box does not reset when the URL round-trips.
   const [searchValue, setSearchValue] = React.useState(state.q);
-  const debouncedSearch = useDebouncedValue(searchValue, 250);
-  
-  React.useEffect(() => {
-    if (debouncedSearch !== state.q) {
-      updateUrl({ q: debouncedSearch, page: 1 });
-    }
-  }, [debouncedSearch]);
+  React.useEffect(() => setSearchValue(state.q), [state.q]);
 
-  // Selection state (page-scoped)
-  const [selectedKeys, setSelectedKeys] = React.useState<string[]>([]);
-
-  // Update URL helper
-  const updateUrl = React.useCallback((updates: Partial<typeof state>) => {
-    const newState = { ...state, ...updates };
-    const query = serializeTableUrlState(newState, {
-      allowedStatuses: CUSTOMER_STATUSES.map(s => s.value),
-      allowedSorts: CUSTOMER_SORTS.map(s => s.value),
-    });
-    router.replace(`${pathname}${query}`, { scroll: false });
-  }, [pathname, state, router]);
-
-  // Handle sort
-  const handleSort = React.useCallback((sort: string, direction: "asc" | "desc") => {
-    updateUrl({ sort, direction, page: 1 });
-  }, [updateUrl]);
-
-  // Handle page change
-  const handlePageChange = React.useCallback((newPage: number) => {
-    updateUrl({ page: newPage });
-  }, [updateUrl]);
-
-  // Handle page size change
-  const handlePageSizeChange = React.useCallback((size: number) => {
-    updateUrl({ pageSize: size, page: 1 });
-  }, [updateUrl]);
-
-  // Handle filter change
-  const handleFilterChange = React.useCallback((key: string, value: string) => {
-    const newState = { ...state, [key]: value, page: 1 };
-    if (key === "status" && value === "ALL") {
-      delete newState.status;
-    }
-    updateUrl(newState);
-  }, [state, updateUrl]);
-
-  // Handle clear all filters
-  const handleClearAll = React.useCallback(() => {
-    updateUrl({ q: "", status: "ALL", page: 1 });
-    setSearchValue("");
-  }, [updateUrl]);
-
-  // Handle clear single filter
-  const handleClearFilter = React.useCallback((key: string) => {
-    if (key === "q") {
-      setSearchValue("");
-      updateUrl({ q: "", page: 1 });
-    } else {
-      updateUrl({ [key]: "ALL", page: 1 });
-    }
-  }, [updateUrl]);
-
-  // Columns definition
-  const columns: Column<Customer>[] = [
-    {
-      id: "customer",
-      header: "Customer",
-      accessor: (row) => (
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded bg-[var(--surface-container-low)] flex items-center justify-center">
-            <span className="text-xs font-semibold text-[var(--on-surface-variant)]">
-              {row.name.slice(0, 2).toUpperCase()}
-            </span>
-          </div>
-          <div className="min-w-0">
-            <div className="body-md truncate font-medium text-[var(--on-surface)]">{row.name}</div>
-            <div className="body-sm truncate text-[var(--on-surface-variant)]">{row.email}</div>
-          </div>
-        </div>
-      ),
-      sortable: true,
-      sortKey: "name",
-      priority: 0,
+  const pushState = React.useCallback(
+    (patch: Partial<typeof state>) => {
+      const next = { ...state, ...patch };
+      const query = new URLSearchParams();
+      if (next.page && next.page !== 1) query.set("page", String(next.page));
+      if (next.pageSize && next.pageSize !== 10) query.set("pageSize", String(next.pageSize));
+      if (next.q) query.set("q", next.q);
+      if (next.status && next.status !== "ALL") query.set("status", next.status);
+      if (next.sort && next.sort !== PARSE_OPTS.defaultSort) query.set("sort", next.sort);
+      if (next.direction && next.direction !== "desc") query.set("direction", next.direction);
+      const qs = query.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    {
-      id: "ref",
-      header: "Reference",
-      accessor: (row) => <span className="data-mono text-[var(--on-surface-variant)]">{row.ref}</span>,
-      sortable: true,
-      sortKey: "ref",
-      priority: 0,
-    },
-    {
-      id: "status",
-      header: "Status",
-      accessor: (row) => <CustomerStatusPill status={row.status} />,
-      sortable: true,
-      sortKey: "status",
-      priority: 0,
-    },
-    {
-      id: "added",
-      header: "Added",
-      accessor: (row) => (
-        <span className="body-sm text-[var(--on-surface-variant)]">{new Date(row.createdAt).toLocaleDateString("id-ID")}</span>
-      ),
-      sortable: true,
-      sortKey: "added",
-      priority: 1,
-    },
-    {
-      id: "ltv",
-      header: "LTV",
-      accessor: (row) => (
-        <span className="text-right data-mono tabular-nums text-[var(--on-surface)]">
-          {formatIDR(row.lifetimeValue)}
-        </span>
-      ),
-      sortable: true,
-      sortKey: "ltv",
-      priority: 1,
-      className: "text-right",
-    },
-    {
-      id: "transactions",
-      header: "Transactions",
-      accessor: (row) => (
-        <span className="text-right data-mono text-[var(--on-surface-variant)]">
-          {row.transactionCount}
-        </span>
-      ),
-      sortable: true,
-      sortKey: "transactions",
-      priority: 2,
-      className: "text-right",
-    },
-  ];
-
-  // Card renderer for mobile
-  const cardRenderer = (row: Customer) => (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded bg-[var(--surface-container-low)] flex items-center justify-center shrink-0">
-          <span className="text-sm font-semibold text-[var(--on-surface-variant)]">
-            {row.name.slice(0, 2).toUpperCase()}
-          </span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="body-md font-medium text-[var(--on-surface)] truncate">{row.name}</div>
-          <div className="body-sm text-[var(--on-surface-variant)] truncate">{row.email}</div>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2 body-sm">
-        <span className="data-mono text-[var(--on-surface-variant)]">Ref: {row.ref}</span>
-        <CustomerStatusPill status={row.status} />
-      </div>
-      <div className="flex justify-between body-sm">
-        <span className="text-[var(--on-surface-variant)]">Added: {new Date(row.createdAt).toLocaleDateString("id-ID")}</span>
-        <span className="data-mono text-[var(--on-surface)]">LTV: {formatIDR(row.lifetimeValue)}</span>
-      </div>
-    </div>
+    [pathname, router, state],
   );
 
-  // Filter chips
-  const chips = toFilterChips(state);
+  const onSearch = React.useCallback(
+    (value: string) => {
+      pushState({ q: value, page: 1 });
+      // ANA-009: query_length and result_count only — never the query, which may
+      // contain a customer's email (PII).
+      trackEvent("search_performed", { query_length: value.trim().length, result_count: total, scr: "SCR-009" });
+    },
+    [pushState, total],
+  );
 
-  // Bulk actions (only export for customers)
-  const bulkActions = selectedKeys.length > 0 ? (
-    <BulkBar
-      count={selectedKeys.length}
-      actions={[
-        <button
-          key="export"
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded hover:bg-[var(--surface-container-low)]"
-          onClick={() => {
-            // Export selected customers
-            const ids = selectedKeys.join(",");
-            window.location.href = `/api/exports/customers?ids=${ids}`;
-          }}
-        >
-          <span className="material-symbols-outlined text-[18px]">download</span>
-          Export Selected
-        </button>,
-      ]}
-    />
-  ) : null;
+  const onStatusChange = React.useCallback(
+    (value: string) => {
+      pushState({ status: value, page: 1 });
+      trackEvent("filter_applied", { filter_key: "status", result_count: total, scr: "SCR-009" });
+    },
+    [pushState, total],
+  );
 
-  // Calculate last updated age
-  const lastUpdatedAge = lastUpdated ? Math.floor((Date.now() - lastUpdated.getTime()) / 1000) : null;
+  const onSort = React.useCallback(
+    (sortKey: string, direction: "asc" | "desc") => {
+      pushState({ sort: sortKey, direction, page: 1 });
+      trackEvent("filter_applied", { filter_key: `sort:${sortKey}`, result_count: total, scr: "SCR-009" });
+    },
+    [pushState, total],
+  );
+
+  const clearChip = React.useCallback(
+    (key: string) => {
+      if (key === "q") {
+        setSearchValue("");
+        pushState({ q: "", page: 1 });
+      } else if (key === "status") {
+        pushState({ status: "ALL", page: 1 });
+      } else {
+        pushState({ page: 1 });
+      }
+      trackEvent("filter_cleared", { filter_key: key, result_count: total, scr: "SCR-009" });
+    },
+    [pushState, total],
+  );
+
+  const clearAll = React.useCallback(() => {
+    setSearchValue("");
+    pushState({ q: "", status: "ALL", sort: PARSE_OPTS.defaultSort, direction: "desc", page: 1 });
+    trackEvent("filter_cleared", { filter_key: "all", result_count: total, scr: "SCR-009" });
+  }, [pushState, total]);
+
+  // Columns are memoised so typing in the search box does not rebuild them
+  // (spec §25 memoization requirement; keeps INP inside budget).
+  const columns = React.useMemo<Column<Customer>[]>(
+    () => [
+      {
+        id: "customer",
+        header: "Customer",
+        sortable: true,
+        sortKey: "name",
+        priority: 0,
+        accessor: (row) => (
+          <Link href={`/customers/${row.id}`} className="group block min-w-0 focus-visible:outline-none">
+            <span className="block truncate text-sm font-medium text-[var(--on-surface)] group-hover:underline group-focus-visible:underline">
+              {row.name}
+            </span>
+            <span className="block truncate text-xs text-[var(--on-surface-variant)]">{row.email}</span>
+          </Link>
+        ),
+      },
+      {
+        id: "reference",
+        header: "Reference",
+        priority: 2,
+        accessor: (row) => <span className="data-mono text-xs text-[var(--on-surface-variant)]">{row.referenceId}</span>,
+      },
+      {
+        id: "status",
+        header: "Status",
+        priority: 0,
+        accessor: (row) => <CustomerStatusPill status={row.status} />,
+      },
+      {
+        id: "payments",
+        header: "Payments",
+        sortable: false,
+        priority: 1,
+        accessor: (row) => (
+          <span className="data-mono text-sm text-[var(--on-surface)]" title={`${row.succeededCount} succeeded, ${row.failedCount} failed`}>
+            {formatNumber(row.paymentCount)}
+          </span>
+        ),
+      },
+      {
+        id: "ltv",
+        header: "Lifetime value",
+        sortable: true,
+        sortKey: "ltv",
+        priority: 1,
+        className: "text-right",
+        accessor: (row) => <span className="data-mono text-sm text-[var(--on-surface)]">{formatMoney(row.lifetimeValue, row.currency)}</span>,
+      },
+      {
+        id: "added",
+        header: "Added",
+        sortable: true,
+        sortKey: "added",
+        priority: 2,
+        accessor: (row) => <span className="text-xs text-[var(--on-surface-variant)]">{formatDateLong(row.createdAt)}</span>,
+      },
+      {
+        id: "last_seen",
+        header: "Last activity",
+        sortable: true,
+        sortKey: "recent",
+        priority: 2,
+        accessor: (row) => <span className="text-xs text-[var(--on-surface-variant)]">{row.lastSeenAt ? formatDateLong(row.lastSeenAt) : "—"}</span>,
+      },
+      {
+        id: "actions",
+        header: "",
+        priority: 0,
+        className: "text-right",
+        accessor: (row) => <CustomerRowActions id={row.id} name={row.name} email={row.email} status={row.status} />,
+      },
+    ],
+    [],
+  );
+
+  const bulkActions = React.useMemo(() => {
+    if (!canExport) return undefined;
+    return (
+      <BulkBar
+        count={selected.length}
+        scopeLabel="page scope"
+        onClear={() => setSelected([])}
+        actions={[
+          {
+            label: "Export selected",
+            icon: "download",
+            onClick: () => {
+              // The export route re-checks `customer.read` server-side (BE-004);
+              // hiding the button is a courtesy, not the control.
+              const ids = selected.join(",");
+              window.location.href = `/api/exports/customers?ids=${encodeURIComponent(ids)}`;
+            },
+          },
+        ]}
+      />
+    );
+  }, [canExport, selected]);
+
+  // Freshness: derive the age from the server's own read timestamp, and tick it
+  // locally so the banner appears without a refetch. `now` state keeps the
+  // re-render scoped to this component.
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (!lastUpdated) return;
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
+  const ageSeconds = lastUpdated ? Math.max(0, Math.floor((now - new Date(lastUpdated).getTime()) / 1000)) : null;
 
   return (
-    <div className="space-y-4">
-      {/* Stale Banner */}
-      {lastUpdatedAge !== null && lastUpdatedAge > 60 && (
+    <div className="space-y-3" data-testid="canonical-customers-table">
+      {ageSeconds !== null && ageSeconds > STALE_AFTER_SECONDS ? (
         <StaleBanner
-          ageSeconds={lastUpdatedAge}
-          onRefresh={() => window.location.reload()}
+          ageSeconds={ageSeconds}
+          onRefresh={() => {
+            trackEvent("stale_refreshed", { age_sec: ageSeconds, scr: "SCR-009" });
+            router.refresh();
+          }}
         />
-      )}
+      ) : null}
 
-      {/* Filter Bar */}
-      <FilterBar
-        chips={chips}
-        activeCount={activeFilterCount(state)}
-        onClearAll={handleClearAll}
-        onClearFilter={handleClearFilter}
-      >
+      <div className="flex flex-wrap items-center gap-2">
         <SearchInput
           value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-          onClear={() => {
-            setSearchValue("");
-            updateUrl({ q: "", page: 1 });
+          onChange={(value) => {
+            setSearchValue(value);
+            onSearch(value);
           }}
-          placeholder="Search customers by name or email..."
-          debounce={250}
+          placeholder="Search by name, email or reference…"
+          ariaLabel="Search customers"
+          className="w-full sm:w-72"
         />
-        <select
-          value={state.status}
-          onChange={(e) => handleFilterChange("status", e.target.value)}
-          aria-label="Filter by status"
-          className="h-9 rounded border border-[var(--outline-variant)] bg-white px-3 text-sm"
-        >
-          {CUSTOMER_STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={state.sort}
-          onChange={(e) => handleSort(e.target.value, state.direction === "asc" ? "desc" : "asc")}
-          aria-label="Sort by"
-          className="h-9 rounded border border-[var(--outline-variant)] bg-white px-3 text-sm"
-        >
-          {CUSTOMER_SORTS.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-      </FilterBar>
+        <label className="flex items-center gap-2 text-sm text-[var(--on-surface-variant)]">
+          <span className="sr-only sm:not-sr-only">Status</span>
+          <select
+            value={state.status}
+            onChange={(e) => onStatusChange(e.target.value)}
+            aria-label="Filter by status"
+            className="h-9 rounded-md border border-[var(--outline-variant)] bg-[var(--surface)] px-2 text-sm text-[var(--on-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+          >
+            {CUSTOMER_STATUS_OPTIONS.map((value) => (
+              <option key={value} value={value}>
+                {value === "ALL" ? "All statuses" : value.charAt(0) + value.slice(1).toLowerCase()}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="ml-auto flex items-center gap-2">
+          <FilterBar chips={toFilterChips(state)} activeCount={activeFilterCount(state)} onClearChip={clearChip} onClearAll={clearAll} />
+        </div>
+      </div>
 
-      {/* Data Table */}
-      <CanonicalDataTable
-        columns={columns}
-        rows={data}
-        rowKey={(row) => row.id}
-        sort={state.sort}
-        direction={state.direction}
-        page={page}
-        pageCount={pageCount}
-        total={total}
-        pageSize={pageSize}
-        onSort={handleSort}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-        selectedKeys={selectedKeys}
-        onSelectionChange={setSelectedKeys}
-        selectable={true}
-        bulkActions={bulkActions}
-        isFiltered={isFiltered}
-        emptyTitle="No customers yet"
-        emptyDescription="Create your first customer to start tracking payments and lifetime value."
-        filteredEmptyTitle="No customers match your filters"
-        filteredEmptyDescription="Try adjusting your search or filters to find what you're looking for."
-        cardRenderer={cardRenderer}
-        caption="Customers directory"
-        loading={false}
-      />
+      <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface)]">
+        {bulkActions}
+        <CanonicalDataTable<Customer>
+          columns={columns}
+          rows={data}
+          rowKey={(row) => row.id}
+          caption="Customers directory"
+          sort={state.sort}
+          direction={state.direction}
+          onSort={onSort}
+          page={page}
+          pageCount={pageCount}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={(next) => pushState({ page: next })}
+          selectable={canExport}
+          selectedKeys={selected}
+          onSelectionChange={setSelected}
+          isFiltered={isFiltered}
+          emptyTitle="No customers yet"
+          emptyDescription="Customers appear here as soon as a payment succeeds. You can also add one manually."
+          emptyAction={
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              render={<Link href="/customers?new=1" />}
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden>
+                person_add
+              </span>
+              Add customer
+            </Button>
+          }
+          filteredEmptyTitle="No customers match those filters"
+          filteredEmptyDescription="Try a different search term, or clear the filters to see the whole directory."
+          cardRenderer={(row) => (
+            <div className="space-y-2 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <Link href={`/customers/${row.id}`} className="min-w-0 group">
+                  <span className="block truncate text-sm font-medium text-[var(--on-surface)] group-hover:underline">{row.name}</span>
+                  <span className="block truncate text-xs text-[var(--on-surface-variant)]">{row.email}</span>
+                </Link>
+                <CustomerStatusPill status={row.status} />
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="data-mono text-[var(--on-surface-variant)]">{row.referenceId}</span>
+                <span className="data-mono font-medium text-[var(--on-surface)]">{formatMoney(row.lifetimeValue, row.currency)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-xs text-[var(--on-surface-variant)]">
+                <span>{formatNumber(row.paymentCount)} payments</span>
+                <span>Added {formatDateLong(row.createdAt)}</span>
+              </div>
+            </div>
+          )}
+        />
+      </div>
     </div>
   );
 }
+
+export default CanonicalCustomersTable;

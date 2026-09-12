@@ -184,7 +184,8 @@ export function CanonicalDataTable<T>({
               {selectable ? (
                 <th className="px-4 py-3 w-10" aria-label="Select all">
                   <Checkbox
-                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    checked={allSelected}
+                    indeterminate={someSelected}
                     onCheckedChange={toggleAll}
                     aria-label="Select all rows on this page"
                   />
@@ -253,7 +254,7 @@ export function CanonicalDataTable<T>({
       <div className="md:hidden divide-y divide-[var(--border-subtle)]">
         {selectable ? (
           <div className="flex items-center gap-2 px-4 py-2 border-b bg-[var(--surface-container-low)]">
-            <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} onCheckedChange={toggleAll} aria-label="Select all cards on this page" />
+            <Checkbox checked={allSelected} indeterminate={someSelected} onCheckedChange={toggleAll} aria-label="Select all cards on this page" />
             <span className="text-sm text-[var(--on-surface-variant)]">Select page</span>
             {selectedKeys.length > 0 ? <span className="ml-auto text-sm font-medium">{selectedKeys.length} selected</span> : null}
           </div>
