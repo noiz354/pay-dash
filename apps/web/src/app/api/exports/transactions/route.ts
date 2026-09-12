@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { guardExport } from "@/server/services/export-guard";
 import {
   listTransactions,
   toCsv,
@@ -9,6 +10,10 @@ import {
 // CSV export endpoint backing the "Export CSV" / "Download report" buttons.
 // Mirrors the ledger filters so what you see is what you export.
 export async function GET(request: NextRequest) {
+  // BE-004: fail-closed export guard (JRN-017)
+  const guard = await guardExport(request, "transaction.read");
+  if (!guard.ok) return guard.response;
+
   const sp = request.nextUrl.searchParams;
   const { rows } = await listTransactions({
     status: (sp.get("status") as TransactionStatus | "ALL") ?? "ALL",

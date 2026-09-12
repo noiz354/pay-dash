@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { guardExport } from "@/server/services/export-guard";
 import {
   isAuditCategory,
   isAuditRange,
@@ -10,6 +11,10 @@ import { auditEventsToCsv, listAuditEvents, type AuditFilters } from "@/server/d
 // Mirrors the filter bar in the URL (`q`, `category`, `status`, `range`) so
 // what you see is what you export — same contract as the other /api/exports.
 export async function GET(request: NextRequest) {
+  // BE-004: fail-closed export guard (JRN-017)
+  const guard = await guardExport(request, "audit.read");
+  if (!guard.ok) return guard.response;
+
   const sp = request.nextUrl.searchParams;
   const category = sp.get("category") ?? "ALL";
   const status = sp.get("status") ?? "ALL";

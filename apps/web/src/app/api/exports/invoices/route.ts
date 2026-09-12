@@ -1,10 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { guardExport } from "@/server/services/export-guard";
 import { invoicesToCsv, listInvoices } from "@/server/data/invoices";
 import type { InvoiceStatus } from "@/lib/invoice-status";
 
 // Statement export backing the "Export Statement" button; mirrors the invoice
 // filters currently in the URL so what you see is what you export.
 export async function GET(request: NextRequest) {
+  // BE-004: fail-closed export guard (JRN-017)
+  const guard = await guardExport(request, "transaction.read");
+  if (!guard.ok) return guard.response;
+
   const sp = request.nextUrl.searchParams;
   const { rows } = await listInvoices({
     q: sp.get("q") ?? "",
