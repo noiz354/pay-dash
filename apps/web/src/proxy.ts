@@ -113,6 +113,35 @@ export default function proxy(request: NextRequest) {
 
   const stripped = pathname.replace(/^\/(en|id)(\/|$)/, "/");
 
+  // FE-001: Canonical alias redirect — old routes 308 → canonical, no bookmark break
+  // Keep in sync with `components/navigation/nav-config.ts` NAV_ALIASES
+  const NAV_ALIASES: Record<string, string> = {
+    "/payouts/bulk": "/payouts",
+    "/payouts/settings": "/payouts",
+    "/payments/platform": "/settings/developer",
+    "/reports": "/reports/builder",
+  };
+  const aliasTarget = NAV_ALIASES[stripped];
+  if (aliasTarget) {
+    const localeMatch = pathname.match(/^\/(en|id)\//);
+    const localePrefix = localeMatch ? `/${localeMatch[1]}` : "";
+    const url = request.nextUrl.clone();
+    // Preserve query and hash via clone, just swap pathname
+    url.pathname = `${localePrefix}${aliasTarget}`;
+    return NextResponse.redirect(url, 308);
+  }
+  // Also handle prefix alias for nested children (e.g., /payouts/bulk/123 → /payouts/123)
+  for (const [oldPath, canonical] of Object.entries(NAV_ALIASES)) {
+    if (stripped.startsWith(oldPath + "/")) {
+      const remainder = stripped.slice(oldPath.length);
+      const localeMatch = pathname.match(/^\/(en|id)\//);
+      const localePrefix = localeMatch ? `/${localeMatch[1]}` : "";
+      const url = request.nextUrl.clone();
+      url.pathname = `${localePrefix}${canonical}${remainder}`;
+      return NextResponse.redirect(url, 308);
+    }
+  }
+
   // 1) i18n first — let next-intl handle locale detection / prefix (as-needed)
   const i18nResponse = handleI18nRouting(request);
   // If i18n wants to redirect (e.g., "/" → locale), honour it

@@ -21,6 +21,8 @@
 | FE-001 | JRN-001 SCR-001..045 | Navigation alias safety + grouped nav | DONE | 6f7f0af | nav-config.ts + alias map | grouped IA config + rewrites preserved |
 | FE-016 | — SCR-025/021/029/023 | Loading skeletons consistency | DONE | 5e4f6af | visual CLS | 7 skeletons 5 rows 44px |
 | DSN-005 | — | Success token AA + DSN foundation | DONE | 6f7f0af | visual AA 5.1:1 | --success #0e7a5b + space/radius/motion tokens + focus 2px |
+| FE-002 | JRN-001 SCR-001..045 INT-001 | Grouped nav wiring (permission-aware, collapsed, More) | DONE | wave1 | route-resolver.test 20/20 + sidebar.test 9/9 + proxy.alias 6/6 | `nav-config` + `route-resolver` + `permission-adapter` + `sidebar` + `bottom-nav` + `mobile-more-sheet` + `app-chrome` + `proxy` 308 |
+| FE-003 | JRN-001 SCR-001..045 | Breadcrumb + PageHeader + state views (loading/empty/error/forbidden) | DONE | wave1 | visual + unit | `breadcrumb.tsx` + `page-header.tsx` + `state-views.tsx` |
 | BE-005 | JRN-003/006 | Idempotency dedupe | BACKLOG | — | — | Phase 3 |
 | BE-006 | JRN-015 | Invite 7d expiry | BACKLOG | — | — |  |
 | BE-007 | JRN-006 | Optimistic locking 409 | BACKLOG | — | — | Phase 4 |
@@ -93,7 +95,36 @@
 - **Tests:** visual: skeleton dimensions match loaded content; CLS metric before→after
 - **Rollback:** delete loading.tsx → Next falls back to spinner; no data loss
 
-## Coverage Table (Wave 0 target)
+## Coverage Table (Wave 1 target)
+| Registry | Total | Wave0 Implemented | Wave1 Implemented | Verified | Remaining |
+|----------|-------|-------------------|-------------------|----------|-----------|
+| JRN | 21 | 4 | +1 (JRN-001 full nav) | 5 | 16 |
+| SCR | 45 | 14 | +6 (grouped nav, breadcrumb, page-header, states, More) | 20 | 25 |
+| INT | 20 | 7 | +2 (nav collapse, More sheet) | 9 | 11 |
+| CMP | 24 | 6 | +5 (Sidebar grouped, BottomNav More, Breadcrumb, PageHeader, StateViews) | 11 | 13 |
+| ANA | 14 | 1 | 0 | 1 | 13 |
+
+## Wave 1 Contracts (pre-implementation) → now DONE
+
+### FE-002 — Grouped nav wiring (Wave1)
+- **Journey:** JRN-001 (Money In/Out, Governance, Operations, Developer)
+- **Screens:** SCR-001..045 grouped IA
+- **Interactions:** nav collapse persisted, More sheet, active-state resolver
+- **Risk:** MED — IA mis-group breaks discoverability
+- **Files:** `components/navigation/nav-config.ts`, `route-resolver.ts`, `permission-adapter.ts`, `components/layout/sidebar.tsx`, `bottom-nav.tsx`, `mobile-more-sheet.tsx`, `app-chrome.tsx`, `app/[locale]/layout.tsx`, `src/proxy.ts` alias 308
+- **Tests:** route-resolver 20/20, permission-adapter 12/12, sidebar 9/9, bottom-nav 5/5, proxy.alias 6/6
+- **Rollback:** revert grouped wiring, fallback to flat nav; alias map preserved
+
+### FE-003 — Breadcrumb/PageHeader/State views
+- **Journey:** JRN-001 global chrome
+- **Screens:** all app routes (breadcrumb + header + loading/empty/error/forbidden)
+- **Interactions:** next-best-action (dashboard, support)
+- **Risk:** LOW — UX consistency
+- **Files:** `components/navigation/breadcrumb.tsx`, `page-header.tsx`, `state-views.tsx`
+- **Tests:** visual + unit via resolver breadcrumb, skeleton CLS same dims
+- **Rollback:** delete breadcrumb/page-header usage, fallback to plain h1
+
+## Coverage Table (Wave 0 target legacy)
 | Registry | Total | Implemented (Wave0) | Verified | Remaining |
 |----------|-------|---------------------|----------|-----------|
 | JRN | 21 | 3 (001,003,006,017 partial) | 0 | 18 |

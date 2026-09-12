@@ -55,8 +55,10 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/team", label: "Team", icon: "group", requiresPermission: "team.manage" },
       { href: "/audit", label: "Audit Log", icon: "history", requiresPermission: "audit.read" },
+      { href: "/reports/builder", label: "Reports", icon: "analytics" },
       { href: "/support", label: "Support", icon: "help" },
       { href: "/system", label: "System", icon: "monitor_heart" },
+      { href: "/onboarding", label: "Onboarding", icon: "checklist" },
     ],
   },
   {
@@ -77,7 +79,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/settings/api-keys", label: "API Keys", icon: "key", requiresPermission: "provider.rotate" },
       { href: "/webhooks", label: "Webhooks", icon: "webhook", requiresPermission: "provider.connect.test" },
       { href: "/settings/mcp", label: "MCP", icon: "smart_toy" },
-      { href: "/settings/developer", label: "Sandbox", icon: "science" },
       { href: "/payments/platform", label: "Platform", icon: "account_balance" },
     ],
   },
