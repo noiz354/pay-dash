@@ -12,15 +12,15 @@ wiring UI JRN-003 lengkap + targeted tests (`6578f43`, `bdd74ce`, `57f0598`, `05
 - [x] **Mount `ConflictDialog` (CMP-020)** — RetryButton kirim `expectedUpdatedAt`; CONFLICT → dialog dengan state terbaru, tidak pernah auto-apply; retry setelah review dikirim versi terbaru yang sudah direview + event `conflict_recovered`; dismiss → refresh sinkron. (`57f0598`)
 - [x] **Targeted tests sebelum Playwright** — refund-workflow (10), retry-button conflict (5), refundState di ledger (5) + parser/data-layer. Bug tertangkap: trigger Request refund tidak ikut disabled untuk viewer tanpa permission. (+27 tests, total 1075.) (`0592154`)
 
-### Playwright critical gates (6 spek)
-Catatan environment: `cdn.playwright.dev` diblokir sandbox → pakai Chromium dari npm `@sparticuz/chromium` (terbukti jalan): `executablePath=/tmp/chromium`, `LD_LIBRARY_PATH=/tmp/al2023-libs/lib`, arg `--no-sandbox`; ekstrak ulang via `chromium.executablePath()` setiap session baru. Dev server: `AUTH_ENFORCED=off pnpm dev` (port 3000); font Google gagal fetch → fallback, tidak fatal.
-- [ ] Spek 1 — Role A (agus) request refund → handoff muncul → Role B (hendri) approve → completion + timeline dua aktor
-- [ ] Spek 2 — SLA filter (`?sla=`) → buka detail → back → state URL + chip restore
-- [ ] Spek 3 — persona restricted (nadia/ANALYST) tidak bisa aksi terlindungi (permission denial server + UI)
-- [ ] Spek 4 — stale → banner → refresh (polling 20s / stale 60s)
-- [ ] Spek 5 — 409 → ConflictDialog review latest → retry sukses
-- [ ] Spek 6 — mobile 390px journey (cards, sheet filter, SLA badge)
-- [ ] Konfigurasi: `playwright.config.ts` projects chromium-only untuk CI sandbox + dokumentasi setup browser di `e2e/README` atau comment config
+### Playwright critical gates (6 spek) — SPEK SELESAI, eksekusi di sisi developer
+Keenam spek + infra tertulis di `apps/web/e2e/wave4/` (helpers, README) dan didokumentasikan penuh di **`WAVE_4_E2E_TEST_PLAN.md`** — prasyarat, cara jalan (env normal & sandbox tanpa CDN Playwright), kriteria lulus per gate, dan catatan limitasi sandbox. Konfigurasi: `playwright.config.ts` auto-narrow ke chromium + `launchOptions` sandbox bila `/tmp/chromium` ada; `scripts/ensure-e2e-browser.mjs` bootstrap browser dari tarball npm. Eksekusi didelegasikan ke mesin developer: sandbox penulis tidak stabil untuk run penuh (retry fetch font Google + kompilasi on-demand berat → `next dev` exit di tengah run).
+- [x] Spek 1 — `refund-handoff.spec.ts` — Role A (agus) request → antrian dual-control → Role B (hendri) approve → timeline dua aktor
+- [x] Spek 2 — `sla-filter-back-restore.spec.ts` — SLA filter → detail → back restore URL + chip + rows (+ reload)
+- [x] Spek 3 — `permissions.spec.ts` — nadia/ANALYST: server menolak retry lewat UI nyata; trigger refund disabled + alasan
+- [x] Spek 4 — `freshness-stale.spec.ts` — usia berdetak tanpa fetch; refresh manual reset; >60s → banner → refresh bersih
+- [x] Spek 5 — `conflict-recovery.spec.ts` — race dua tab nyata → 409 → dialog state terbaru → retry setelah review sukses
+- [x] Spek 6 — `mobile-journey.spec.ts` — 390px: cards + badge → sheet → chip → detail → back restore
+- [ ] **[DEVELOPER] Jalankan** `cd apps/web && npx playwright test e2e/wave4 --project=chromium` → semua hijau; tempel hasilnya ke PR #9
 
 ### Performance verification
 - [ ] CLS ≤ 0.05 (LayoutShift via CDP/web-vitals di spek Playwright)
