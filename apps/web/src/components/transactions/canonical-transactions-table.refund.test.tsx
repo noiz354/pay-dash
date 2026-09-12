@@ -42,6 +42,10 @@ import { CanonicalTransactionsTable } from "./canonical-transactions-table";
 function row(id: string, status: LedgerRow["status"]): LedgerRow {
   const createdAt = new Date(Date.now() - 3_600_000).toISOString();
   return {
+    // Wave 7A: a ledger row carries its tenant, so table fixtures name one. The
+    // component receives already-scoped rows — scoping is a data-boundary
+    // property, never a rendering one.
+    organizationId: "org_demo",
     id,
     referenceId: id,
     createdAt,

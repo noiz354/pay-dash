@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { getAnalyticsSeries, listTransactions } from "./transactions";
+import { getAnalyticsSeries, listTransactions, seedDemoLedgerForOrganization } from "./transactions";
+import { DEMO_CONTEXT } from "@/test/organization-context";
 
 function resetStores() {
   const g = globalThis as unknown as {
@@ -20,7 +21,7 @@ describe("getAnalyticsSeries", () => {
     [30, "30d"],
     [90, "90d"],
   ])("returns one bucket per day for the %s window", async (days) => {
-    const series = await getAnalyticsSeries(days);
+    const series = await getAnalyticsSeries(DEMO_CONTEXT, days);
     expect(series).toHaveLength(days);
     // One bucket per calendar day, oldest first — the chart plots them in order.
     const dates = series.map((p) => p.date);
@@ -39,8 +40,8 @@ describe("getAnalyticsSeries", () => {
   });
 
   it("conserves money: the 30-day series sums to the whole seeded ledger", async () => {
-    const series = await getAnalyticsSeries(30);
-    const { rows } = await listTransactions({ pageSize: 200, page: 1 });
+    const series = await getAnalyticsSeries(DEMO_CONTEXT, 30);
+    const { rows } = await listTransactions(DEMO_CONTEXT, { pageSize: 200, page: 1 });
     // The seeded ledger window is ~6.5 days, so nothing falls outside 30d.
     expect(rows.length).toBeGreaterThan(0);
     const ledgerTotal = rows.reduce((a, t) => a + t.amount, 0);
@@ -51,11 +52,10 @@ describe("getAnalyticsSeries", () => {
   it("an empty ledger yields a zero series of the right length, not an error", async () => {
     // Wipe the seeded rows — the chart's empty state must be reachable
     // without a crash (the page maps an all-zero series to it).
-    // Touch the store so the lazy seed runs, then wipe the rows.
-    await listTransactions({ pageSize: 1, page: 1 });
-    const g = globalThis as unknown as { __kineticTxStore: { rows: unknown[] } };
-    g.__kineticTxStore.rows = [];
-    const series = await getAnalyticsSeries(7);
+    // Installed through the seeding seam rather than by reaching into the store,
+    // so an empty *tenant* is expressible without an empty *process*.
+    seedDemoLedgerForOrganization(DEMO_CONTEXT, { rows: [], mode: "replace" });
+    const series = await getAnalyticsSeries(DEMO_CONTEXT, 7);
     expect(series).toHaveLength(7);
     expect(series.every((p) => p.total === 0 && p.succeeded === 0 && p.failed === 0)).toBe(true);
   });
@@ -76,6 +76,7 @@ const FIXED_NOW = new Date("2026-09-12T09:00:00.000Z");
 
 function tx(partial: Partial<Transaction> & Pick<Transaction, "id" | "status" | "createdAt">): Transaction {
   return {
+    organizationId: DEMO_CONTEXT.organizationId,
     referenceId: partial.id,
     updatedAt: partial.createdAt,
     amount: 100_000,
@@ -98,11 +99,12 @@ function tx(partial: Partial<Transaction> & Pick<Transaction, "id" | "status" | 
 
 /** Install a fixed ledger and read it back through the public list API,
  *  evaluated at FIXED_NOW so band assertions never depend on the wall clock. */
-async function withLedger(rows: Transaction[], filters: Parameters<typeof listTransactions>[0]) {
-  await listTransactions({ pageSize: 1 });
-  const g = globalThis as unknown as { __kineticTxStore: { rows: Transaction[] } };
-  g.__kineticTxStore.rows = rows;
-  return listTransactions(filters, { now: FIXED_NOW });
+async function withLedger(rows: Transaction[], filters: Parameters<typeof listTransactions>[1]) {
+  // Rows are installed for the demo tenant only. `mode: "replace"` keeps this
+  // suite's fixtures exact — and proves the scoped read is the thing under test,
+  // because the demo partition is the only one a demo-scoped call can see.
+  seedDemoLedgerForOrganization(DEMO_CONTEXT, { rows, mode: "replace" });
+  return listTransactions(DEMO_CONTEXT, filters, { now: FIXED_NOW });
 }
 
 describe("SLA band derivation (Wave 4 ledger wiring)", () => {
@@ -217,7 +219,7 @@ describe("SLA ledger filter + sort (server-side)", () => {
     // then 25h past creation → 21h overdue, past the 20h critical threshold.
     // The clock moved, the bands followed.
     const later = new Date(now.getTime() + 24 * HOUR);
-    const atLater = await listTransactions({ sla: "ALL", sort: "sla", direction: "desc", pageSize: 50 }, { now: later });
+    const atLater = await listTransactions(DEMO_CONTEXT, { sla: "ALL", sort: "sla", direction: "desc", pageSize: 50 }, { now: later });
     expect(atLater.rows.find((r) => r.id === "txn_normal")?.slaBand).toBe("CRITICAL");
   });
 

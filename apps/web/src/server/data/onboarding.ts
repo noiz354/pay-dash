@@ -4,7 +4,7 @@ import { formatDateLong } from "@/lib/format";
 import { KYC_DOC_TYPES } from "@/lib/kyc-options";
 import { getKycSubmission, profileKycCompleteness } from "./kyc";
 import { getDestinationAccount, listBankAccounts } from "./payouts";
-import { getLedgerRows } from "./transactions";
+import { legacyLedgerRows } from "./transactions-unscoped";
 import { getMerchantProfile, listApiKeys } from "./settings";
 import { listWebhooks } from "./webhooks";
 
@@ -160,7 +160,7 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
   // --- Technical Setup (keys + callback log + ledger) ----------------------
   const liveKeys = keys.filter((k) => k.environment === "LIVE").length;
   const sandboxKeys = keys.filter((k) => k.environment === "TEST").length;
-  const succeeded = getLedgerRows().filter((t) => t.status === "SUCCEEDED").length;
+  const succeeded = legacyLedgerRows("onboarding").filter((t) => t.status === "SUCCEEDED").length;
   const techChecks: OnboardingCheck[] = [
     {
       id: "tech-keys",

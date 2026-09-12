@@ -32,6 +32,9 @@ export const AuditActionSchema = z.enum([
   "SPLIT_ACTIVATE",
   "WEBHOOK_RECEIVED",
   "WEBHOOK_REPLAYED",
+  // Wave 7A — a refused cross-tenant attempt. Distinct from a permission denial:
+  // the actor was allowed to do this, only not to *this row*.
+  "TENANT_ISOLATION_DENIED",
 ]);
 export type AuditAction = z.infer<typeof AuditActionSchema>;
 
@@ -42,6 +45,8 @@ const AuditMetadataSchema = z
     provider: z.string().optional(),
     connectionId: z.string().optional(),
     canonicalResourceId: z.string().optional(),
+    surface: z.string().min(1).max(80).optional(),
+    requestedOrganizationId: z.string().min(1).optional(),
     operationId: z.string().optional(),
     correlationId: z.string().optional(),
     mode: z.enum(["TEST", "LIVE"]).optional(),

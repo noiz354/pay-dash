@@ -19,6 +19,7 @@ import {
   slaBandFor,
 } from "./handoff";
 import { listTransactions, requestRefund } from "./transactions";
+import { DEMO_CONTEXT } from "@/test/organization-context";
 
 // Wave 4 §4 — Role B's queue.
 //
@@ -123,12 +124,12 @@ describe("deriveHandoffs — overlay + real stores reconciled", () => {
   });
 
   it("does not re-derive a handoff the overlay has already resolved", async () => {
-    const { rows } = await listTransactions({ pageSize: 50, page: 1 });
+    const { rows } = await listTransactions(DEMO_CONTEXT, { pageSize: 50, page: 1 });
     const row = rows.find((t) => t.status !== "FAILED" && t.refundedAmount === 0);
     expect(row).toBeDefined();
     if (!row) return;
 
-    await requestRefund({ transactionId: row.id, amount: 5_000, reason: "Duplicate", requestedBy: AGUS, now: NOW });
+    await requestRefund(DEMO_CONTEXT, { transactionId: row.id, amount: 5_000, reason: "Duplicate", requestedBy: AGUS, now: NOW });
     expect((await deriveHandoffs(NOW)).filter((h) => h.entityId === row.id)).toHaveLength(1);
 
     const tracked = listStoredHandoffs().find((h) => h.entityId === row.id);
@@ -314,10 +315,10 @@ describe("queue deep links", () => {
   });
 
   it("the refund queue href is the exact filter the transactions screen honours", async () => {
-    const { rows } = await listTransactions({ pageSize: 50, page: 1 });
+    const { rows } = await listTransactions(DEMO_CONTEXT, { pageSize: 50, page: 1 });
     const row = rows.find((t) => t.status !== "FAILED" && t.refundedAmount === 0);
     if (!row) return;
-    await requestRefund({ transactionId: row.id, amount: 5_000, reason: "Duplicate", requestedBy: AGUS, now: NOW });
+    await requestRefund(DEMO_CONTEXT, { transactionId: row.id, amount: 5_000, reason: "Duplicate", requestedBy: AGUS, now: NOW });
 
     const [item] = (await getHandoffQueue({ roles: ["FINANCE_ADMIN"] }, NOW)).filter(
       (h) => h.journey === "refund_approval" && h.entityId === row.id,

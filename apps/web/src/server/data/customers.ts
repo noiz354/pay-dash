@@ -1,6 +1,7 @@
 import "server-only";
 
-import { listTransactions, type Transaction } from "./transactions";
+import { type Transaction } from "./transactions";
+import { legacyListTransactions } from "./transactions-unscoped";
 // Status vocabulary lives in a client-safe module; re-exported here so server
 // code keeps a single import site for everything customer-shaped.
 import { CUSTOMER_STATUSES, type CustomerStatus } from "@/lib/customer-status";
@@ -148,7 +149,7 @@ function initialsOf(name: string) {
 }
 
 async function allLedgerRows(): Promise<Transaction[]> {
-  const { rows } = await listTransactions({ page: 1, pageSize: 100 });
+  const { rows } = await legacyListTransactions("customers", { page: 1, pageSize: 100 });
   return rows;
 }
 

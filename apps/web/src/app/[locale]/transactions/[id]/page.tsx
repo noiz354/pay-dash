@@ -18,9 +18,9 @@ import { RefundWorkflow, RefundDecisionPanel } from "@/components/transactions/r
 import { RetryButton } from "@/components/transactions/retry-button";
 import { CopyButton } from "@/components/common/copy-button";
 import { authorizeRoles } from "@/domain/organization/roles";
-import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { formatDateLong, formatDateTime, formatMoney } from "@/lib/format";
 import { getTransactionWithSla } from "@/server/data/transactions";
+import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import { customerIdFromEmail } from "@/server/data/customers";
 
 // Transaction detail — the destination for every ledger row / row-action.
@@ -61,9 +61,14 @@ export default async function TransactionDetailPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
+  const requestedOrg = Array.isArray(sp.organizationId) ? sp.organizationId[0] : sp.organizationId;
+  // Wave 7A — the detail read is scoped before it is rendered. A row belonging
+  // to another tenant resolves to `null`, and `notFound()` is the same answer a
+  // nonexistent id gets: the page never reveals that someone else's id exists.
+  const access = await resolveTransactionOrganizationContext({ organizationId: requestedOrg });
   // Same server-side evaluation as the ledger, so a badge here and a badge in
   // the table can never disagree about the band.
-  const tx = await getTransactionWithSla(id);
+  const tx = await getTransactionWithSla(access.context, id);
   if (!tx) notFound();
 
   const refundable = tx.amount - tx.refundedAmount;
@@ -71,9 +76,8 @@ export default async function TransactionDetailPage({
 
   // Permission-aware refund UI: flags come from the session (persona-aware in
   // dev/E2E), never from the browser. The server actions re-enforce everything.
-  const ctx = await resolveSessionOrgContext();
-  const canRequest = authorizeRoles(ctx.roles, "refund.prepare") || authorizeRoles(ctx.roles, "refund.execute");
-  const canApprove = authorizeRoles(ctx.roles, "refund.execute");
+  const canRequest = authorizeRoles(access.roles, "refund.prepare") || authorizeRoles(access.roles, "refund.execute");
+  const canApprove = authorizeRoles(access.roles, "refund.execute");
 
   return (
     <main className="mx-auto w-full max-w-container-max p-gutter space-y-6 pb-12">
@@ -166,7 +170,7 @@ export default async function TransactionDetailPage({
             refundState={tx.refundState}
             refundRequest={tx.refundRequest}
             currency={tx.currency}
-            viewerActorId={ctx.userId}
+            viewerActorId={access.actorId}
             canApprove={canApprove}
           />
           <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm">

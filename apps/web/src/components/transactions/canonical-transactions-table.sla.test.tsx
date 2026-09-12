@@ -42,6 +42,7 @@ const HOUR = 3_600_000;
 function row(partial: Partial<LedgerRow> & Pick<LedgerRow, "id" | "status">): LedgerRow {
   const createdAt = partial.createdAt ?? new Date(Date.now() - 2 * HOUR).toISOString();
   return {
+    organizationId: partial.organizationId ?? "org_demo",
     referenceId: partial.id,
     createdAt,
     updatedAt: createdAt,

@@ -1,6 +1,7 @@
 import "server-only";
 
-import { listTransactions, type Transaction } from "./transactions";
+import { type Transaction } from "./transactions";
+import { legacyListTransactions } from "./transactions-unscoped";
 import { getMerchantProfile } from "./settings";
 import { INVOICE_STATUSES, isPayable, type InvoiceStatus } from "@/lib/invoice-status";
 
@@ -191,7 +192,7 @@ function billableRows(rows: Transaction[]) {
 }
 
 async function allLedgerRows(): Promise<Transaction[]> {
-  const { rows } = await listTransactions({ page: 1, pageSize: 100 });
+  const { rows } = await legacyListTransactions("invoices", { page: 1, pageSize: 100 });
   return rows;
 }
 

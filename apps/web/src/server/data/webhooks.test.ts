@@ -7,6 +7,7 @@ import {
   rejectInbound,
 } from "./webhooks";
 import { getLedgerRows } from "./transactions";
+import { DEMO_CONTEXT } from "@/test/organization-context";
 
 function resetAllStores() {
   const g = globalThis as unknown as {
@@ -46,7 +47,7 @@ describe("seed coverage", () => {
   });
 
   it("ties the seeded money events to real ledger rows", () => {
-    const ledger = getLedgerRows();
+    const ledger = getLedgerRows(DEMO_CONTEXT);
     const succeeded = ledger.find((t) => t.status === "SUCCEEDED");
     const refunded = ledger.find((t) => t.status === "REFUNDED");
 

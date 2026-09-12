@@ -18,6 +18,7 @@ import { ExpireLinkButton } from "@/components/links/expire-link-button";
 import { SimulatePaymentButton } from "@/components/links/simulate-payment-button";
 import { getLink } from "@/server/data/links";
 import { getTransaction } from "@/server/data/transactions";
+import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import { formatMoney, formatDateLong, formatDateTime, formatRelative } from "@/lib/format";
 import { LINK_KIND_LABELS, LINK_STATUS_ICONS, shareUrlOf } from "@/lib/link-status";
 
@@ -56,7 +57,11 @@ export default async function PaymentLinkDetailPage({ params }: { params: Params
   // A simulated payment creates a ledger row whose id equals the link id;
   // seeded pre-window payments have paidAt but no ledger row — "View payment"
   // only points where a record actually exists.
-  const paymentTx = paid ? await getTransaction(link.id) : null;
+  // Wave 7A: a link payment is a ledger row, and a link id doubles as that row's
+  // id — so this read is scoped. Another tenant's link id must not resolve to
+  // their payment record here either.
+  const { context } = await resolveTransactionOrganizationContext();
+  const paymentTx = paid ? await getTransaction(context, link.id) : null;
 
   return (
     <main className="mx-auto w-full max-w-container-max p-gutter space-y-6 pb-12">

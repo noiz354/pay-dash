@@ -9,6 +9,7 @@ import {
   VOLUME_ALERT_PCT,
 } from "./risk";
 import { getLedgerRows, getTransaction } from "./transactions";
+import { DEMO_CONTEXT } from "@/test/organization-context";
 
 describe("risk store (ADR-0023)", () => {
   it("seeds an app-owned ruleset: four rules, IDR caps, no draft", async () => {
@@ -28,7 +29,7 @@ describe("risk store (ADR-0023)", () => {
 
   it("derives alerts from the ledger, and every transactionId resolves", async () => {
     const o = await getRiskOverview();
-    const rows = getLedgerRows();
+    const rows = getLedgerRows(DEMO_CONTEXT);
     const expected = rows.filter((t) => t.riskScore >= HIGH_RISK_SCORE).length;
     // a volume alert may be present only when usage >= VOLUME_ALERT_PCT
     expect(o.alertCount).toBe(expected);
@@ -37,7 +38,7 @@ describe("risk store (ADR-0023)", () => {
     expect(o.alerts.every((a) => a.id.startsWith("alert_"))).toBe(true);
     for (const a of o.alerts) {
       expect(a.transactionId).toBeDefined();
-      const tx = await getTransaction(a.transactionId!);
+      const tx = await getTransaction(DEMO_CONTEXT, a.transactionId!);
       expect(tx).not.toBeNull();
       expect(tx!.riskScore).toBeGreaterThanOrEqual(HIGH_RISK_SCORE);
       // newest-first
@@ -51,7 +52,7 @@ describe("risk store (ADR-0023)", () => {
 
   it("derives cap usage and the score distribution from the ledger", async () => {
     const o = await getRiskOverview();
-    const rows = getLedgerRows();
+    const rows = getLedgerRows(DEMO_CONTEXT);
     expect(o.scanned).toBe(rows.length);
     expect(o.usage.dailyVolume24h).toBeGreaterThan(0);
     expect(o.usage.dailyPct).toBeGreaterThanOrEqual(0);
@@ -96,7 +97,7 @@ describe("risk store (ADR-0023)", () => {
   });
 
   it("raises the volume alert only when 24h usage reaches the threshold", () => {
-    const rows = getLedgerRows();
+    const rows = getLedgerRows(DEMO_CONTEXT);
     const base = {
       dailyVolumeLimit: 2_000_000_000,
       monthlyVolumeLimit: 60_000_000_000,

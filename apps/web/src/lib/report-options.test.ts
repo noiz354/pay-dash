@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getLedgerRows } from "@/server/data/transactions";
 import { getPayoutBatches } from "@/server/data/payouts";
 import { listCustomers } from "@/server/data/customers";
+import { DEMO_CONTEXT } from "@/test/organization-context";
 import {
   buildReportCsv,
   columnsFor,
@@ -21,7 +22,7 @@ const EMPTY_QUERY = { from: "", to: "", status: "", amountMin: null, amountMax: 
 
 describe("report row mappers (ADR-0020)", () => {
   it("maps every ledger row with real detail links and IDR display", () => {
-    const txs = getLedgerRows();
+    const txs = getLedgerRows(DEMO_CONTEXT);
     const rows = transactionsToReportRows(txs);
     expect(rows).toHaveLength(txs.length);
     expect(txs.length).toBeGreaterThan(0);
@@ -63,12 +64,12 @@ describe("runQuery", () => {
     columns: TX_COLUMNS,
     statusOptions: [],
     amountLabel: "Amount",
-    rows: transactionsToReportRows(getLedgerRows()),
+    rows: transactionsToReportRows(getLedgerRows(DEMO_CONTEXT)),
   });
 
   it("returns everything for an empty query", () => {
     const rows = runQuery(dataset(), EMPTY_QUERY);
-    expect(rows).toHaveLength(getLedgerRows().length);
+    expect(rows).toHaveLength(getLedgerRows(DEMO_CONTEXT).length);
   });
 
   it("filters by status, amount bounds and date range", () => {
@@ -116,7 +117,7 @@ describe("columns + csv", () => {
   });
 
   it("builds a csv with exactly the selected columns and raw values", () => {
-    const rows = transactionsToReportRows(getLedgerRows()).slice(0, 3);
+    const rows = transactionsToReportRows(getLedgerRows(DEMO_CONTEXT)).slice(0, 3);
     const selected = { reference_id: true, status: true, fee: false, amount: false };
     const csv = buildReportCsv(
       { columns: TX_COLUMNS },

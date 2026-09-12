@@ -24,6 +24,14 @@ Prototype mapping: `screens/mobile|desktop/*/code.html` → `app/[locale]/*` rou
 
 1. **Server Components by default.** Add `"use client"` only for: button interaction, modals/dropdowns, charts, animation, Three.js canvas, analytics capture, forms needing client state.
 2. **DAL + `server-only`.** Secrets, DB, `xendit-node` calls live in `server/dal` and `lib/xendit.ts`. Never import them into Client Components. `server-only` enforces this.
+2b. **Tenant scoping lives in the DAL, not the caller** (Wave 7A, ADR-0041). A scoped data module takes
+   `OrganizationContext` (`domain/tenancy/organization-context.ts`) as the **first required parameter** of
+   every read and write, and its store is keyed `(organizationId, id)`. The context is produced only by
+   `server/services/transaction-organization-context.ts` from the session — never from a query param,
+   never defaulted. Policy (foreign read ⇒ `∅`, foreign write ⇒ throw + audit) stays in
+   `domain/security/tenant.ts`; the DAL supplies rows and predicates. Modules not yet converted must go
+   through `server/data/transactions-unscoped.ts`, which fails closed once a second tenant has rows;
+   `server/data/transactions-structural.test.ts` (S-1..S-6) keeps both rules enforced in CI.
 3. **Webhooks server-only, provider-specific ingress.** `POST /api/webhooks/xendit` verifies `x-callback-token` with a constant-time compare (`INTEGRATION.md:292`); `POST /api/webhooks/stripe` verifies the raw-body HMAC signature with the pinned webhook secret (ADR-0028). Both parse, dedupe by a provider-scoped event key (`event_id` / `stripe:<event_id>`), respond 200 fast, and queue work.
 
 ## Data Flow

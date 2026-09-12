@@ -2,6 +2,15 @@ import "server-only";
 
 import type { ProviderReadResult, ProviderTransaction } from "@/domain/payments/provider-read";
 import { SLA_BANDS, compareSla, evaluateSla, type SlaBand, type SlaEntityType } from "@/lib/sla";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
+import {
+  OrganizationContextError,
+  parseOrganizationContext,
+  type OrganizationContext,
+} from "@/domain/tenancy/organization-context";
+import { TenantIsolationError, scopeRecords } from "@/domain/security/tenant";
+import { tenantScopeFor } from "@/domain/tenancy/organization-context";
+import { recordTenantDenial } from "@/server/services/tenant-denial";
 
 // ---------------------------------------------------------------------------
 // Transactions data source
@@ -60,6 +69,13 @@ export type RefundRequest = {
 };
 
 export type Transaction = {
+  /**
+   * Wave 7A — the owning tenant. Part of the row, not of a query: a ledger
+   * entry without an owner is unreachable by construction (the scope filter is
+   * an equality test against the resolved context, so an orphan row is visible
+   * to nobody rather than to everybody).
+   */
+  organizationId: string;
   id: string;
   referenceId: string;
   createdAt: string;
@@ -184,6 +200,26 @@ export type Paginated<T> = {
   isFiltered: boolean;
 };
 
+/* ---------------------------------------------------------------------------
+ * Wave 7A — the tenant contract on this module (WAVE_7A_TENANT_ISOLATION_SPEC.md §2).
+ *
+ * Every function below that touches a row takes `ctx: OrganizationContext` as
+ * its **first, required** parameter. There is no default context, no optional
+ * one, and no accessor that can see across tenants — the one deliberately
+ * unscoped entry point lives in `transactions-unscoped.ts` and is quarantined
+ * behind a fail-closed single-tenant gate.
+ *
+ * The store is therefore keyed by `(organizationId, id)` rather than `id`:
+ *   • a read of a foreign id is indistinguishable from a read of a missing one;
+ *   • a write to a foreign id throws `TenantIsolationError` and is audited,
+ *     and the *result-shaped* variants map that throw to the same NOT_FOUND an
+ *     unknown id produces, so the wire never reveals which case happened.
+ *
+ * That asymmetry (loud inside, silent outside) is inherited from
+ * `domain/security/tenant.ts`, which stays the policy engine; this module only
+ * supplies rows and predicates.
+ * ------------------------------------------------------------------------- */
+
 // --- deterministic seed ----------------------------------------------------
 
 function mulberry32(seed: number) {
@@ -287,7 +323,22 @@ function eventsFor(tx: Omit<Transaction, "events">): TransactionEvent[] {
   return base.sort((a, b) => a.at.localeCompare(b.at));
 }
 
-function seed(count = 46): Transaction[] {
+/**
+ * Short deterministic tag for a tenant, mixed into seeded ids. Seeded rows for
+ * two tenants must not share an id, otherwise "the composite key works" would be
+ * untestable against the demo data (and an accidental collision would look like
+ * a leak).
+ */
+function orgTag(organizationId: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < organizationId.length; i++) {
+    h ^= organizationId.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36).slice(0, 4);
+}
+
+function seed(count: number, organizationId: string): Transaction[] {
   const rng = mulberry32(20260901);
   // Anchor to midnight UTC so SSR and client renders agree.
   const anchor = new Date();
@@ -310,8 +361,9 @@ function seed(count = 46): Transaction[] {
     const amount = Math.round((250_000 + rng() * 48_000_000) / 5_000) * 5_000;
     const fee = Math.round(amount * 0.029 + 2_000);
     const createdAt = new Date(anchor.getTime() - i * (3.4 * 60 * 60 * 1000) - Math.floor(rng() * 90) * 60_000);
-    const id = `txn_${Math.floor(mulberry32(i + 7)() * 1e12).toString(36).padStart(8, "0").slice(0, 10)}`;
+    const id = `txn_${orgTag(organizationId)}_${Math.floor(mulberry32(i + 7)() * 1e12).toString(36).padStart(8, "0").slice(0, 10)}`;
     const partial: Omit<Transaction, "events"> = {
+      organizationId,
       id,
       referenceId: id,
       createdAt: createdAt.toISOString(),
@@ -337,20 +389,224 @@ function seed(count = 46): Transaction[] {
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-type Store = { rows: Transaction[] };
+/**
+ * The store is partitioned by tenant (`organizationId → rows`). The Wave 6
+ * report's headline defect was that the *accessor* was process-wide; a flat
+ * array with an owner column would have kept that shape and relied on every
+ * caller to remember the filter. Keying the collection means an unscoped read
+ * is not merely discouraged, it is not expressible through these helpers.
+ */
+type Store = { byOrganization: Map<string, Transaction[]> };
 const globalStore = globalThis as unknown as { __kineticTxStore?: Store };
+
+// --- dev/demo store bootstrap --------------------------------------------
+/**
+ * The dev/demo dataset's tenant. This is the **only** place in this module that
+ * names a tenant without being told one, and it is data provisioning for the
+ * demo store — never a fallback for a request. A scoped read for any other
+ * tenant finds an empty partition; it is never answered from this one.
+ *
+ * `S-3` in `transactions-structural.test.ts` pins that the constant appears
+ * exactly once in this file and only inside this block.
+ */
+const DEMO_BOOTSTRAP_ORGANIZATION_ID = DEFAULT_DEMO_ORG;
+
+function demoBootstrapLedger(target: Map<string, Transaction[]>): void {
+  if (target.size > 0) return;
+  target.set(DEMO_BOOTSTRAP_ORGANIZATION_ID, seed(46, DEMO_BOOTSTRAP_ORGANIZATION_ID));
+}
+// --- end dev/demo store bootstrap -----------------------------------------
+
 function store(): Store {
-  if (!globalStore.__kineticTxStore) globalStore.__kineticTxStore = { rows: seed() };
+  if (!globalStore.__kineticTxStore) {
+    const byOrganization = new Map<string, Transaction[]>();
+    demoBootstrapLedger(byOrganization);
+    globalStore.__kineticTxStore = { byOrganization };
+  }
   return globalStore.__kineticTxStore;
+}
+
+function partitionRows(organizationId: string): Transaction[] {
+  return store().byOrganization.get(organizationId) ?? [];
+}
+
+/**
+ * Resolve a caller's context. Extracted so every entry point shares one error:
+ * `parseOrganizationContext` refuses to invent a tenant, so a call site that
+ * forgets to resolve one fails instead of reading the demo ledger.
+ */
+function scopeOf(ctx: OrganizationContext): OrganizationContext {
+  return parseOrganizationContext(ctx);
+}
+
+/**
+ * How many tenants the store holds. The quarantine in
+ * `transactions-unscoped.ts` fails closed on `> 1`, so this number is what
+ * makes "the demo store is single-tenant" a checked fact rather than a comment.
+ */
+export function countLedgerTenants(): number {
+  return [...store().byOrganization.entries()].filter(([, rows]) => rows.length > 0).length;
+}
+
+/**
+ * The identity of the only tenant in the store, or `null` when there is not
+ * exactly one.
+ *
+ * It is the quarantine's whole safety argument in one function: an unscoped
+ * reader can only ever be answered while there is nothing to be ambiguous
+ * *about*. It cannot be used to "guess the tenant" in a real deployment, because
+ * the moment a second tenant has rows the answer is `null` — fail closed, rather
+ * than return whichever tenant happens to sort first.
+ */
+export function soleLedgerOrganizationId(): string | null {
+  const ids = [...store().byOrganization.entries()]
+    .filter(([, rows]) => rows.length > 0)
+    .map(([id]) => id);
+  return ids.length === 1 ? (ids[0] ?? null) : null;
+}
+
+/** Rows of one tenant, defensively copied, ownership re-checked per row. */
+function scopedRows(ctx: OrganizationContext): Transaction[] {
+  const { organizationId } = scopeOf(ctx);
+  return partitionRows(organizationId)
+    .filter((row) => row.organizationId === organizationId)
+    .map((row) => ({ ...row }));
+}
+
+function keyMatches(row: Transaction, id: string): boolean {
+  const needle = typeof id === "string" ? id.trim() : "";
+  if (!needle) return false;
+  return row.id === needle || row.referenceId === needle;
+}
+
+/**
+ * The caller's own row for an id/reference. A foreign id and an unknown id both
+ * answer `null` — that indistinguishability is the anti-enumeration property
+ * (spec §4), so it is implemented here, once, rather than at each call site.
+ */
+function findOwnedRow(ctx: OrganizationContext, id: string): Transaction | null {
+  const { organizationId } = scopeOf(ctx);
+  return partitionRows(organizationId).find((row) => row.organizationId === organizationId && keyMatches(row, id)) ?? null;
+}
+
+/** Cross-partition probe. It answers a yes/no for the audit record only — the
+ *  foreign row itself is never returned to a scoped caller. */
+function ownedByAnotherTenant(organizationId: string, id: string): string | null {
+  for (const [tenant, rows] of store().byOrganization) {
+    if (tenant === organizationId) continue;
+    if (rows.some((row) => keyMatches(row, id))) return tenant;
+  }
+  return null;
+}
+
+/**
+ * Resolve the row a **write** will mutate.
+ *
+ *   own row      → returned
+ *   unknown id   → `null` (the caller's existing NOT_FOUND path)
+ *   foreign id   → throws `TenantIsolationError` after recording the denial
+ *
+ * Writes throw where reads return ∅ because there is no benign cross-tenant
+ * write: a silent `null` here would make a wiring bug indistinguishable from a
+ * user clicking on a stale row, and the neighbour's book would be corrupted
+ * quietly the first time the predicate is dropped. Result-shaped APIs
+ * (`requestRefund`, `retryTransactionWithVersion`, …) catch this and answer with
+ * the same NOT_FOUND an unknown id gets, so the loud/silent split lands on the
+ * audit log and the wire respectively.
+ */
+function writableRow(ctx: OrganizationContext, id: string, surface: string, actorId?: string | null): Transaction | null {
+  const own = findOwnedRow(ctx, id);
+  if (own) return own;
+  const { organizationId } = scopeOf(ctx);
+  const foreignOwner = ownedByAnotherTenant(organizationId, id);
+  if (foreignOwner) {
+    recordTenantDenial({
+      surface,
+      actorOrganizationId: organizationId,
+      requestedOrganizationId: foreignOwner,
+      actorId: actorId ?? null,
+      resourceId: id,
+    });
+    throw new TenantIsolationError(
+      "CROSS_TENANT_WRITE",
+      { surface, actorOrg: organizationId, requestedOrg: foreignOwner },
+      `Refusing a cross-tenant write on ${surface}: the row belongs to another organization.`,
+    );
+  }
+  return null;
+}
+
+/** Map a `TenantIsolationError` onto the not-found result a missing id produces. */
+function notFoundFromTenantError(e: unknown): boolean {
+  return e instanceof TenantIsolationError && e.code === "CROSS_TENANT_WRITE";
+}
+
+/**
+ * Install a deterministic demo dataset for one tenant.
+ *
+ * Multi-tenant demo data has to be a *decision*, so it is not implicit in the
+ * store: nothing in a request path can call this. It exists for the dev/demo
+ * bootstrap, for an isolated tenant fixture, and for the isolation probes
+ * themselves (which need two tenants in one process to prove anything).
+ */
+export function seedDemoLedgerForOrganization(
+  ctx: OrganizationContext,
+  input: { count?: number; rows?: readonly Partial<Transaction>[]; mode?: "append" | "replace" } = {},
+): number {
+  const { organizationId } = scopeOf(ctx);
+  const target = store().byOrganization;
+  const generated = typeof input.count === "number" ? seed(Math.max(0, input.count), organizationId) : [];
+  const supplied = (input.rows ?? []).map((row, i) => materializeRow({ ...row, organizationId, id: row.id ?? `txn_${orgTag(organizationId)}_supplied_${i}` }));
+  const rows = [...generated, ...supplied];
+  if (input.mode === "replace") {
+    target.set(organizationId, [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    return rows.length;
+  }
+  if (rows.length === 0) return target.get(organizationId)?.length ?? 0;
+  const existing = target.get(organizationId) ?? [];
+  target.set(organizationId, [...existing, ...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  return rows.length;
+}
+
+/** Build a full row (with its event timeline) from a partial spec. */
+function materializeRow(partial: Partial<Transaction> & { organizationId: string; id: string }): Transaction {
+  const createdAt = partial.createdAt ?? new Date().toISOString();
+  const base: Omit<Transaction, "events"> = {
+    organizationId: partial.organizationId,
+    id: partial.id,
+    referenceId: partial.referenceId ?? partial.id,
+    createdAt,
+    updatedAt: partial.updatedAt ?? createdAt,
+    amount: partial.amount ?? 0,
+    currency: partial.currency ?? "IDR",
+    fee: partial.fee ?? 0,
+    net: partial.net ?? (partial.amount ?? 0) - (partial.fee ?? 0),
+    status: partial.status ?? "PENDING",
+    channel: partial.channel ?? "CARD",
+    methodLabel: partial.methodLabel ?? "Visa •••• 4242",
+    customerName: partial.customerName ?? "Unassigned",
+    customerEmail: partial.customerEmail ?? "",
+    description: partial.description ?? "",
+    riskScore: partial.riskScore ?? 0,
+    refundedAmount: partial.refundedAmount ?? 0,
+    refundState: partial.refundState ?? "NONE",
+    refundRequest: partial.refundRequest ?? null,
+  };
+  return { ...base, events: partial.events ?? eventsFor(base) };
 }
 
 // --- reads -----------------------------------------------------------------
 
 /** Map a provider transaction to the UI `Transaction` DTO (live data source).
  *  UI-only enrichment fields get safe defaults; provider fields are authoritative. */
-function providerTransactionToRow(p: ProviderTransaction): Transaction {
+function providerTransactionToRow(p: ProviderTransaction, organizationId: string): Transaction {
   const channel = (CHANNELS as readonly string[]).includes(p.channel) ? (p.channel as Channel) : "CARD";
   return {
+    // A provider row is attributed to the tenant whose connection produced it —
+    // never to a global default. That attribution is what lets the scope filter
+    // below be a *check* instead of a no-op, and what keeps a provider/adapter
+    // bug from sharing one row between tenants.
+    organizationId,
     id: p.id,
     referenceId: p.referenceId,
     createdAt: p.at,
@@ -385,11 +641,15 @@ function withinRange(iso: string, range: TransactionFilters["range"], now: Date 
  *  the SDK/client boundary which reads server env; in a non-server (jsdom test)
  *  context that import fails and we fall back to `{ connected: false }`. In the
  *  real server the SDK loads and the read reaches the provider. */
-async function tryProviderTransactions(): Promise<ProviderReadResult<ProviderTransaction[]>> {
+async function tryProviderTransactions(organizationId: string): Promise<ProviderReadResult<ProviderTransaction[]>> {
   try {
     const { getProviderReadService } = await import("@/server/repositories/provider-read");
     const service = await getProviderReadService();
-    return await service.readTransactions();
+    // Wave 7A: the organization is a required argument of the read. Before this
+    // wave the call was `readTransactions()` with no argument, which resolved
+    // the *demo* organization's provider connection — so a real tenant's ledger
+    // page would have rendered another tenant's live provider rows.
+    return await service.readTransactions(organizationId);
   } catch {
     return { connected: false };
   }
@@ -407,7 +667,9 @@ export type ListTransactionsOptions = {
 
 const SLA_SORT_KEYS = ["date", "amount", "status", "sla"] as const;
 
-export async function listTransactions(filters: TransactionFilters = {}, options: ListTransactionsOptions = {}): Promise<Paginated<LedgerRow>> {
+export async function listTransactions(ctx: OrganizationContext, filters: TransactionFilters = {}, options: ListTransactionsOptions = {}): Promise<Paginated<LedgerRow>> {
+  const scope = scopeOf(ctx);
+  const scopedOrganizationId = scope.organizationId;
   const { status = "ALL", channel = "ALL", range = "all", q = "", sort = "date", direction = "desc", refundState = "ALL", sla = "ALL" } = filters;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
@@ -464,31 +726,45 @@ export async function listTransactions(filters: TransactionFilters = {}, options
   // secret resolves for the org, provider transactions are authoritative. A
   // configured-but-failing provider propagates (never mocked); with no
   // connection the in-memory dev/demo ledger is the fallback.
-  const providerResult = await tryProviderTransactions();
+  const providerResult = await tryProviderTransactions(scopedOrganizationId);
   if (providerResult.connected) {
-    return finalize(providerResult.data.map(providerTransactionToRow));
+    // Defence in depth: even rows the provider returned for this connection are
+    // filtered by the scope predicate before they reach a caller.
+    return finalize(scopeRecords(tenantScopeFor(scope), providerResult.data.map((p) => providerTransactionToRow(p, scopedOrganizationId))));
   }
 
-  return finalize(store().rows);
+  return finalize(scopedRows(scope));
 }
 
-export async function getTransaction(id: string): Promise<Transaction | null> {
-  return store().rows.find((t) => t.id === id || t.referenceId === id) ?? null;
+/**
+ * Detail read for one tenant. A foreign id and an unknown id both answer `null`
+ * (spec §4), which is what lets the page `notFound()` and the API answer
+ * `NOT_FOUND` without either of them deciding the policy.
+ */
+export async function getTransaction(ctx: OrganizationContext, id: string): Promise<Transaction | null> {
+  const row = findOwnedRow(scopeOf(ctx), id);
+  return row ? { ...row } : null;
 }
 
 /** Detail-page read: the row plus its SLA view against one server instant. */
-export async function getTransactionWithSla(id: string, now: Date = new Date()): Promise<LedgerRow | null> {
-  const tx = await getTransaction(id);
+export async function getTransactionWithSla(ctx: OrganizationContext, id: string, now: Date = new Date()): Promise<LedgerRow | null> {
+  const tx = await getTransaction(ctx, id);
   if (!tx) return null;
   return { ...tx, ...evaluateTransactionSla(tx, now) };
 }
 
 /**
- * Read-only view of the whole ledger for derived data sources (the balance
- * module, ADR-0011). Rows are copies; callers must not mutate them.
+ * Read-only view of **one tenant's** ledger for derived data sources (the
+ * balance module, ADR-0011). Rows are copies; callers must not mutate them.
+ *
+ * Wave 6's isolation probe asserted `getLedgerRows.length === 0` as evidence
+ * that no scope parameter existed. That assertion is now inverted in
+ * `tenant-isolation.probe.test.ts`, and the process-wide view a dozen legacy
+ * modules used to call lives behind the fail-closed gate in
+ * `transactions-unscoped.ts`.
  */
-export function getLedgerRows(): Transaction[] {
-  return store().rows.map((t) => ({ ...t }));
+export function getLedgerRows(ctx: OrganizationContext): Transaction[] {
+  return scopedRows(ctx);
 }
 
 export type LedgerMetrics = {
@@ -504,8 +780,13 @@ export type LedgerMetrics = {
   total: number;
 };
 
-export async function getLedgerMetrics(): Promise<LedgerMetrics> {
-  const rows = store().rows;
+/**
+ * Dashboard metrics for one tenant. Aggregates are a tenant-isolation surface
+ * like any other: a volume/failed-rate tile computed across tenants leaks
+ * another organization's trading through a number, with no rows in sight.
+ */
+export async function getLedgerMetrics(ctx: OrganizationContext): Promise<LedgerMetrics> {
+  const rows = scopedRows(scopeOf(ctx));
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
   const current = rows.filter((t) => now - new Date(t.createdAt).getTime() <= 7 * day);
@@ -541,8 +822,9 @@ export async function getLedgerMetrics(): Promise<LedgerMetrics> {
 
 export type AnalyticsPoint = { date: string; total: number; succeeded: number; failed: number };
 
-export async function getAnalyticsSeries(days = 7): Promise<AnalyticsPoint[]> {
-  const rows = store().rows;
+/** Per-tenant analytics series. See `getLedgerMetrics` on why aggregates scope. */
+export async function getAnalyticsSeries(ctx: OrganizationContext, days = 7): Promise<AnalyticsPoint[]> {
+  const rows = scopedRows(scopeOf(ctx));
   const fmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", timeZone: "UTC" });
   const buckets: AnalyticsPoint[] = [];
   const today = new Date();
@@ -576,11 +858,13 @@ export type CreateTransactionInput = {
   referenceId?: string;
 };
 
-export async function createTransaction(input: CreateTransactionInput): Promise<Transaction> {
+export async function createTransaction(ctx: OrganizationContext, input: CreateTransactionInput): Promise<Transaction> {
+  const { organizationId } = scopeOf(ctx);
   const now = new Date();
   const id = input.referenceId?.trim() || `txn_${now.getTime().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
   const fee = Math.round(input.amount * 0.029 + 2_000);
   const partial: Omit<Transaction, "events"> = {
+    organizationId,
     id,
     referenceId: id,
     createdAt: now.toISOString(),
@@ -602,12 +886,24 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
     events: [],
   } as Omit<Transaction, "events">;
   const tx: Transaction = { ...partial, events: eventsFor(partial) };
-  store().rows.unshift(tx);
+  const target = store().byOrganization;
+  const rows = target.get(organizationId) ?? [];
+  // Ids are only unique *within* a tenant; a duplicate inside the same tenant is
+  // a bug and must not silently double-count in the ledger.
+  if (rows.some((r) => r.id === tx.id)) {
+    throw new Error(`Transaction id ${tx.id} already exists in this organization.`);
+  }
+  target.set(organizationId, [tx, ...rows]);
+  // The created row is returned by reference — the create-API convention the
+  // payment-link flow already relies on (it captures the row immediately after
+  // creating it). This is the one place a caller holds the stored object, and it
+  // holds only a row it just created, inside the tenant it was given. Reads
+  // (`getTransaction`, `getLedgerRows`, `listTransactions`) return copies.
   return tx;
 }
 
-export async function refundTransaction(id: string, amount: number, reason: string): Promise<Transaction | null> {
-  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+export async function refundTransaction(ctx: OrganizationContext, id: string, amount: number, reason: string): Promise<Transaction | null> {
+  const tx = writableRow(scopeOf(ctx), id, "transactions.refund.execute");
   if (!tx) return null;
   const refunded = Math.min(tx.amount, tx.refundedAmount + amount);
   tx.refundedAmount = refunded;
@@ -623,7 +919,7 @@ export async function refundTransaction(id: string, amount: number, reason: stri
       kind: "warning",
     },
   ];
-  return tx;
+  return { ...tx };
 }
 
 // ---------------------------------------------------------------------------
@@ -676,14 +972,17 @@ function appendEvent(tx: Transaction, label: string, detail: string, kind: Trans
  * (`created: false`) rather than stacking a second queue item — a double submit
  * must not produce two approvals.
  */
-export async function requestRefund(input: {
-  transactionId: string;
-  amount: number;
-  reason: string;
-  requestedBy: string;
-  now?: Date;
-}): Promise<RefundRequestResult> {
-  const tx = store().rows.find((t) => t.id === input.transactionId || t.referenceId === input.transactionId);
+export async function requestRefund(
+  ctx: OrganizationContext,
+  input: {
+    transactionId: string;
+    amount: number;
+    reason: string;
+    requestedBy: string;
+    now?: Date;
+  },
+): Promise<RefundRequestResult> {
+  const tx = resolveForWrite(ctx, input.transactionId, "transactions.refund.request", input.requestedBy);
   if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   if (tx.status === "FAILED") {
     return { ok: false, code: "NOT_REFUNDABLE", message: "Failed payments cannot be refunded — retry it instead." };
@@ -754,12 +1053,15 @@ export async function requestRefund(input: {
  * Role B approves the pending refund. Money moves only here, and only for an
  * actor distinct from the requester.
  */
-export async function approveRefund(input: {
-  transactionId: string;
-  approvedBy: string;
-  now?: Date;
-}): Promise<RefundDecisionResult> {
-  const tx = store().rows.find((t) => t.id === input.transactionId || t.referenceId === input.transactionId);
+export async function approveRefund(
+  ctx: OrganizationContext,
+  input: {
+    transactionId: string;
+    approvedBy: string;
+    now?: Date;
+  },
+): Promise<RefundDecisionResult> {
+  const tx = resolveForWrite(ctx, input.transactionId, "transactions.refund.approve", input.approvedBy);
   if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   if (tx.refundState !== "AWAITING_APPROVAL" || !tx.refundRequest) {
     return { ok: false, code: "NOT_AWAITING", message: "This transaction has no refund awaiting approval." };
@@ -797,13 +1099,16 @@ export async function approveRefund(input: {
 }
 
 /** Role B rejects the pending refund. No money moves. */
-export async function rejectRefund(input: {
-  transactionId: string;
-  rejectedBy: string;
-  reason?: string;
-  now?: Date;
-}): Promise<RefundDecisionResult> {
-  const tx = store().rows.find((t) => t.id === input.transactionId || t.referenceId === input.transactionId);
+export async function rejectRefund(
+  ctx: OrganizationContext,
+  input: {
+    transactionId: string;
+    rejectedBy: string;
+    reason?: string;
+    now?: Date;
+  },
+): Promise<RefundDecisionResult> {
+  const tx = resolveForWrite(ctx, input.transactionId, "transactions.refund.reject", input.rejectedBy);
   if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   if (tx.refundState !== "AWAITING_APPROVAL" || !tx.refundRequest) {
     return { ok: false, code: "NOT_AWAITING", message: "This transaction has no refund awaiting approval." };
@@ -829,16 +1134,35 @@ export async function rejectRefund(input: {
   return { ok: true, transaction: tx };
 }
 
-/** Role B's queue: every transaction with a refund awaiting a second approval. */
-export function listRefundsAwaiting(): Transaction[] {
-  return store()
-    .rows.filter((t) => t.refundState === "AWAITING_APPROVAL")
+/**
+ * Role B's queue: every transaction with a refund awaiting a second approval,
+ * **for this tenant**. An approval queue is the most dangerous unscoped read in
+ * the app — it hands the actor a mutation affordance for someone else's money.
+ */
+export function listRefundsAwaiting(ctx: OrganizationContext): Transaction[] {
+  return scopedRows(scopeOf(ctx))
+    .filter((t) => t.refundState === "AWAITING_APPROVAL")
     .sort((a, b) => (a.refundRequest?.requestedAt ?? "").localeCompare(b.refundRequest?.requestedAt ?? ""));
 }
 
-export async function retryTransaction(id: string): Promise<Transaction | null> {
-  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
-  if (!tx) return null;
+/**
+ * Resolve a row for a **result-shaped** write: `null` for "not yours or not
+ * there" (the caller already returns `NOT_FOUND` for that), and the tenant
+ * error still propagates for anything else. `writableRow` is the throwing form
+ * used by the primitive APIs.
+ */
+function resolveForWrite(ctx: OrganizationContext, id: string, surface: string, actorId?: string | null): Transaction | null {
+  try {
+    return writableRow(scopeOf(ctx), id, surface, actorId);
+  } catch (e) {
+    if (notFoundFromTenantError(e)) return null;
+    throw e;
+  }
+}
+
+/** The retry mutation itself, shared by both public entry points so the two
+ *  cannot drift into different state transitions. */
+function applyRetry(tx: Transaction): void {
   tx.status = "PROCESSING";
   tx.updatedAt = new Date().toISOString();
   tx.events = [
@@ -851,7 +1175,13 @@ export async function retryTransaction(id: string): Promise<Transaction | null> 
       kind: "info",
     },
   ];
-  return tx;
+}
+
+export async function retryTransaction(ctx: OrganizationContext, id: string, actorId?: string | null): Promise<Transaction | null> {
+  const tx = writableRow(scopeOf(ctx), id, "transactions.retry", actorId);
+  if (!tx) return null;
+  applyRetry(tx);
+  return { ...tx };
 }
 
 export type RetryResult =
@@ -870,8 +1200,22 @@ export type RetryResult =
  * moved since the viewer saw it, refuse with CONFLICT instead of applying a
  * blind mutation on top of someone else's change.
  */
-export async function retryTransactionWithVersion(id: string, expectedUpdatedAt?: string | null): Promise<RetryResult> {
-  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+export async function retryTransactionWithVersion(
+  ctx: OrganizationContext,
+  id: string,
+  expectedUpdatedAt?: string | null,
+  actorId?: string | null,
+): Promise<RetryResult> {
+  const scoped = scopeOf(ctx);
+  let tx: Transaction | null;
+  try {
+    tx = writableRow(scoped, id, "transactions.retry", actorId);
+  } catch (e) {
+    // Foreign row: audited loudly inside, answered as "not found" outside
+    // (spec §4). The caller must never be able to tell the two apart.
+    if (notFoundFromTenantError(e)) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
+    throw e;
+  }
   if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   if (expectedUpdatedAt && tx.updatedAt !== expectedUpdatedAt) {
     return {
@@ -881,9 +1225,8 @@ export async function retryTransactionWithVersion(id: string, expectedUpdatedAt?
       latest: { ...tx },
     };
   }
-  const retried = await retryTransaction(id);
-  if (!retried) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
-  return { ok: true, transaction: retried };
+  applyRetry(tx);
+  return { ok: true, transaction: { ...tx } };
 }
 
 /** Canonical `?refundState=` vocabulary for the dual-control queue filter. */

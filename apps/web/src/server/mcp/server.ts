@@ -9,13 +9,20 @@ import {
   setDataSourceHandler,
 } from "./handlers";
 import { registerDomainTools } from "./domain-tools";
+import type { OrganizationContext } from "@/domain/tenancy/organization-context";
 import { registerXenditTools } from "./xendit-tools";
 import { registerJournalTools } from "./journal-tools";
 
-export function buildMcpServer(store: RuntimeSettingsStore = getRuntimeSettingsStore()): McpServer {
+export function buildMcpServer(
+  store: RuntimeSettingsStore = getRuntimeSettingsStore(),
+  organization?: OrganizationContext | null,
+): McpServer {
   const server = new McpServer({ name: "paydash", version: "1.0.0" });
 
-  registerDomainTools(server);
+  // Wave 7A: the tenant bound to *this request* is threaded into the domain
+  // tools. Tools outside this wave's slice (balance, payouts, …) are untouched on
+  // purpose — see the Wave 7B quarantine note in WAVE_7A_IMPLEMENTATION_REPORT.md.
+  registerDomainTools(server, organization);
   registerXenditTools(server);
   registerJournalTools(server);
 

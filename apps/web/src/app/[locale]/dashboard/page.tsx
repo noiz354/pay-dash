@@ -17,6 +17,8 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCompactMoney, formatNumber, formatPercent } from "@/lib/format";
 import { getAnalyticsSeries, getLedgerMetrics, listTransactions } from "@/server/data/transactions";
+import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
+import type { OrganizationContext } from "@/domain/tenancy/organization-context";
 
 // Dashboard — screens/desktop/dashboard_home_desktop:228-349
 // Every interactive element on this page resolves to a real destination or
@@ -101,8 +103,11 @@ function MetricTile({
   );
 }
 
-async function MetricsGroup() {
-  const m = await getLedgerMetrics();
+async function MetricsGroup({ context }: { context: OrganizationContext }) {
+  // Wave 7A: the dashboard tiles are transaction aggregates, so they are scoped
+  // like the ledger is. An unscoped volume tile leaks a neighbour's trading as
+  // a single number, with no row in sight to trace.
+  const m = await getLedgerMetrics(context);
   return (
     <>
       <MetricTile
@@ -133,10 +138,10 @@ async function MetricsGroup() {
   );
 }
 
-async function AnalyticsSection({ range }: { range: ChartRange }) {
+async function AnalyticsSection({ range, context }: { range: ChartRange; context: OrganizationContext }) {
   const [series, metrics] = await Promise.all([
-    getAnalyticsSeries(CHART_RANGE_DAYS[range]),
-    getLedgerMetrics(),
+    getAnalyticsSeries(context, CHART_RANGE_DAYS[range]),
+    getLedgerMetrics(context),
   ]);
   const hasData = series.some((p) => p.total > 0);
   return (
@@ -148,8 +153,8 @@ async function AnalyticsSection({ range }: { range: ChartRange }) {
   );
 }
 
-async function RecentTransactions() {
-  const { rows } = await listTransactions({ pageSize: 5, page: 1 });
+async function RecentTransactions({ context }: { context: OrganizationContext }) {
+  const { rows } = await listTransactions(context, { pageSize: 5, page: 1 });
   return (
     <TransactionsTable
       rows={rows}
@@ -176,6 +181,10 @@ async function RecentTransactions() {
 
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
+  // One tenant resolution per request, threaded into every derived surface, so
+  // the tiles, the chart and the recent list cannot disagree about whose data
+  // they are showing.
+  const { context } = await resolveTransactionOrganizationContext();
   const range = chartRangeOf(sp);
   const lane = laneOf(sp);
 
@@ -214,7 +223,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
               </>
             }
           >
-            <MetricsGroup />
+            <MetricsGroup context={context} />
           </Suspense>
 
           {/* Quick Actions — every label matches an intent the target route can fulfil */}
@@ -265,11 +274,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         <ChartRangeTabs range={range} />
       </div>
       <Suspense key={range} fallback={<AnalyticsChart data={[]} isLoading />}>
-        <AnalyticsSection range={range} />
+        <AnalyticsSection range={range} context={context} />
       </Suspense>
 
       <Suspense fallback={<TableSkeleton rows={5} columns={5} />}>
-        <RecentTransactions />
+        <RecentTransactions context={context} />
       </Suspense>
     </main>
   );

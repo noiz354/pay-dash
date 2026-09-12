@@ -5,6 +5,7 @@ import { z } from "zod";
 import { parseAmount } from "@/lib/payout-status";
 import { formatMoney } from "@/lib/format";
 import { createLink, expireLink, recordLinkPayment, getLink, totalOf } from "@/server/data/links";
+import { requireTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import type { ActionState } from "./payouts";
 
 export type { ActionState };
@@ -164,7 +165,10 @@ export async function payPaymentLinkAction(
 ): Promise<ActionState<{ transactionId: string; total: number }>> {
   const id = String(formData.get("id") ?? "").trim();
   try {
-    const { transactionId, total } = await recordLinkPayment(id);
+    // Paying a link credits the transaction ledger, so the write is tenant-bound
+    // — and this action had no authorization at all before Wave 7A.
+    const access = await requireTransactionOrganizationContext("money_in.create");
+    const { transactionId, total } = await recordLinkPayment(access.context, id);
     revalidateAfterPayment(transactionId);
     return {
       status: "success",
