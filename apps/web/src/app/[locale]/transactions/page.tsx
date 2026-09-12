@@ -3,9 +3,7 @@ import type { Metadata } from "next";
 import { Card } from "@/components/ui/card";
 import { CreateTransactionDialog } from "@/components/transactions/create-transaction-dialog";
 import { ExportCsvButton } from "@/components/transactions/export-csv-button";
-import { TransactionFilters } from "@/components/transactions/transaction-filters";
-import { TablePagination } from "@/components/transactions/table-pagination";
-import { TransactionsTable } from "@/components/transactions/transactions-table";
+import { CanonicalTransactionsTable } from "@/components/transactions/canonical-transactions-table";
 import { TableSkeleton } from "@/components/common/table-skeleton";
 import { formatCompactMoney, formatNumber, formatPercent } from "@/lib/format";
 import {
@@ -69,30 +67,28 @@ async function MetricsRow() {
 async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const page = Number(one(sp.page) ?? 1) || 1;
+  const pageSize = Number(one(sp.pageSize) ?? 10) || 10;
+  const sort = (one(sp.sort) as "date" | "amount" | "status") ?? "date";
+  const direction = (one(sp.direction) as "asc" | "desc") ?? "desc";
   const result = await listTransactions({
     status: (one(sp.status) as TransactionStatus | "ALL") ?? "ALL",
     channel: (one(sp.channel) as Channel | "ALL") ?? "ALL",
     range: (one(sp.range) as "7d" | "30d" | "90d" | "all") ?? "all",
     q: one(sp.q) ?? "",
     page,
-    pageSize: 10,
+    pageSize,
+    sort,
+    direction,
   });
 
   return (
-    <TransactionsTable
+    <CanonicalTransactionsTable
       rows={result.rows}
+      total={result.total}
+      page={result.page}
+      pageCount={result.pageCount}
+      pageSize={result.pageSize}
       isFiltered={result.isFiltered}
-      toolbar={<TransactionFilters resultCount={result.total} />}
-      footer={
-        result.total > 0 ? (
-          <TablePagination
-            page={result.page}
-            pageCount={result.pageCount}
-            total={result.total}
-            pageSize={result.pageSize}
-          />
-        ) : null
-      }
     />
   );
 }

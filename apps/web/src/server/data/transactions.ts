@@ -60,6 +60,8 @@ export type TransactionFilters = {
   q?: string;
   page?: number;
   pageSize?: number;
+  sort?: "date" | "amount" | "status";
+  direction?: "asc" | "desc";
 };
 
 export type Paginated<T> = {
@@ -277,10 +279,12 @@ async function tryProviderTransactions(): Promise<ProviderReadResult<ProviderTra
 }
 
 export async function listTransactions(filters: TransactionFilters = {}): Promise<Paginated<Transaction>> {
-  const { status = "ALL", channel = "ALL", range = "all", q = "" } = filters;
+  const { status = "ALL", channel = "ALL", range = "all", q = "", sort = "date", direction = "desc" } = filters;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
+  const sortKey = ["date", "amount", "status"].includes(sort) ? sort : "date";
+  const dir = direction === "asc" ? 1 : -1;
 
   // Live provider read (rekomendasi #4). When a configured TEST connection +
   // secret resolves for the org, provider transactions are authoritative. A
@@ -300,15 +304,20 @@ export async function listTransactions(filters: TransactionFilters = {}): Promis
         }
         return true;
       });
-    const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortKey === "date") return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      if (sortKey === "amount") return dir * (a.amount - b.amount);
+      return dir * a.status.localeCompare(b.status);
+    });
+    const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
     const safePage = Math.min(page, pageCount);
     return {
-      rows: filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
-      total: filtered.length,
+      rows: sorted.slice((safePage - 1) * pageSize, safePage * pageSize),
+      total: sorted.length,
       page: safePage,
       pageSize,
       pageCount,
-      isFiltered: status !== "ALL" || channel !== "ALL" || range !== "all" || needle.length > 0,
+      isFiltered: status !== "ALL" || channel !== "ALL" || range !== "all" || needle.length > 0 || sortKey !== "date" || dir !== -1,
     };
   }
 
@@ -323,15 +332,20 @@ export async function listTransactions(filters: TransactionFilters = {}): Promis
     return true;
   });
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortKey === "date") return dir * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    if (sortKey === "amount") return dir * (a.amount - b.amount);
+    return dir * a.status.localeCompare(b.status);
+  });
+  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(page, pageCount);
   return {
-    rows: filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
-    total: filtered.length,
+    rows: sorted.slice((safePage - 1) * pageSize, safePage * pageSize),
+    total: sorted.length,
     page: safePage,
     pageSize,
     pageCount,
-    isFiltered: status !== "ALL" || channel !== "ALL" || range !== "all" || needle.length > 0,
+    isFiltered: status !== "ALL" || channel !== "ALL" || range !== "all" || needle.length > 0 || sortKey !== "date" || dir !== -1,
   };
 }
 

@@ -23,6 +23,11 @@
 | DSN-005 | — | Success token AA + DSN foundation | DONE | 6f7f0af | visual AA 5.1:1 | --success #0e7a5b + space/radius/motion tokens + focus 2px |
 | FE-002 | JRN-001 SCR-001..045 INT-001 | Grouped nav wiring (permission-aware, collapsed, More) | DONE | wave1 | route-resolver.test 20/20 + sidebar.test 9/9 + proxy.alias 6/6 | `nav-config` + `route-resolver` + `permission-adapter` + `sidebar` + `bottom-nav` + `mobile-more-sheet` + `app-chrome` + `proxy` 308 |
 | FE-003 | JRN-001 SCR-001..045 | Breadcrumb + PageHeader + state views (loading/empty/error/forbidden) | DONE | wave1 | visual + unit | `breadcrumb.tsx` + `page-header.tsx` + `state-views.tsx` |
+| CMP-005 | JRN-002,006,017 SCR-005,013,025 CMP-005 | Canonical DataTable foundation | DONE | wave2 | canonical-data-table.test 9/9 | `data-table/canonical-data-table.tsx` sticky/aria-sort/selection/bulk/cards |
+| FE-010 | JRN-002,017 SCR-005,025 INT-018 CMP-004 | Ledger filters + URL state | DONE | wave2 | table-url-state.test 11/11 | `table-url-state.ts` parser/serializer + filter chips persistence |
+| FE-010-S | JRN-002 SCR-005 CMP-004 ANA-009 | Search system 250ms | DONE | wave2 | search-input + table-url-state | debounce 250, clear, loading, URL sync, analytics query_length |
+| FE-007 | JRN-006 SCR-013/014 INT-009,010 CMP-007 | Bulk + CSV workflows (invalid preserved, failed.csv) | DONE | wave2 | csv-import.test 3/3 | `csv-import.tsx` + `payout-csv` parse + `canonical-payouts-table` bulk partial |
+| CMP-004/007 | JRN-006 SCR-013 CMP-004,007 | Filters bar + bulk bar + responsive | DONE | wave2 | filter-bar + bulk-bar | chips, active count, bulk bar page scope, mobile cards |
 | BE-005 | JRN-003/006 | Idempotency dedupe | BACKLOG | — | — | Phase 3 |
 | BE-006 | JRN-015 | Invite 7d expiry | BACKLOG | — | — |  |
 | BE-007 | JRN-006 | Optimistic locking 409 | BACKLOG | — | — | Phase 4 |
@@ -95,7 +100,16 @@
 - **Tests:** visual: skeleton dimensions match loaded content; CLS metric before→after
 - **Rollback:** delete loading.tsx → Next falls back to spinner; no data loss
 
-## Coverage Table (Wave 1 target)
+## Coverage Table (Wave 2 target)
+| Registry | Total | Wave0 Implemented | Wave1 Implemented | Wave2 Implemented | Verified | Remaining |
+|----------|-------|-------------------|-------------------|-------------------|----------|-----------|
+| JRN | 21 | 4 | +1 (JRN-001 full nav) | +2 (002,006 data ops) | 7 | 14 |
+| SCR | 45 | 14 | +6 (grouped nav, breadcrumb, page-header, states, More) | +3 (005,013,025) | 23 | 22 |
+| INT | 20 | 7 | +2 (nav collapse, More sheet) | +4 (search/filter/sort/bulk) | 13 | 7 |
+| CMP | 24 | 6 | +5 (Sidebar grouped, BottomNav More, Breadcrumb, PageHeader, StateViews) | +3 (005 DataTable,004 FilterBar,007 BulkUpload) | 14 | 10 |
+| ANA | 14 | 1 | 0 | +3 (009 filter/search,006 bulk,007 payout) | 4 | 10 |
+
+## Coverage Table (Wave 1 target legacy)
 | Registry | Total | Wave0 Implemented | Wave1 Implemented | Verified | Remaining |
 |----------|-------|-------------------|-------------------|----------|-----------|
 | JRN | 21 | 4 | +1 (JRN-001 full nav) | 5 | 16 |
