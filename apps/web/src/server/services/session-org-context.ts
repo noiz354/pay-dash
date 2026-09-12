@@ -52,3 +52,42 @@ export async function requireOrgContext(permission: Permission, input?: { organi
   authorizeOrgContext(ctx, permission);
   return ctx;
 }
+
+/**
+ * BE-001/BE-003/BE-004 strict variant: fail-closed.
+ * In strict mode (default), a demo fallback (no session) is denied — not OWNER.
+ * Use this for money-movement and export guards where demo fallback must not authorize.
+ * Respects AUTH_ENFORCED=off|preview (preview allows demo when x-preview-bypass header is present — checked via next/headers).
+ */
+export async function requireStrictOrgContext(permission: Permission, input?: { organizationId?: string }): Promise<OrgContext> {
+  const raw = process.env.AUTH_ENFORCED;
+  const mode = raw === "off" || raw === "0" || raw === "false" ? "off" : raw === "preview" ? "preview" : "strict";
+  if (mode === "off") {
+    // Allow demo fallback when explicitly off (dev/demo parity)
+    const ctx = await resolveSessionOrgContext(input);
+    // Still authorize permission (OWNER demo passes)
+    const { authorizeOrgContext } = await import("./org-context");
+    authorizeOrgContext(ctx, permission);
+    return ctx;
+  }
+  if (mode === "preview") {
+    try {
+      const { headers } = await import("next/headers");
+      const h = await headers();
+      if (h.get("x-preview-bypass") === "1") {
+        const ctx = await resolveSessionOrgContext(input);
+        authorizeOrgContext(ctx, permission);
+        return ctx;
+      }
+    } catch {}
+  }
+  // Strict: no demo fallback
+  const ctx = await resolveSessionOrgContext(input);
+  if (ctx.isDemoFallback) {
+    const { OrgContextError } = await import("./org-context");
+    throw new OrgContextError("FORBIDDEN", `Authentication required for ${permission}`);
+  }
+  authorizeOrgContext(ctx, permission);
+  return ctx;
+}
+

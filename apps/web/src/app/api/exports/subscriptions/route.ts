@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { guardExport } from "@/server/services/export-guard";
 import { listSubscriptions, subscriptionsToCsv } from "@/server/data/subscriptions";
 import type { SubscriptionStatus } from "@/lib/subscription-status";
 
@@ -6,6 +7,10 @@ import type { SubscriptionStatus } from "@/lib/subscription-status";
 // (ADR-0021). Mirrors the directory filters so what you see is what you
 // export — same contract as /api/exports/customers.
 export async function GET(request: NextRequest) {
+  // BE-004: fail-closed export guard (JRN-017)
+  const guard = await guardExport(request, "report.export");
+  if (!guard.ok) return guard.response;
+
   const sp = request.nextUrl.searchParams;
   const { rows } = await listSubscriptions({
     q: sp.get("q") ?? "",

@@ -56,8 +56,23 @@
   --surface-canvas: #f8fafc;
   --border-subtle: #e2e8f0;
   --success-status: #10b981;
+  --success: #0e7a5b;
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --success-text: #0e7a5b; /* AA 5.1:1 for text on white, DSN-005 */
   --pending-status: #f59e0b;
   --failed-status: #ef4444;
+  /* DSN foundation tokens — §14 semantic */
+  --space-card: 24px;
+  --space-section: 32px;
+  --space-page: 40px;
+  --radius-card: 12px;
+  --radius-pill: 9999px;
+  --radius-icon: 8px;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.08);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-spring: 400ms;
   --test-mode-amber: #d97706;
   --warning: #d97706; /* alias Enterprise → Ledger (screens/mobile use warning) */
 
@@ -319,6 +334,20 @@ html, body { background: var(--surface-canvas); color: var(--on-surface); }
   }
   html {
     @apply font-sans;
+  }
+}
+
+
+/* DSN-005/006: focus visible 2px primary + reduced motion (FE-016/DSN) */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

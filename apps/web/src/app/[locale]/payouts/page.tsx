@@ -5,15 +5,13 @@ import { TableSkeleton } from "@/components/common/table-skeleton";
 import { SectionBoundary } from "@/components/common/section-boundary";
 import { ExportCsvButton } from "@/components/transactions/export-csv-button";
 import { PayoutsSummaryCards } from "@/components/payouts/payouts-summary-cards";
-import { BatchFilters } from "@/components/payouts/batch-filters";
-import { BatchesTable } from "@/components/payouts/batches-table";
+import { CanonicalPayoutsTable } from "@/components/payouts/canonical-payouts-table";
 import { CreateBatchDialog } from "@/components/payouts/create-batch-dialog";
 import { getPayoutsOverview, listBatches } from "@/server/data/payouts";
 import type { PayoutStatus } from "@/lib/payout-status";
 
-// Payouts index — the route that used to 404 while two children hung off the
-// sidebar. Batch history lives here (ADR-0010); filters are URL state so a
-// "what failed last month?" view is shareable.
+// Payouts index — canonical DataTable with URL state, search, filters, sorting, pagination, selection, bulk actions, CSV import
+// Wave2: Data Operations & Productivity
 
 export const dynamic = "force-dynamic";
 
@@ -40,15 +38,20 @@ async function BatchHistory({ searchParams }: { searchParams: SearchParams }) {
     status: (one(sp.status) as PayoutStatus | "ALL") ?? "ALL",
     range: (one(sp.range) as "30d" | "90d" | "12m" | "all") ?? "all",
     sort: (one(sp.sort) as "recent" | "amount" | "recipients") ?? "recent",
+    direction: (one(sp.direction) as "asc" | "desc") ?? "desc",
     page: Number(one(sp.page) ?? 1) || 1,
-    pageSize: 10,
+    pageSize: Number(one(sp.pageSize) ?? 10) || 10,
   });
 
   return (
-    <>
-      <BatchFilters resultCount={data.total} />
-      <BatchesTable data={data} />
-    </>
+    <CanonicalPayoutsTable
+      rows={data.rows}
+      total={data.total}
+      page={data.page}
+      pageCount={data.pageCount}
+      pageSize={data.pageSize}
+      isFiltered={data.isFiltered}
+    />
   );
 }
 
@@ -70,7 +73,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Sear
           </nav>
           <h1 className="headline-xl text-[var(--on-surface)]">Payouts</h1>
           <p className="body-md mt-2 max-w-2xl text-[var(--on-surface-variant)]">
-            Every disbursement batch, its recipients and where the money got stuck.
+            Every disbursement batch, its recipients and where the money got stuck — operate with bulk actions and CSV workflows.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -101,7 +104,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Sear
 
       <section className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)]">
         <div className="flex items-center justify-between px-4 py-3">
-          <h2 className="headline-md text-[var(--on-surface)]">Batch history</h2>
+          <h2 className="headline-md text-[var(--on-surface)]">Batch history — canonical DataTable</h2>
           <Link href="/payouts/bulk" className="body-sm text-[var(--primary)] hover:underline">
             Open the bulk upload workspace
           </Link>

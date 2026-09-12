@@ -9,7 +9,29 @@ const handleI18nRouting = createMiddleware(routing);
 
 // Reusable proxy (formerly middleware) — NEXTJS #7 proxy, ADR-0004 Better Auth
 // Verifies session cookie; redirects unauthenticated from protected routes
+// BE-001: fail-closed — default strict, not opt-in. `AUTH_ENFORCED=off|0|false` disables,
+// `preview` allows `x-preview-bypass:1` (preview env only), legacy `1|true` = strict.
+// Implements: JRN-001 SCR-001..004.
 const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/ai-journal", "/api/auth", "/api/health", "/_next", "/favicon", "/static"];
+const PUBLIC_API_PREFIXES = ["/api/auth", "/api/health", "/api/webhooks", "/api/vitals"];
+
+export function authMode(): "strict" | "preview" | "off" {
+  const raw = process.env.AUTH_ENFORCED;
+  if (raw === "off" || raw === "0" || raw === "false") return "off";
+  if (raw === "preview") return "preview";
+  return "strict"; // default strict (includes "1", "true", undefined)
+}
+
+function isPreviewBypass(request: NextRequest): boolean {
+  return request.headers.get("x-preview-bypass") === "1" || request.nextUrl.searchParams.get("preview_bypass") === "1";
+}
+
+export function shouldEnforceAuth(request: NextRequest): boolean {
+  const mode = authMode();
+  if (mode === "off") return false;
+  if (mode === "preview" && isPreviewBypass(request)) return false;
+  return true;
+}
 
 // Single source of truth for authenticated app routes (kept in sync with
 // `next.config.ts` rewrites and `components/layout/sidebar.tsx`). Prefix match
@@ -45,12 +67,25 @@ function isPublic(pathname: string) {
 export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Route handlers own /api/*, and "/" renders the root chooser scaffold
-  // (app/page.tsx) — both are passed straight through so activating the proxy
-  // takes nothing away that used to work.
-    if (pathname === "/" || pathname === "/api" || pathname.startsWith("/api/")) {
-        return NextResponse.next();
+  // "/" renders the root chooser scaffold (app/page.tsx) — pass through.
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
+
+  // API: public endpoints pass, protected endpoints enforce auth (fail-closed)
+  // This is defense-in-depth with BE-004 route-level guards; matcher now includes /api.
+  if (pathname === "/api" || pathname.startsWith("/api/")) {
+    const isPublicApi = PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+    if (isPublicApi) return NextResponse.next();
+    // Protected API (e.g., /api/exports/*, /api/mcp) — fail-closed when enforcing
+    if (shouldEnforceAuth(request)) {
+      const hasSession = request.cookies.has("better-auth.session_token") || request.cookies.has("__Secure-better-auth.session_token");
+      if (!hasSession) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
+      }
     }
+    return NextResponse.next();
+  }
 
     // Strip locale prefix from static assets (e.g. /en/_next/... → /_next/...)
     // next-intl's "as-needed" localePrefix adds the locale to all paths,
@@ -78,6 +113,35 @@ export default function proxy(request: NextRequest) {
 
   const stripped = pathname.replace(/^\/(en|id)(\/|$)/, "/");
 
+  // FE-001: Canonical alias redirect — old routes 308 → canonical, no bookmark break
+  // Keep in sync with `components/navigation/nav-config.ts` NAV_ALIASES
+  const NAV_ALIASES: Record<string, string> = {
+    "/payouts/bulk": "/payouts",
+    "/payouts/settings": "/payouts",
+    "/payments/platform": "/settings/developer",
+    "/reports": "/reports/builder",
+  };
+  const aliasTarget = NAV_ALIASES[stripped];
+  if (aliasTarget) {
+    const localeMatch = pathname.match(/^\/(en|id)\//);
+    const localePrefix = localeMatch ? `/${localeMatch[1]}` : "";
+    const url = request.nextUrl.clone();
+    // Preserve query and hash via clone, just swap pathname
+    url.pathname = `${localePrefix}${aliasTarget}`;
+    return NextResponse.redirect(url, 308);
+  }
+  // Also handle prefix alias for nested children (e.g., /payouts/bulk/123 → /payouts/123)
+  for (const [oldPath, canonical] of Object.entries(NAV_ALIASES)) {
+    if (stripped.startsWith(oldPath + "/")) {
+      const remainder = stripped.slice(oldPath.length);
+      const localeMatch = pathname.match(/^\/(en|id)\//);
+      const localePrefix = localeMatch ? `/${localeMatch[1]}` : "";
+      const url = request.nextUrl.clone();
+      url.pathname = `${localePrefix}${canonical}${remainder}`;
+      return NextResponse.redirect(url, 308);
+    }
+  }
+
   // 1) i18n first — let next-intl handle locale detection / prefix (as-needed)
   const i18nResponse = handleI18nRouting(request);
   // If i18n wants to redirect (e.g., "/" → locale), honour it
@@ -94,6 +158,13 @@ export default function proxy(request: NextRequest) {
 
   const isBare = !pathname.match(/^\/(en|id)(\/|$)/);
   if (isBare && isAppRoute) {
+    const hasSession = request.cookies.has("better-auth.session_token") || request.cookies.has("__Secure-better-auth.session_token");
+    if (!hasSession && shouldEnforceAuth(request)) {
+      const signInUrl = request.nextUrl.clone();
+      signInUrl.pathname = `/${routing.defaultLocale}/sign-in`;
+      signInUrl.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(signInUrl);
+    }
     const url = request.nextUrl.clone();
     url.pathname = `/${routing.defaultLocale}${pathname}`;
     // Rewrite (not redirect) to keep bare URL in browser, but render [locale] page
@@ -103,16 +174,6 @@ export default function proxy(request: NextRequest) {
       i18nResponse.headers.forEach((value, key) => {
         if (key.toLowerCase() !== "x-middleware-rewrite") rewriteResponse.headers.set(key, value);
       });
-    }
-    // Still check auth after rewrite? For bare with no session, redirect to sign-in instead
-    const hasSession = request.cookies.has("better-auth.session_token") || request.cookies.has("__Secure-better-auth.session_token");
-    if (!hasSession) {
-      // For now allow bare in dev (no session) to render — comment out redirect for dev parity
-      // If you need auth, uncomment:
-      // const signInUrl = request.nextUrl.clone();
-      // signInUrl.pathname = `/${routing.defaultLocale}/sign-in`;
-      // signInUrl.searchParams.set("redirect", pathname);
-      // return NextResponse.redirect(signInUrl);
     }
     return rewriteResponse;
   }
@@ -128,15 +189,10 @@ export default function proxy(request: NextRequest) {
     return i18nResponse ?? NextResponse.next();
   }
 
-  // Check Better Auth session cookie
+  // Check Better Auth session cookie — fail-closed (BE-001)
   const hasSession = request.cookies.has("better-auth.session_token") || request.cookies.has("__Secure-better-auth.session_token");
-
-  // Auth enforcement is opt-in via AUTH_ENFORCED=1 so the proxy can be active
-  // (locale rewrites + in-shell 404) without locking the demo/preview out of
-  // every screen. The redirect logic below is unchanged and ships as-is.
-  const enforceAuth = process.env.AUTH_ENFORCED === "1";
   const isProtected = isAppRoute;
-  if (isProtected && !hasSession && enforceAuth) {
+  if (isProtected && !hasSession && shouldEnforceAuth(request)) {
     const localeMatch = pathname.match(/^\/(en|id)\//);
     const locale = localeMatch ? `/${localeMatch[1]}` : `/${routing.defaultLocale}`;
     const url = request.nextUrl.clone();
@@ -159,5 +215,5 @@ export default function proxy(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ["/((?!_next/static|_next/image|favicon.ico|api|_next|en/_next|id/_next).*)"],
+    matcher: ["/((?!_next/static|_next/image|favicon.ico|_next|en/_next|id/_next).*)"],
 };

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { guardExport } from "@/server/services/export-guard";
 import { listMembers, membersToCsv } from "@/server/data/team";
 import type { TeamRole } from "@/lib/team-roles";
 
@@ -6,6 +7,10 @@ import type { TeamRole } from "@/lib/team-roles";
 // Mirrors the Members tab filters so what you see is what you export —
 // same contract as /api/exports/customers.
 export async function GET(request: NextRequest) {
+  // BE-004: fail-closed export guard (JRN-017)
+  const guard = await guardExport(request, "team.manage");
+  if (!guard.ok) return guard.response;
+
   const sp = request.nextUrl.searchParams;
   const { rows } = await listMembers({
     q: sp.get("q") ?? "",

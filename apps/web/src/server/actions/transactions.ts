@@ -2,6 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { OrgContextError } from "@/server/services/org-context";
+import { requireStrictOrgContext, resolveSessionOrgContext } from "@/server/services/session-org-context";
+import { hasPermission } from "@/domain/organization/roles";
+import { requiresDualControl, isApproverDistinct } from "@/domain/security/step-up";
 import {
   CHANNELS,
   createTransaction,
@@ -40,6 +44,13 @@ export async function createTransactionAction(
   _prev: ActionState<{ id: string }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string }>> {
+  // BE-003/BE-002: enforce money-in permission fail-closed (JRN-002)
+  try {
+    await requireStrictOrgContext("money_in.create");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to create payments." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
   const parsed = CreateTransactionSchema.safeParse({
     customerName: formData.get("customerName"),
     customerEmail: formData.get("customerEmail"),
@@ -113,6 +124,49 @@ export async function refundTransactionAction(
     };
   }
 
+  // BE-002/BE-003: refund permission + dual-control enforcement (JRN-003)
+  // Backend is final enforcement point — initiator != approver for threshold amounts
+  try {
+    const ctx = await resolveSessionOrgContext();
+    const canPrepare = ctx.roles.some((r) => hasPermission(r, "refund.prepare"));
+    const canExecute = ctx.roles.some((r) => hasPermission(r, "refund.execute"));
+    if (!canPrepare && !canExecute) {
+      const { OrgContextError } = await import("@/server/services/org-context");
+      throw new OrgContextError("FORBIDDEN", "Actor is not authorized for refund.prepare in " + ctx.organizationId);
+    }
+    if (ctx.isDemoFallback) {
+      const { OrgContextError } = await import("@/server/services/org-context");
+      const raw = process.env.AUTH_ENFORCED;
+      const mode = raw === "off" || raw === "0" || raw === "false" ? "off" : raw === "preview" ? "preview" : "strict";
+      if (mode !== "off") throw new OrgContextError("FORBIDDEN", "Authentication required for refund.prepare");
+    }
+    const amountMinor = String(parsed.data.amount);
+    const originalMinor = String(existing.amount);
+    const needsDual = requiresDualControl("refund.amount", { mode: "TEST", amountMinor, originalPaymentAmountMinor: originalMinor }) || requiresDualControl("refund.pct", { mode: "TEST", amountMinor, originalPaymentAmountMinor: originalMinor });
+    const approverId = String(formData.get("approverId") ?? "").trim() || null;
+    if (needsDual) {
+      if (!canExecute) {
+        return { status: "error", message: "This refund requires a separate approval — you don't have permission to execute refunds." };
+      }
+      if (!approverId) {
+        return { status: "error", message: "This refund requires a separate approval — provide an approver." };
+      }
+      const requesterId = ctx.userId ?? "unknown";
+      if (!isApproverDistinct(requesterId, approverId)) {
+        return { status: "error", message: "Requester cannot be the approver — a different user must approve this refund." };
+      }
+    } else {
+      // For non-dual refunds, prepare is sufficient; execute also allowed
+      if (!canPrepare && !canExecute) {
+        return { status: "error", message: "You don't have permission to prepare refunds." };
+      }
+    }
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : e.message };
+    if (e instanceof Error && (e.message.includes("separate approval") || e.message.includes("approver"))) return { status: "error", message: e.message };
+    // Re-throw unexpected? But we already handled
+  }
+
   // Rekomendasi #5: route the refund through the provider payment-flow when a
   // TEST connection resolves (idempotency + durable op + authz/step-up + audit).
   // A configured-but-failing provider propagates (never mock); with no connection
@@ -151,6 +205,14 @@ export async function retryTransactionAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  // BE-003: retry requires money-in permission (resubmit)
+  try {
+    await requireStrictOrgContext("money_in.create");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payments." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const id = String(formData.get("id") ?? "");
   if (!id) return { status: "error", message: "Missing transaction id." };
   const tx = await retryTransaction(id);

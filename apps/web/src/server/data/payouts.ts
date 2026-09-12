@@ -76,6 +76,7 @@ export type BatchFilters = {
   status?: PayoutStatus | "ALL";
   range?: "30d" | "90d" | "12m" | "all";
   sort?: "recent" | "amount" | "recipients";
+  direction?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 };
@@ -438,9 +439,11 @@ export async function listBatches(filters: BatchFilters = {}): Promise<Paginated
     status = "ALL",
     range = "all",
     sort = "recent",
+    direction = "desc",
     page = 1,
     pageSize = 10,
   } = filters;
+  const dir = direction === "asc" ? 1 : -1;
 
   let rows = store().batches.map(summarise);
   const term = q.trim().toLowerCase();
@@ -459,9 +462,9 @@ export async function listBatches(filters: BatchFilters = {}): Promise<Paginated
   }
 
   rows.sort((a, b) => {
-    if (sort === "amount") return b.totalAmount - a.totalAmount;
-    if (sort === "recipients") return b.recipientCount - a.recipientCount;
-    return b.createdAt.localeCompare(a.createdAt);
+    if (sort === "amount") return dir * (a.totalAmount - b.totalAmount);
+    if (sort === "recipients") return dir * (a.recipientCount - b.recipientCount);
+    return dir * a.createdAt.localeCompare(b.createdAt);
   });
 
   const total = rows.length;

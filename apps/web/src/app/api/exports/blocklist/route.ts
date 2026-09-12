@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { guardExport } from "@/server/services/export-guard";
 import { isBlocklistType } from "@/lib/blocklist-options";
 import { blocklistToCsv, listBlocklist } from "@/server/data/blocklist";
 
@@ -6,6 +7,10 @@ import { blocklistToCsv, listBlocklist } from "@/server/data/blocklist";
 // Mirrors the panel filters in the URL (`type`, `q`) so what you see is what
 // you export — same contract as /api/exports/customers.
 export async function GET(request: NextRequest) {
+  // BE-004: fail-closed export guard (JRN-017)
+  const guard = await guardExport(request, "audit.read");
+  if (!guard.ok) return guard.response;
+
   const sp = request.nextUrl.searchParams;
   // the URL carries the lowercase tab value ("card") — normalise to the enum
   const rawType = (sp.get("type") ?? "ALL").toUpperCase();
