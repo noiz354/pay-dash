@@ -14,6 +14,7 @@ import { __resetHandoffStore, openHandoff, rolesWithPermission, type OpenHandoff
 import { getCommandCenter, toDto, worstBand, type CommandCenterSnapshot } from "./command-center";
 import { getPayoutBatches } from "./payouts";
 import { listTransactions, requestRefund } from "./transactions";
+import { DEMO_CONTEXT } from "@/test/organization-context";
 
 // Wave 4 §2 — the Command Center.
 //
@@ -162,11 +163,11 @@ describe("permission awareness (§2)", () => {
   });
 
   it("counts a real two-phase refund as pending approval for the approver only", async () => {
-    const { rows } = await listTransactions({ pageSize: 50, page: 1 });
+    const { rows } = await listTransactions(DEMO_CONTEXT, { pageSize: 50, page: 1 });
     const row = rows.find((t) => t.status !== "FAILED" && t.refundedAmount === 0);
     expect(row).toBeDefined();
     if (!row) return;
-    await requestRefund({ transactionId: row.id, amount: 5_000, reason: "Duplicate", requestedBy: AGUS, now: NOW });
+    await requestRefund(DEMO_CONTEXT, { transactionId: row.id, amount: 5_000, reason: "Duplicate", requestedBy: AGUS, now: NOW });
 
     const admin = await getCommandCenter(["FINANCE_ADMIN"], NOW);
     const support = await getCommandCenter(["SUPPORT"], NOW);

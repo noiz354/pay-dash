@@ -14,6 +14,8 @@ import {
   type Channel,
   type TransactionStatus,
 } from "@/server/data/transactions";
+import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
+import type { OrganizationContext } from "@/domain/tenancy/organization-context";
 
 // Transaction Ledger — screens/desktop/transaction_ledger_desktop
 // Filters, search and pagination are URL state so the view is shareable and
@@ -31,8 +33,8 @@ function one(v: string | string[] | undefined) {
   return Array.isArray(v) ? v[0] : v;
 }
 
-async function MetricsRow() {
-  const m = await getLedgerMetrics();
+async function MetricsRow({ context }: { context: OrganizationContext }) {
+  const m = await getLedgerMetrics(context);
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-4">
@@ -66,7 +68,7 @@ async function MetricsRow() {
   );
 }
 
-async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
+async function LedgerTable({ searchParams, context }: { searchParams: SearchParams; context: OrganizationContext }) {
   const sp = await searchParams;
   const page = Number(one(sp.page) ?? 1) || 1;
   const pageSize = Number(one(sp.pageSize) ?? 10) || 10;
@@ -78,7 +80,10 @@ async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
   // Dual-control refund queue (JRN-003): same fail-open normalization for
   // `?refundState=` — the Role B deep link lands here.
   const refundState = normalizeRefundStateFilter(one(sp.refundState));
-  const result = await listTransactions({
+  // Wave 7A: the tenant is resolved once per request and handed to the data
+  // boundary. A `?organizationId=` in the URL is normalized against the session
+  // (and audited if it names someone else's tenant), never honoured.
+  const result = await listTransactions(context, {
     status: (one(sp.status) as TransactionStatus | "ALL") ?? "ALL",
     channel: (one(sp.channel) as Channel | "ALL") ?? "ALL",
     range: (one(sp.range) as "7d" | "30d" | "90d" | "all") ?? "all",
@@ -107,6 +112,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   // Awaited inside the streaming child; a stable key makes Suspense re-fire on
   // filter changes so the skeleton shows during server round-trips.
   const sp = await searchParams;
+  const { context } = await resolveTransactionOrganizationContext({ organizationId: one(sp.organizationId) });
   const key = new URLSearchParams(
     Object.entries(sp).map(([k, v]) => [k, String(one(v) ?? "")])
   ).toString();
@@ -136,12 +142,12 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             </div>
           }
         >
-          <MetricsRow />
+          <MetricsRow context={context} />
         </Suspense>
       </div>
 
       <Suspense key={key} fallback={<TableSkeleton rows={10} columns={7} />}>
-        <LedgerTable searchParams={searchParams} />
+        <LedgerTable searchParams={searchParams} context={context} />
       </Suspense>
     </main>
   );

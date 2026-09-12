@@ -6,7 +6,7 @@ import type {
   MovementType,
 } from "@/lib/balance-status";
 import type { RecipientDraft } from "@/lib/payout-csv";
-import { getLedgerRows } from "./transactions";
+import { legacyLedgerRows } from "./transactions-unscoped";
 import { approveBatch, createBatch, listBankAccounts, getPayoutBatches } from "./payouts";
 import type { ProviderBalance, ProviderReadResult } from "@/domain/payments/provider-read";
 
@@ -148,7 +148,7 @@ function deriveMovements(): Movement[] {
   const out: Movement[] = [];
 
   // 1. Ledger: settlements, refunds and what is still clearing.
-  for (const tx of getLedgerRows()) {
+  for (const tx of legacyLedgerRows("balance")) {
     if (tx.status === "SUCCEEDED") {
       out.push({
         id: `mv_setl_${tx.id}`,

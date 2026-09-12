@@ -16,10 +16,12 @@ import { getMerchantProfile, getSettingsOverview } from "@/server/data/settings"
 import { listSubscriptions } from "@/server/data/subscriptions";
 import { listMembers } from "@/server/data/team";
 import { getTransaction, listTransactions, refundTransaction } from "@/server/data/transactions";
+import { OrganizationContextError, parseOrganizationContext, type OrganizationContext } from "@/domain/tenancy/organization-context";
+import { TenantIsolationError } from "@/domain/security/tenant";
 import { getWebhookEvent, listWebhooks } from "@/server/data/webhooks";
 import { dataSourceError, resolveDataSource } from "@/server/settings/data-source";
 import { textResult } from "./handlers";
-import { getBalanceOverviewPostgres, getTransactionPostgres, listTransactionsPostgres } from "./pg-stores";
+import { getBalanceOverviewPostgres } from "./pg-stores";
 
 function asFilters<T>(input: Record<string, unknown>): T {
   return input as unknown as T;
@@ -52,40 +54,100 @@ function notImplementedPg(domain: string): () => unknown {
   return () => Promise.resolve(dataSourceError(domain));
 }
 
-export function registerDomainTools(server: McpServer): void {
+/**
+ * Wave 7A — the transaction tools are the money-moving surface of the MCP
+ * endpoint, and an endpoint with one shared bearer token cannot answer
+ * "which ledger?" on its own. Two rules, both fail-closed:
+ *
+ *   • no organization on the request  → the tool refuses and touches no store.
+ *     Refusing is a *better* answer than the previous behaviour, which was
+ *     "read everybody", and a better one than defaulting to the demo tenant,
+ *     which would be a tenant chosen by the absence of an answer.
+ *   • dataSource=postgres              → refused too, and for an honest reason:
+ *     `LedgerEntry` has no `organizationId` column at all (schema.prisma), so no
+ *     `where` clause can express the predicate. Debt D-26 tracks the column/RLS
+ *     work; until then the Postgres transaction read is *unavailable*, not
+ *     *unscoped*.
+ *
+ * `organization` is `null`-able rather than optional-with-a-default so the
+ * "we could not tell" state is a value the caller has to handle.
+ */
+const NO_TENANT = {
+  error:
+    "This MCP request is not bound to an organization, so the transaction tools are unavailable. A shared MCP token authorizes the agent, not a tenant — pass through an authenticated session or bind the token to an organization.",
+};
+
+const PG_UNSCOPED = (tool: string) => ({
+  error: `${tool}: the Postgres ledger table (LedgerEntry) carries no organizationId column, so its rows cannot be read tenant-scoped. Refused rather than leaked — see debt D-26. Use dataSource=memory.`,
+});
+
+export function registerDomainTools(server: McpServer, organization?: OrganizationContext | null): void {
+  let scoped: OrganizationContext | null = null;
+  try {
+    scoped = organization ? parseOrganizationContext(organization) : null;
+  } catch (e) {
+    // A malformed context must not degrade into "no tenant, read everything".
+    if (!(e instanceof OrganizationContextError)) throw e;
+    scoped = null;
+  }
+  const tenantOnly = async (
+    tool: (ctx: OrganizationContext) => unknown | Promise<unknown>,
+  ): Promise<ReturnType<typeof textResult>> => {
+    if (!scoped) return textResult(NO_TENANT);
+    return textResult(await tool(scoped));
+  };
+
   // Transactions
   server.registerTool(
     "list_transactions",
     {
       title: "List transactions",
-      description: "List the payment transaction ledger. dataSource=postgres reads real Cloud SQL ledger rows.",
+      description:
+        "List the payment transaction ledger **for the organization bound to this request**. dataSource=postgres is refused until the ledger table carries an organization (D-26).",
       inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional(), channel: z.string().optional() },
     },
-    async (input) =>
-      sourceAware(
-        input,
-        () => listTransactions(asFilters<Parameters<typeof listTransactions>[0]>(filterFrom(input))),
-        () => listTransactionsPostgres({ page: input.page, pageSize: input.pageSize })
-      )
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      const source = await resolveDataSource(input.dataSource);
+      if (source === "postgres") return textResult(PG_UNSCOPED("list_transactions"));
+      return textResult(
+        await listTransactions(scoped, asFilters<Parameters<typeof listTransactions>[1]>(filterFrom(input))),
+      );
+    }
   );
   server.registerTool(
     "get_transaction",
     {
       title: "Get transaction",
-      description: "Get one transaction by id. dataSource=postgres reads the real Cloud SQL ledger.",
+      description: "Get one transaction by id, within the bound organization. A foreign id is indistinguishable from a missing one.",
       inputSchema: { id: z.string(), ...sourceSchema },
     },
-    async ({ id, ...input }) => sourceAware(input, () => getTransaction(id), () => getTransactionPostgres(id))
+    async ({ id, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      const source = await resolveDataSource(input.dataSource);
+      if (source === "postgres") return textResult(PG_UNSCOPED("get_transaction"));
+      return textResult(await getTransaction(scoped, id));
+    }
   );
   server.registerTool(
     "refund_transaction",
     {
       title: "Refund transaction",
-      description: "Refund a transaction (full amount by default). In-memory store only for now.",
+      description: "Refund a transaction of the bound organization (full amount by default). In-memory store only for now.",
       inputSchema: { id: z.string(), amount: z.number().positive().optional(), reason: z.string().optional(), ...sourceSchema },
     },
-    async ({ id, amount, reason, ...input }) =>
-      sourceAware(input, () => refundTransaction(id, amount ?? 0, reason ?? "Refunded via MCP"), notImplementedPg("refund_transaction"))
+    async ({ id, amount, reason }) =>
+      tenantOnly(async (ctx) => {
+        try {
+          return await refundTransaction(ctx, id, amount ?? 0, reason ?? "Refunded via MCP");
+        } catch (e) {
+          // Same uniform answer as the dashboard: a foreign row is reported as
+          // not-found, so the tool cannot be used to probe which ids exist in
+          // another tenant. The denial itself is recorded server-side.
+          if (e instanceof TenantIsolationError) return { error: "Transaction not found." };
+          throw e;
+        }
+      })
   );
 
   // Balance

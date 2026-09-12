@@ -3,7 +3,7 @@ import "server-only";
 import { hasPermission, type OrganizationRole, type Permission } from "@/domain/organization/roles";
 import { compareSla, evaluateSla, isOverdueBand, type SlaBand, type SlaEntityType } from "@/lib/sla";
 import { getPayoutBatches } from "./payouts";
-import { getLedgerRows, listRefundsAwaiting } from "./transactions";
+import { legacyLedgerRows, legacyRefundQueue } from "./transactions-unscoped";
 import { getRiskOverview } from "./risk";
 import { getKycSubmission } from "./kyc";
 import { listWebhooks } from "./webhooks";
@@ -178,7 +178,7 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   }
 
   // 2. Refunds awaiting a second approver (JRN-003 dual control).
-  for (const tx of listRefundsAwaiting()) {
+  for (const tx of legacyRefundQueue("handoff")) {
     sources.push({
       journey: "refund_approval",
       entityType: "refund",
@@ -199,7 +199,7 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   }
 
   // 3. Failed payments needing triage.
-  for (const tx of getLedgerRows()) {
+  for (const tx of legacyLedgerRows("handoff")) {
     if (tx.status !== "FAILED") continue;
     sources.push({
       journey: "payment_triage",
@@ -221,7 +221,7 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   const risk = await getRiskOverview();
   for (const alert of risk.alerts) {
     if (!alert.transactionId) continue; // volume-cap alerts have no single target
-    const tx = getLedgerRows().find((t) => t.id === alert.transactionId);
+    const tx = legacyLedgerRows("handoff").find((t) => t.id === alert.transactionId);
     sources.push({
       journey: "fraud_review",
       entityType: "transaction",

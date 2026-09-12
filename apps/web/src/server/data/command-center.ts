@@ -13,7 +13,7 @@ import {
   type CommandCenterTotals,
 } from "@/lib/command-center";
 import { getPayoutBatches } from "./payouts";
-import { getLedgerRows } from "./transactions";
+import { legacyLedgerRows } from "./transactions-unscoped";
 import { listWebhooks } from "./webhooks";
 import { canActOnHandoff } from "./handoff-store";
 import { deriveHandoffs, type DerivedHandoff } from "./handoff";
@@ -139,7 +139,7 @@ export async function getCommandCenter(roles: OrganizationRole[] = [], now: Date
   const handoffs = await deriveHandoffs(now);
   const pending = handoffs.filter((h) => h.status === "OPEN" || h.status === "NOTIFIED" || h.status === "CLAIMED");
   const batches = getPayoutBatches();
-  const ledger = getLedgerRows();
+  const ledger = legacyLedgerRows("command-center");
 
   const raw: Record<CommandCenterLane, RawItem[]> = {
     critical: [],

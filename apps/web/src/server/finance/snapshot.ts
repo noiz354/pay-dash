@@ -37,6 +37,7 @@ import type {
 } from "@/domain/finance/ledger";
 import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 import { getLedgerRows, type Transaction } from "@/server/data/transactions";
+import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
 import { getPayoutBatches } from "@/server/data/payouts";
 import { getBalanceOverview, listMovements, OPENING_BALANCE } from "@/server/data/balance";
 
@@ -201,7 +202,9 @@ export async function buildLedgerSnapshot(
   organizationId: string = DEFAULT_DEMO_ORG,
   now: Date = new Date(),
 ): Promise<SnapshotBuildResult> {
-  const rows = getLedgerRows();
+  // Wave 7A: this module already carried an organizationId; the read was the
+  // part that ignored it. The snapshot is now derived from that tenant only.
+  const rows = getLedgerRows(parseOrganizationContext({ organizationId }));
   const overview = await getBalanceOverview();
 
   const opening = OPENING_BALANCE;

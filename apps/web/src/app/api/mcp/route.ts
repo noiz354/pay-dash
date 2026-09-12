@@ -1,5 +1,5 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { authorizeMcpRequest } from "@/server/mcp/auth";
+import { authorizeMcpRequest, resolveMcpOrganization } from "@/server/mcp/auth";
 import { buildMcpServer } from "@/server/mcp/server";
 
 export const runtime = "nodejs";
@@ -26,8 +26,11 @@ async function handleMcpRequest(request: Request): Promise<Response> {
     );
   }
 
+  // Wave 7A: bind the server instance to the request's tenant *before* any tool
+  // can run. One bearer token across tenants is why this has to be per request.
+  const organization = await resolveMcpOrganization(request);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  const server = buildMcpServer();
+  const server = buildMcpServer(undefined, organization);
   await server.connect(transport);
 
   try {

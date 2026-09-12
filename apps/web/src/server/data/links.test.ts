@@ -10,6 +10,7 @@ import {
   type PaymentLink,
 } from "./links";
 import { getTransaction } from "./transactions";
+import { DEMO_CONTEXT } from "@/test/organization-context";
 
 function resetAllStores() {
   const g = globalThis as unknown as {
@@ -230,12 +231,12 @@ describe("recordLinkPayment (TEST MODE)", () => {
     });
     const beforeLedger = listLinks({ pageSize: 100 }).total;
 
-    const { transactionId, total } = await recordLinkPayment(link.id);
+    const { transactionId, total } = await recordLinkPayment(DEMO_CONTEXT, link.id);
 
     expect(total).toBe(12_000_000);
     // The ledger row IS the payment: id = referenceId = link id.
     expect(transactionId).toBe(link.id);
-    const tx = await getTransaction(transactionId);
+    const tx = await getTransaction(DEMO_CONTEXT, transactionId);
     expect(tx).not.toBeNull();
     expect(tx?.status).toBe("SUCCEEDED");
     expect(tx?.referenceId).toBe(link.id);
@@ -256,8 +257,8 @@ describe("recordLinkPayment (TEST MODE)", () => {
       payerEmail: null,
       expiresAt: null,
     });
-    await recordLinkPayment(link.id);
-    await expect(recordLinkPayment(link.id)).rejects.toThrow(/only open links/i);
+    await recordLinkPayment(DEMO_CONTEXT, link.id);
+    await expect(recordLinkPayment(DEMO_CONTEXT, link.id)).rejects.toThrow(/only open links/i);
 
     const closed = createLink({
       kind: "single",
@@ -266,10 +267,10 @@ describe("recordLinkPayment (TEST MODE)", () => {
       expiresAt: null,
     });
     expireLink(closed.id);
-    await expect(recordLinkPayment(closed.id)).rejects.toThrow(/only open links/i);
+    await expect(recordLinkPayment(DEMO_CONTEXT, closed.id)).rejects.toThrow(/only open links/i);
   });
 
   it("refuses unknown links", async () => {
-    await expect(recordLinkPayment("plink_nope")).rejects.toThrow(/Unknown payment link/);
+    await expect(recordLinkPayment(DEMO_CONTEXT, "plink_nope")).rejects.toThrow(/Unknown payment link/);
   });
 });

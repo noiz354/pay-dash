@@ -6,6 +6,7 @@ import { GeminiJournalAgent, type GeminiQuickPrompt } from "@/components/ai-jour
 import { formatCompactMoney, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { listCustomers } from "@/server/data/customers";
 import { getLedgerMetrics, listTransactions } from "@/server/data/transactions";
+import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +23,12 @@ function RecoveryMetric({ label, value, detail }: { label: string; value: string
 }
 
 export default async function FailedPaymentRecoveryPage() {
+  // Wave 7A — scoped, for the same reason as the ops copilot: this page's
+  // context block feeds a model, and a customer's failure detail is theirs alone.
+  const { context } = await resolveTransactionOrganizationContext();
   const [metrics, failed, customers] = await Promise.all([
-    getLedgerMetrics(),
-    listTransactions({ status: "FAILED", pageSize: 8 }),
+    getLedgerMetrics(context),
+    listTransactions(context, { status: "FAILED", pageSize: 8 }),
     listCustomers({ pageSize: 100 }),
   ]);
 

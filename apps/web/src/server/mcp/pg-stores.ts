@@ -12,48 +12,15 @@ import { prisma } from "@/lib/db/prisma";
 
 const LedgerStatus = z.enum(["PENDING", "SUCCEEDED", "FAILED"]);
 
-function mapLedgerRow(row: {
-  id: string;
-  amount: { toNumber(): number } | number;
-  currency: string;
-  status: string;
-  referenceId: string | null;
-  xenditPaymentId: string | null;
-  description: string | null;
-  userId: string | null;
-  createdAt: Date;
-}) {
-  const status = LedgerStatus.safeParse(row.status).success ? (row.status as "PENDING" | "SUCCEEDED" | "FAILED") : "PENDING";
-  const amount = typeof row.amount === "number" ? row.amount : row.amount.toNumber();
-  return {
-    id: row.id,
-    referenceId: row.referenceId ?? row.id,
-    amount,
-    currency: row.currency,
-    status,
-    xenditPaymentId: row.xenditPaymentId,
-    description: row.description,
-    userId: row.userId,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-export async function listTransactionsPostgres(opts: { page?: number; pageSize?: number } = {}) {
-  const take = Math.min(Math.max(opts.pageSize ?? 20, 1), 200);
-  const skip = Math.max(opts.page ?? 1, 1);
-  const rows = await prisma.ledgerEntry.findMany({
-    orderBy: { createdAt: "desc" },
-    take,
-    skip: (skip - 1) * take,
-  });
-  return { items: rows.map(mapLedgerRow), page: skip, pageSize: take, total: rows.length, source: "postgres" };
-}
-
-export async function getTransactionPostgres(id: string) {
-  const row = await prisma.ledgerEntry.findUnique({ where: { id } });
-  if (!row) return null;
-  return { ...mapLedgerRow(row), source: "postgres" };
-}
+/* Wave 7A — `listTransactionsPostgres()` and `getTransactionPostgres()` used to
+ * live here. They read `LedgerEntry` with no organization predicate (the table has
+ * no `organizationId` column at all), which on a multi-tenant database is a
+ * cross-tenant read of the money ledger, exposed through the MCP endpoint that
+ * authenticates with one shared bearer token. A function cannot be made safe by
+ * asking its callers to remember a `where` clause, so the unscoped pair is
+ * deleted and the MCP transaction tools refuse until debt **D-26** lands the
+ * column (and RLS). `grep -rn "prisma.ledgerEntry.find" src/server` must stay
+ * empty for transaction reads — see `transactions-structural.test.ts` (S-6). */
 
 /**
  * Projected shape of the balance query. Annotated explicitly rather than
