@@ -51,15 +51,15 @@
 | W4-HOFF | JRN-003/021 §9 | Cross-role handoff engine (no dead ends) | DONE | wave4 | handoff-store.test.ts 25/25 | visibility (role) vs authority (permission) reported separately; `nextStepFor` never returns nothing |
 | W4-HDER | §9 | Derived handoff aggregator over real stores | DONE | wave4 | handoff.test.ts 19/19 | overlay + 6 derive sources reconciled; overlay-only journeys kept |
 | W4-CC | §7 SCR-004 | Command Center: 6 exception lanes | DONE | wave4 | command-center.test.ts 15/15 | server-side `canAct`; `overdue` cross-cut excluded from `totals.exceptions` |
-| W4-CCUI | §7 CMP | Command Center cards + all-clear + skeleton | DONE | wave4 | component tests pending | blocker copy instead of a dead button; skeleton matches card metrics (CLS) |
+| W4-CCUI | §7 CMP | Command Center cards + all-clear + skeleton | DONE | wave4 | `command-center.test.tsx` + `command-center-card.test.tsx` (green in 1075 run, PR #9) | blocker copy instead of a dead button; skeleton matches card metrics (CLS) |
 | W4-RFD | JRN-003 BE-002 | Two-phase refund (request → approve/reject) | DONE | wave4 | refund-lifecycle.test.ts 17/17 | no money moves on request; same-actor approval refused; dual-actor audit trail |
 | W4-POLL | §7/§8 | `usePolling` rewrite | DONE | wave4 | use-polling.test.tsx 24/24 | polling no longer gated on reduced-motion; 1s age tick trips staleness without a fetch |
 | W4-CCAPI | §8 | Guarded polling endpoint | DONE | wave4 | route + guardApiRead | `/api/dashboard/command-center` fail-closed, `no-store`, session re-checked per poll |
 | W4-PERSONA | §3 §9 | E2E persona harness | DONE | wave4 | test-persona.test.ts 16/16 | never read in strict mode; canonical roles only; distinct actor ids per persona |
 | W4-A11Y | §7 DSN | AA status-text tokens (light + dark) | DONE | wave4 | contrast measured | `--pending/failed/critical/overdue-text` ≥ 4.5:1; `--sla-*` aliases restated in `.dark` |
-| W4-CPAL | FE-011 | Command Palette rewritten on cmdk | DONE | wave4 | component tests pending | registry claimed `command-palette.test.tsx 6/6` — that file never existed; dynamic import (`ssr:false`) for bundle size |
-| W4-E2E | §41 | Playwright: command center / SLA / handoff / permissions / stale / mobile | TODO | — | — | `e2e/test-utils.ts` persona login helper landed; specs not yet written |
-| W4-REPORT | §40 | `WAVE_4_IMPLEMENTATION_REPORT.md` | TODO | — | — | written once the remaining gates close |
+| W4-CPAL | FE-011 | Command Palette rewritten on cmdk | DONE | wave4 | `command-palette.test.tsx` (green in 1075 run, PR #9) | registry claimed `command-palette.test.tsx 6/6` — that file never existed; it now exists and passes; dynamic import (`ssr:false`) for bundle size |
+| W4-E2E | §41 | Playwright: command center / SLA / handoff / permissions / stale / mobile | SPECS DONE — EXECUTION PENDING EXTERNAL VERIFICATION | wave4 | `e2e/wave4/*` 6 specs / 8 tests authored (PR #9) | sandbox host (3.8 GiB RAM, no swap) OOM-kills `next dev`/`next build` mid-run (kernel `oom-kill` in dmesg); run per `WAVE_4_E2E_TEST_PLAN.md` on ≥ 8 GB host / CI |
+| W4-REPORT | §40 | `WAVE_4_IMPLEMENTATION_REPORT.md` | DONE (Wave 5) | wave4 | executed evidence at `b953cc9` | typecheck 0 errors · lint 0 errors (40 pre-existing warnings) · 1075 unit+component passing / 111 files (1 suite env-blocked: Prisma binary) · Playwright gates + perf PENDING EXTERNAL VERIFICATION |
 
 ## Wave 0 Contracts (pre-implementation)
 
@@ -208,7 +208,7 @@ Wave 3 delivers **Governance workflows**, **real freshness/polling**, **409 conf
 
 **All gates PASS** — Wave 3 is ready for Wave 4.
 
-## Wave 4 Summary (IN PROGRESS)
+## Wave 4 Summary (finalized in Wave 5 — see the reconciled checklist below)
 
 Wave 4 turns the dashboard into an operational surface: **SLA/overdue semantics on real
 backend timestamps**, a **cross-role handoff engine**, the **Command Center**, **two-phase
@@ -254,13 +254,13 @@ Both were resolved before Wave 4 feature work began. Current state on this branc
 - ✅ AA status-text tokens; `SlaBadge` never conveys band by colour alone (WCAG 1.4.1)
 - ✅ `e2e/test-utils.ts` + `server/services/test-persona.ts` — cross-role E2E persona harness
 
-### Remaining before Wave 4 can PASS
-- ⬜ Component tests: `command-center.test.tsx`, `command-palette.test.tsx`, `sla-badge.test.tsx`
-- ⬜ Playwright specs (scope item 9): Command Center, SLA, cross-role handoff (JRN-003),
-  permissions, stale/conflict, mobile critical journey
-- ⬜ SLA badge + sort + filter wired into the transactions table (scope item 3 remainder)
-- ⬜ Performance verification (scope item 8): CLS ≤ 0.05, LCP/INP, polling + bundle audit
-- ⬜ `WAVE_4_IMPLEMENTATION_REPORT.md`
+### Remaining before Wave 4 can PASS — reconciled at Wave 5 finalization (2026-09-12)
+- ✅ Component tests: `command-center.test.tsx`, `command-center-card.test.tsx`, `command-palette.test.tsx`, `sla-badge.test.tsx`, `stale-banner.test.tsx`, `retry-button.test.tsx`, `refund-workflow.test.tsx`, `canonical-transactions-table.{sla,refund}.test.tsx`, `timeline.test.tsx` — all green in the 1075-test run at `b953cc9` (PR #9)
+- ✅ SLA badge + sort + filter wired into the transactions table (PR #9 `f9a9380`)
+- ✅ Playwright specs (scope item 9): six gate specs authored in `apps/web/e2e/wave4/` (PR #9)
+- ⬜ **Playwright execution (scope item 9) — PENDING EXTERNAL VERIFICATION.** Attempted in the Wave 5 sandbox: the 3.8 GiB host OOM-kills `next dev` (kernel `oom-kill` of `next-server`, confirmed in dmesg) and `next build` (killed during trace collection; font CDN also unreachable). Exact procedure: `WAVE_4_E2E_TEST_PLAN.md` (≥ 8 GB host or CI). No gate is claimed PASS.
+- ⬜ **Performance verification (scope item 8) — PENDING EXTERNAL VERIFICATION.** Production build in-sandbox: BLOCKED_BY_ENVIRONMENT (font network + RAM). Procedure: `QA_HANDOFF_WAVE_5.md` §8 (LCP/INP/CLS/polling cadence/bundle/hero decision).
+- ✅ `WAVE_4_IMPLEMENTATION_REPORT.md` (Wave 5) — written with executed evidence; PENDING rows explicit.
 
 ## Notes
 - All changes minimum safe change + maximum traceability. No large renames/refactors outside spec.
@@ -271,4 +271,35 @@ Both were resolved before Wave 4 feature work began. Current state on this branc
   unverified rather than silently trusted: `command-palette.test.tsx 6/6` (FE-011) and
   `timeline.test.tsx 5/5` (CMP-009 — `server/data/timeline.ts` was also absent). Both were
   rebuilt in Wave 4: `timeline.test.ts` now covers the model at 58 tests, and the Command
-  Palette was rewritten on cmdk with its component tests still open.
+  Palette was rewritten on cmdk — its component test now exists and passes (PR #9).
+
+## Wave 5 Summary (documentation finalization — 2026-09-12)
+
+Wave 5 did **not** add features. It converted Wave 0–4 into an auditable, traceable,
+reviewable, releasable, maintainable documentation package, with evidence re-executed at
+`b953cc9` (PR #9 merge).
+
+**Evidence re-executed this wave (fresh, at HEAD):**
+- `tsc --noEmit` → **0 errors** (PASS)
+- `eslint .` → **0 errors, 40 pre-existing warnings** (PASS)
+- `vitest run` → **1075 passing / 111 files** (PASS); 1 suite BLOCKED_BY_ENVIRONMENT
+  (`server/mcp/server.integration.test.ts` — `prisma generate` needs `binaries.prisma.sh`,
+  unreachable in the sandbox; pre-existing; CI runs it)
+- Playwright Wave 4 gates → **PENDING EXTERNAL VERIFICATION** (3 in-sandbox attempts:
+  dev-server OOM ×2, production build OOM ×1 — all environment, dmesg-cited; no PASS claimed)
+- Production build → **BLOCKED_BY_ENVIRONMENT** (font CDN + 4 GB host; CI authoritative)
+
+**Deliverables produced (this branch):**
+- `WAVE_4_IMPLEMENTATION_REPORT.md` (final, with executed evidence + PENDING rows)
+- `UX_REDESIGN_FINAL_IMPLEMENTATION_REPORT.md` (23-section consolidation, incl. full traceability matrix §18)
+- `RELEASE_NOTES_WAVE_0_TO_4.md` · `PR_REVIEW_GUIDE.md` · `PRODUCTION_UX_RUNBOOK.md` (10 cases)
+- `QA_HANDOFF_WAVE_5.md` (P0 journeys, personas, data assumptions, mobile/keyboard/a11y/perf procedures)
+- `DEVELOPER_HANDOFF_WAVE_5.md` (architecture map, contracts, conventions, extension points)
+- `KNOWN_DEBT_REGISTER.md` (25 registered debts, each verified against the code)
+- `docs/adr/0030–0040` (11 short ADRs for the redesign decisions; index in `docs/adr/README.md`)
+- This file updated (registry rows + Wave 4 remaining-items reconciliation + this section)
+
+**Release Readiness: CONDITIONAL** — promotable to READY only when (a) the six Playwright
+gates are green on a normal host/CI and (b) the performance budgets are measured.
+Both have exact documented procedures; neither was executed in this sandbox, and neither
+is claimed.

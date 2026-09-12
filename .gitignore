@@ -5,6 +5,7 @@
 # deps / build
 node_modules/
 .pnpm-store/
+apps/web/test-results/
 apps/web/.next/
 apps/web/out/
 apps/web/dist/
