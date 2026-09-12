@@ -21,6 +21,7 @@ import { authorizeRoles } from "@/domain/organization/roles";
 import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { formatDateLong, formatDateTime, formatMoney } from "@/lib/format";
 import { getTransactionWithSla } from "@/server/data/transactions";
+import { tenantScope } from "@/domain/security/tenant";
 import { customerIdFromEmail } from "@/server/data/customers";
 
 // Transaction detail — the destination for every ledger row / row-action.
@@ -61,9 +62,12 @@ export default async function TransactionDetailPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
+  // Tenant scope first: a cross-tenant id 404s exactly like an absent one (no oracle).
+  const ctx = await resolveSessionOrgContext();
+  const scope = tenantScope(ctx.organizationId);
   // Same server-side evaluation as the ledger, so a badge here and a badge in
   // the table can never disagree about the band.
-  const tx = await getTransactionWithSla(id);
+  const tx = await getTransactionWithSla(scope, id);
   if (!tx) notFound();
 
   const refundable = tx.amount - tx.refundedAmount;
@@ -71,7 +75,7 @@ export default async function TransactionDetailPage({
 
   // Permission-aware refund UI: flags come from the session (persona-aware in
   // dev/E2E), never from the browser. The server actions re-enforce everything.
-  const ctx = await resolveSessionOrgContext();
+  // (ctx resolved above for the tenant-scoped detail read; reused here.)
   const canRequest = authorizeRoles(ctx.roles, "refund.prepare") || authorizeRoles(ctx.roles, "refund.execute");
   const canApprove = authorizeRoles(ctx.roles, "refund.execute");
 

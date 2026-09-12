@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardExport } from "@/server/services/export-guard";
+import { tenantScope } from "@/domain/security/tenant";
 import {
   listTransactions,
   normalizeRefundStateFilter,
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   if (!guard.ok) return guard.response;
 
   const sp = request.nextUrl.searchParams;
-  const { rows } = await listTransactions({
+  const { rows } = await listTransactions(tenantScope(guard.organizationId), {
     status: (sp.get("status") as TransactionStatus | "ALL") ?? "ALL",
     channel: (sp.get("channel") as Channel | "ALL") ?? "ALL",
     range: (sp.get("range") as "7d" | "30d" | "90d" | "all") ?? "all",

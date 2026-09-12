@@ -65,6 +65,7 @@ function row(partial: Partial<LedgerRow> & Pick<LedgerRow, "id" | "status">): Le
     slaRemainingSeconds: null,
     slaDueAt: null,
     ...partial,
+    organizationId: "org-a",
   };
 }
 

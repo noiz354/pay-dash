@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardExport } from "@/server/services/export-guard";
+import { tenantScope } from "@/domain/security/tenant";
 import { listMovements, movementsToCsv } from "@/server/data/balance";
 import type { MovementStatus, MovementType } from "@/lib/balance-status";
 
@@ -10,9 +11,10 @@ export async function GET(request: NextRequest) {
   // BE-004: fail-closed export guard (JRN-017)
   const guard = await guardExport(request, "transaction.read");
   if (!guard.ok) return guard.response;
+  const scope = tenantScope(guard.organizationId);
 
   const sp = request.nextUrl.searchParams;
-  const { rows } = await listMovements({
+  const { rows } = await listMovements(scope, {
     type: (sp.get("type") as MovementType | "all") ?? "all",
     status: (sp.get("status") as MovementStatus | "all") ?? "all",
     range: (sp.get("range") as "7d" | "30d" | "90d" | "all") ?? "all",

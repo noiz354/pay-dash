@@ -6,6 +6,7 @@ import { parseAmount } from "@/lib/payout-status";
 import { formatMoney } from "@/lib/format";
 import { createLink, expireLink, recordLinkPayment, getLink, totalOf } from "@/server/data/links";
 import type { ActionState } from "./payouts";
+import { actionScope } from "@/server/services/session-org-context";
 
 export type { ActionState };
 
@@ -68,6 +69,16 @@ const CreateLinkSchema = z
     }
   });
 
+/**
+ * Wave 7A — session-derived tenant scope for the payment-link actions.
+ * There is no link permission in the roles catalog, so these actions cannot
+ * use requireStrictOrgContext(permission); instead they resolve the session
+ * and apply the same strict-mode demo-deny. Anonymous link creation / expiry /
+ * payment is denied in strict mode; off-mode demo scope keeps dev parity.
+ * Links themselves are still ownerless (Wave 7B adds link ownership); payment
+ * mints its transaction into the payer's scope via recordLinkPayment.
+ */
+
 export async function createPaymentLinkAction(
   _prev: ActionState<{ id: string; checkoutUrl?: string }> | undefined,
   formData: FormData
@@ -107,6 +118,7 @@ export async function createPaymentLinkAction(
       : parsed.data.items.map((i) => ({ label: i.label, amount: i.amount }));
   const expiresAt = parsed.data.expiresIn === "" ? null : new Date(Date.now() + Number(parsed.data.expiresIn) * 86_400_000).toISOString();
 
+  await actionScope(); // Wave 7A gate: session required, demo denied in strict.
   const link = createLink({
     kind: parsed.data.kind,
     items: linkItems,
@@ -150,7 +162,7 @@ export async function expirePaymentLinkAction(
 ): Promise<ActionState<undefined>> {
   const id = String(formData.get("id") ?? "").trim();
   try {
-    expireLink(id);
+    expireLink(await actionScope(), id);
     revalidateLinks(id);
     return { status: "success", message: `Link ${id} closed — it can no longer be paid.` };
   } catch (error) {
@@ -164,7 +176,7 @@ export async function payPaymentLinkAction(
 ): Promise<ActionState<{ transactionId: string; total: number }>> {
   const id = String(formData.get("id") ?? "").trim();
   try {
-    const { transactionId, total } = await recordLinkPayment(id);
+    const { transactionId, total } = await recordLinkPayment(await actionScope(), id);
     revalidateAfterPayment(transactionId);
     return {
       status: "success",

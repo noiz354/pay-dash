@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardExport } from "@/server/services/export-guard";
+import { tenantScope } from "@/domain/security/tenant";
 import { customersToCsv, listCustomers } from "@/server/data/customers";
 import type { CustomerStatus } from "@/lib/customer-status";
 
@@ -9,9 +10,10 @@ export async function GET(request: NextRequest) {
   // BE-004: fail-closed export guard (JRN-017)
   const guard = await guardExport(request, "customer.read");
   if (!guard.ok) return guard.response;
+  const scope = tenantScope(guard.organizationId);
 
   const sp = request.nextUrl.searchParams;
-  const { rows } = await listCustomers({
+  const { rows } = await listCustomers(scope, {
     q: sp.get("q") ?? "",
     status: (sp.get("status") as CustomerStatus | "ALL") ?? "ALL",
     sort: (sp.get("sort") as "recent" | "ltv" | "name") ?? "recent",

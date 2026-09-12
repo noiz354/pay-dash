@@ -3,6 +3,8 @@ import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { OnboardingCard } from "@/components/onboarding/onboarding-card";
 import { getOnboardingStatus } from "@/server/data/onboarding";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 
 // Sub-Merchant Onboarding (ADR-0025). The prototype hard-coded "3 of 4
 // sections completed · 75%", an invented ****4592 account, "Verified on Oct
@@ -17,7 +19,8 @@ export const metadata: Metadata = {
 };
 
 export default async function OnboardingPage() {
-  const status = await getOnboardingStatus();
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const status = await getOnboardingStatus(scope);
 
   return (
     <main className="mx-auto max-w-container-max p-gutter space-y-6">

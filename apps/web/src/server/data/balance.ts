@@ -6,6 +6,7 @@ import type {
   MovementType,
 } from "@/lib/balance-status";
 import type { RecipientDraft } from "@/lib/payout-csv";
+import { type TenantScope } from "@/domain/security/tenant";
 import { getLedgerRows } from "./transactions";
 import { approveBatch, createBatch, listBankAccounts, getPayoutBatches } from "./payouts";
 import type { ProviderBalance, ProviderReadResult } from "@/domain/payments/provider-read";
@@ -144,11 +145,11 @@ function effectOf(m: Movement): number {
   return 0;
 }
 
-function deriveMovements(): Movement[] {
+function deriveMovements(scope: TenantScope): Movement[] {
   const out: Movement[] = [];
 
   // 1. Ledger: settlements, refunds and what is still clearing.
-  for (const tx of getLedgerRows()) {
+  for (const tx of getLedgerRows(scope)) {
     if (tx.status === "SUCCEEDED") {
       out.push({
         id: `mv_setl_${tx.id}`,
@@ -267,7 +268,7 @@ async function tryProviderBalance(): Promise<ProviderReadResult<ProviderBalance>
   }
 }
 
-export async function getBalanceOverview(): Promise<BalanceOverview> {
+export async function getBalanceOverview(scope: TenantScope): Promise<BalanceOverview> {
   // Live provider balance (rekomendasi #4) takes precedence for the available
   // figure; derived pending/reserved settlements still come from the ledger.
   // A configured-but-failing provider propagates (never mocked); with no
@@ -278,7 +279,7 @@ export async function getBalanceOverview(): Promise<BalanceOverview> {
     let pendingSettlements = 0;
     let reserved = 0;
     let lastPayoutAt: string | null = null;
-    for (const m of deriveMovements()) {
+    for (const m of deriveMovements(scope)) {
       if (m.type === "WITHDRAWAL") {
         if (m.status === "SETTLED" && (!lastPayoutAt || m.at > lastPayoutAt)) lastPayoutAt = m.at;
         if (m.status === "PENDING") reserved += -m.amount;
@@ -294,7 +295,7 @@ export async function getBalanceOverview(): Promise<BalanceOverview> {
   let reserved = 0;
   let lastPayoutAt: string | null = null;
 
-  for (const m of deriveMovements()) {
+  for (const m of deriveMovements(scope)) {
     const effect = effectOf(m);
     available += effect;
     if (m.type === "WITHDRAWAL") {
@@ -308,7 +309,7 @@ export async function getBalanceOverview(): Promise<BalanceOverview> {
   return { available, pendingSettlements, reserved, lastPayoutAt, currency: CURRENCY };
 }
 
-export async function listMovements(filters: MovementFilters = {}): Promise<PaginatedMovements> {
+export async function listMovements(scope: TenantScope, filters: MovementFilters = {}): Promise<PaginatedMovements> {
   const {
     type = "all",
     status = "all",
@@ -319,7 +320,7 @@ export async function listMovements(filters: MovementFilters = {}): Promise<Pagi
     pageSize = 10,
   } = filters;
 
-  let rows = deriveMovements();
+  let rows = deriveMovements(scope);
   const term = q.trim().toLowerCase();
 
   if (type !== "all") rows = rows.filter((m) => m.type === type);
@@ -357,8 +358,8 @@ export async function listMovements(filters: MovementFilters = {}): Promise<Pagi
   };
 }
 
-export async function getBalanceTrend(days = 30): Promise<TrendPoint[]> {
-  const sorted = deriveMovements().sort((a, b) => a.at.localeCompare(b.at));
+export async function getBalanceTrend(scope: TenantScope, days = 30): Promise<TrendPoint[]> {
+  const sorted = deriveMovements(scope).sort((a, b) => a.at.localeCompare(b.at));
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const startMs = today.getTime() - (days - 1) * 24 * 60 * 60 * 1000;
@@ -392,7 +393,7 @@ export async function getBalanceTrend(days = 30): Promise<TrendPoint[]> {
 
 // --- writes ------------------------------------------------------------------
 
-export async function topUpBalance(input: {
+export async function topUpBalance(scope: TenantScope, input: {
   amount: number;
   method: string;
 }): Promise<{ movement: Movement; available: number }> {
@@ -401,7 +402,7 @@ export async function topUpBalance(input: {
   s.sequence += 1;
   const at = new Date().toISOString();
   s.topUps.push({ id, at, amount: input.amount, method: input.method });
-  const overview = await getBalanceOverview();
+  const overview = await getBalanceOverview(scope);
   return {
     movement: {
       id,
@@ -431,7 +432,7 @@ export type WithdrawResult = {
  * That keeps an audit trail, reuses the release gate, and means the
  * movements table, the payout history and the balance all show the same row.
  */
-export async function withdrawBalance(input: {
+export async function withdrawBalance(scope: TenantScope, input: {
   amount: number;
   accountId: string;
 }): Promise<WithdrawResult> {
@@ -441,7 +442,7 @@ export async function withdrawBalance(input: {
     throw new Error(`${account.bank} ${account.masked} is not verified yet`);
   }
 
-  const overview = await getBalanceOverview();
+  const overview = await getBalanceOverview(scope);
   if (input.amount > overview.available) {
     throw new Error(
       `Only ${formatMoney(overview.available, overview.currency)} is available — the withdrawal exceeds it`
@@ -466,7 +467,7 @@ export async function withdrawBalance(input: {
   const result = await approveBatch(batch.id);
   if (!result) throw new Error("The withdrawal batch disappeared before it could be released");
 
-  const after = await getBalanceOverview();
+  const after = await getBalanceOverview(scope);
   const failed = result.failed > 0;
   return {
     batchId: batch.id,

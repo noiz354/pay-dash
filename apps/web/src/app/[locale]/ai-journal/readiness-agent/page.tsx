@@ -9,6 +9,8 @@ import { getOnboardingStatus } from "@/server/data/onboarding";
 import { getPayoutSettings } from "@/server/data/payouts";
 import { getRiskOverview } from "@/server/data/risk";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 
 export const dynamic = "force-dynamic";
 
@@ -62,9 +64,10 @@ function ReadinessSignal({ label, complete, detail }: { label: string; complete:
 }
 
 export default async function LaunchReadinessAgentPage() {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const [onboarding, risk, webhooks, payoutSettings] = await Promise.all([
-    getOnboardingStatus(),
-    getRiskOverview(),
+    getOnboardingStatus(scope),
+    getRiskOverview(scope),
     Promise.resolve(getSystemWebhookSummary()),
     getPayoutSettings(),
   ]);

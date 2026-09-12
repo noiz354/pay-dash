@@ -6,6 +6,8 @@ import { RiskProfilePanel } from "@/components/risk/risk-profile-panel";
 import { RulesTable } from "@/components/risk/rules-table";
 import { VolumeLimitsCard } from "@/components/risk/volume-limits-card";
 import { getRiskOverview } from "@/server/data/risk";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 
 // Risk & Velocity Limits (ADR-0023). INTEGRATION.md:117/:320: no Xendit
 // source — "Velocity/risk thresholds are Dashboard-only" — so the ruleset,
@@ -23,7 +25,8 @@ export const metadata: Metadata = {
 };
 
 export default async function RiskPage() {
-  const overview = await getRiskOverview();
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const overview = await getRiskOverview(scope);
   const hasDraft = overview.draft !== null;
 
   return (

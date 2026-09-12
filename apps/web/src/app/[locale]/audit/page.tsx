@@ -13,6 +13,8 @@ import {
 } from "@/lib/audit-options";
 import { formatDateTime } from "@/lib/format";
 import { auditSummary, listAuditEvents, type AuditStatus } from "@/server/data/audit";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 
 // Detailed Audit Log (ADR-0026). The prototype printed five hard-coded rows
 // (all dated 2023-10-24, off-world @org.com actors, "1 of 12,042 events"),
@@ -42,13 +44,14 @@ export default async function AuditPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const rawCategory = String(sp.category ?? "ALL");
   const rawStatus = String(sp.status ?? "ALL");
   const rawRange = String(sp.range ?? "all");
   const pageParam = Number(sp.page ?? 1);
 
   const [result, summary] = await Promise.all([
-    listAuditEvents({
+    listAuditEvents(scope, {
       q: String(sp.q ?? ""),
       category: isAuditCategory(rawCategory) ? rawCategory : "ALL",
       status: isAuditStatus(rawStatus) ? rawStatus : "ALL",
@@ -56,7 +59,7 @@ export default async function AuditPage({
       page: Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1,
       pageSize: 10,
     }),
-    auditSummary(),
+    auditSummary(scope),
   ]);
 
   return (

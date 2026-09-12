@@ -4,6 +4,7 @@ import { hasPermission, type OrganizationRole, type Permission } from "@/domain/
 import { compareSla, evaluateSla, isOverdueBand, type SlaBand, type SlaEntityType } from "@/lib/sla";
 import { getPayoutBatches } from "./payouts";
 import { getLedgerRows, listRefundsAwaiting } from "./transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 import { getRiskOverview } from "./risk";
 import { getKycSubmission } from "./kyc";
 import { listWebhooks } from "./webhooks";
@@ -133,7 +134,7 @@ function synthesise(source: DeriveSource, id: string): Handoff {
  * `now` is threaded through so a single aggregation pass stamps every SLA with
  * the same instant.
  */
-export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHandoff[]> {
+export async function deriveHandoffs(scope: TenantScope, now: Date = new Date()): Promise<DerivedHandoff[]> {
   const overlay = listStoredHandoffs();
   const overlayByIdentity = new Map(overlay.map((h) => [handoffIdentity(h.journey, h.entityType, h.entityId), h]));
   const sources: DeriveSource[] = [];
@@ -178,7 +179,7 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   }
 
   // 2. Refunds awaiting a second approver (JRN-003 dual control).
-  for (const tx of listRefundsAwaiting()) {
+  for (const tx of listRefundsAwaiting(scope)) {
     sources.push({
       journey: "refund_approval",
       entityType: "refund",
@@ -199,7 +200,7 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   }
 
   // 3. Failed payments needing triage.
-  for (const tx of getLedgerRows()) {
+  for (const tx of getLedgerRows(scope)) {
     if (tx.status !== "FAILED") continue;
     sources.push({
       journey: "payment_triage",
@@ -218,10 +219,10 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   }
 
   // 4. High-risk transactions (the real fraud signal — `deriveAlerts`).
-  const risk = await getRiskOverview();
+  const risk = await getRiskOverview(scope);
   for (const alert of risk.alerts) {
     if (!alert.transactionId) continue; // volume-cap alerts have no single target
-    const tx = getLedgerRows().find((t) => t.id === alert.transactionId);
+    const tx = getLedgerRows(scope).find((t) => t.id === alert.transactionId);
     sources.push({
       journey: "fraud_review",
       entityType: "transaction",
@@ -345,9 +346,9 @@ export type HandoffQueueItem = DerivedHandoff & { nextStep: NextStep; canAct: bo
  * Finance Admin" instead of a button that would 403 — that distinction is what
  * removes the dead end.
  */
-export async function getHandoffQueue(filter: HandoffQueueFilter = {}, now: Date = new Date()): Promise<HandoffQueueItem[]> {
+export async function getHandoffQueue(scope: TenantScope, filter: HandoffQueueFilter = {}, now: Date = new Date()): Promise<HandoffQueueItem[]> {
   const roles = filter.roles ?? [];
-  const derived = await deriveHandoffs(now);
+  const derived = await deriveHandoffs(scope, now);
 
   return derived
     .filter((h) => {
@@ -369,8 +370,8 @@ export async function getHandoffQueue(filter: HandoffQueueFilter = {}, now: Date
 }
 
 /** Counts per lane for the Command Center cards. */
-export async function getHandoffCounts(roles: OrganizationRole[] = [], now: Date = new Date()): Promise<Record<HandoffLane, number>> {
-  const queue = await getHandoffQueue({ roles, status: "PENDING" }, now);
+export async function getHandoffCounts(scope: TenantScope, roles: OrganizationRole[] = [], now: Date = new Date()): Promise<Record<HandoffLane, number>> {
+  const queue = await getHandoffQueue(scope, { roles, status: "PENDING" }, now);
   const counts: Record<HandoffLane, number> = {
     pending_approval: 0,
     needs_retry: 0,
@@ -383,8 +384,8 @@ export async function getHandoffCounts(roles: OrganizationRole[] = [], now: Date
 }
 
 /** Handoffs whose SLA has been breached (OVERDUE or CRITICAL). */
-export async function getOverdueHandoffs(roles: OrganizationRole[] = [], now: Date = new Date()): Promise<HandoffQueueItem[]> {
-  const queue = await getHandoffQueue({ roles, status: "PENDING" }, now);
+export async function getOverdueHandoffs(scope: TenantScope, roles: OrganizationRole[] = [], now: Date = new Date()): Promise<HandoffQueueItem[]> {
+  const queue = await getHandoffQueue(scope, { roles, status: "PENDING" }, now);
   return queue.filter((h) => h.slaBand !== null && isOverdueBand(h.slaBand));
 }
 

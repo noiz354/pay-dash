@@ -50,6 +50,7 @@ function row(id: string, status: LedgerRow["status"]): LedgerRow {
     currency: "IDR",
     fee: 7_250,
     net: 242_750,
+    organizationId: "org-a",
     channel: "VA",
     methodLabel: "BCA Virtual Account",
     customerName: "Queue Customer",

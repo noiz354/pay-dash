@@ -6,6 +6,8 @@ import { GeminiJournalAgent, type GeminiQuickPrompt } from "@/components/ai-jour
 import { formatCompactMoney, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { listCustomers } from "@/server/data/customers";
 import { getLedgerMetrics, listTransactions } from "@/server/data/transactions";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +24,11 @@ function RecoveryMetric({ label, value, detail }: { label: string; value: string
 }
 
 export default async function FailedPaymentRecoveryPage() {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const [metrics, failed, customers] = await Promise.all([
-    getLedgerMetrics(),
-    listTransactions({ status: "FAILED", pageSize: 8 }),
-    listCustomers({ pageSize: 100 }),
+    getLedgerMetrics(scope),
+    listTransactions(scope, { status: "FAILED", pageSize: 8 }),
+    listCustomers(scope, { pageSize: 100 }),
   ]);
 
   const failedAmount = failed.rows.reduce((sum, tx) => sum + tx.amount, 0);

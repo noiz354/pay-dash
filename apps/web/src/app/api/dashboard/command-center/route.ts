@@ -4,6 +4,7 @@ import { guardApiRead } from "@/server/services/export-guard";
 import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { getCommandCenter, toDto } from "@/server/data/command-center";
 import { getHandoffCounts } from "@/server/data/handoff";
+import { tenantScope } from "@/domain/security/tenant";
 
 // Wave 4 §2 — Command Center polling endpoint.
 //
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
   // One instant for the whole snapshot, so lanes and SLA badges agree.
   const now = new Date();
   try {
-    const [snapshot, handoffCounts] = await Promise.all([getCommandCenter(roles, now), getHandoffCounts(roles, now)]);
+    const [snapshot, handoffCounts] = await Promise.all([getCommandCenter(tenantScope(guard.organizationId), roles, now), getHandoffCounts(tenantScope(guard.organizationId), roles, now)]);
     return NextResponse.json(
       { ...toDto(snapshot), handoffCounts },
       { status: 200, headers: { "Cache-Control": "no-store, max-age=0", "Content-Type": "application/json" } },

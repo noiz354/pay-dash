@@ -1,6 +1,7 @@
 import "server-only";
 
 import { listTransactions, type Transaction } from "./transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 // Status vocabulary lives in a client-safe module; re-exported here so server
 // code keeps a single import site for everything customer-shaped.
 import { CUSTOMER_STATUSES, type CustomerStatus } from "@/lib/customer-status";
@@ -147,8 +148,8 @@ function initialsOf(name: string) {
   );
 }
 
-async function allLedgerRows(): Promise<Transaction[]> {
-  const { rows } = await listTransactions({ page: 1, pageSize: 100 });
+async function allLedgerRows(scope: TenantScope): Promise<Transaction[]> {
+  const { rows } = await listTransactions(scope, { page: 1, pageSize: 100 });
   return rows;
 }
 
@@ -162,8 +163,8 @@ function statusFor(succeeded: number, failed: number, total: number, lastSeen: s
   return succeeded > 0 ? "ACTIVE" : "REVIEW";
 }
 
-async function buildDirectory(): Promise<Customer[]> {
-  const rows = await allLedgerRows();
+async function buildDirectory(scope: TenantScope): Promise<Customer[]> {
+  const rows = await allLedgerRows(scope);
   const byEmail = new Map<string, Transaction[]>();
   for (const t of rows) {
     const key = t.customerEmail.toLowerCase();
@@ -237,7 +238,7 @@ async function buildDirectory(): Promise<Customer[]> {
   return [...manualCustomers, ...derived];
 }
 
-export async function listCustomers(filters: CustomerFilters = {}): Promise<PaginatedCustomers> {
+export async function listCustomers(scope: TenantScope, filters: CustomerFilters = {}): Promise<PaginatedCustomers> {
   const { q = "", status = "ALL", sort = "recent", direction } = filters;
   // Each sort key has a natural reading order: names go A-Z, everything else is
   // newest/largest first. An explicit `direction` from the URL overrides it; when
@@ -247,7 +248,7 @@ export async function listCustomers(filters: CustomerFilters = {}): Promise<Pagi
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
 
-  const all = await buildDirectory();
+  const all = await buildDirectory(scope);
   const filtered = all.filter((c) => {
     if (status !== "ALL" && c.status !== status) return false;
     if (needle) {
@@ -280,14 +281,14 @@ export async function listCustomers(filters: CustomerFilters = {}): Promise<Pagi
   };
 }
 
-export async function getCustomer(idOrEmail: string): Promise<Customer | null> {
-  const all = await buildDirectory();
+export async function getCustomer(scope: TenantScope, idOrEmail: string): Promise<Customer | null> {
+  const all = await buildDirectory(scope);
   const needle = idOrEmail.trim().toLowerCase();
   return all.find((c) => c.id === idOrEmail || c.email.toLowerCase() === needle) ?? null;
 }
 
-export async function getCustomerTransactions(email: string): Promise<Transaction[]> {
-  const rows = await allLedgerRows();
+export async function getCustomerTransactions(scope: TenantScope, email: string): Promise<Transaction[]> {
+  const rows = await allLedgerRows(scope);
   return rows.filter((t) => t.customerEmail.toLowerCase() === email.toLowerCase());
 }
 
@@ -300,8 +301,8 @@ export type CustomerMetrics = {
   currency: string;
 };
 
-export async function getCustomerMetrics(): Promise<CustomerMetrics> {
-  const all = await buildDirectory();
+export async function getCustomerMetrics(scope: TenantScope): Promise<CustomerMetrics> {
+  const all = await buildDirectory(scope);
   const weekAgo = Date.now() - 7 * 86_400_000;
   return {
     total: all.length,
@@ -320,9 +321,9 @@ export type CreateCustomerInput = {
   notes?: string;
 };
 
-export async function createCustomer(input: CreateCustomerInput): Promise<Customer> {
+export async function createCustomer(scope: TenantScope, input: CreateCustomerInput): Promise<Customer> {
   const email = input.email.trim().toLowerCase();
-  const existing = await getCustomer(email);
+  const existing = await getCustomer(scope, email);
   if (existing) throw new Error("A customer with this email already exists");
 
   const id = customerIdFromEmail(email);
@@ -336,7 +337,7 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Custom
     notes: input.notes?.trim() || undefined,
   });
 
-  const created = await getCustomer(id);
+  const created = await getCustomer(scope, id);
   if (!created) throw new Error("Customer could not be created");
   return created;
 }
@@ -348,8 +349,8 @@ export type UpdateCustomerInput = {
   notes?: string;
 };
 
-export async function updateCustomer(input: UpdateCustomerInput): Promise<Customer | null> {
-  const existing = await getCustomer(input.id);
+export async function updateCustomer(scope: TenantScope, input: UpdateCustomerInput): Promise<Customer | null> {
+  const existing = await getCustomer(scope, input.id);
   if (!existing) return null;
   const s = store();
   s.overrides[input.id] = {
@@ -358,7 +359,7 @@ export async function updateCustomer(input: UpdateCustomerInput): Promise<Custom
     ...(input.status !== undefined ? { status: input.status } : {}),
     ...(input.notes !== undefined ? { notes: input.notes.trim() } : {}),
   };
-  return getCustomer(input.id);
+  return getCustomer(scope, input.id);
 }
 
 export function customersToCsv(rows: Customer[]) {

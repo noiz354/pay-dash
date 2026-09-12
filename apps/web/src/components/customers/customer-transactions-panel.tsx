@@ -2,11 +2,14 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { getCustomerTransactions } from "@/server/data/customers";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 
 // A customer's payment history, reusing the ledger table so a row here behaves
 // exactly like a row on /transactions (click → /transactions/[id]).
 export async function CustomerTransactionsPanel({ email, limit = 5 }: { email: string; limit?: number }) {
-  const rows = await getCustomerTransactions(email);
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const rows = await getCustomerTransactions(scope, email);
   const visible = rows.slice(0, limit);
 
   return (

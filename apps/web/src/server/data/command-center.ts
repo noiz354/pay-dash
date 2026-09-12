@@ -14,6 +14,7 @@ import {
 } from "@/lib/command-center";
 import { getPayoutBatches } from "./payouts";
 import { getLedgerRows } from "./transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 import { listWebhooks } from "./webhooks";
 import { canActOnHandoff } from "./handoff-store";
 import { deriveHandoffs, type DerivedHandoff } from "./handoff";
@@ -135,11 +136,11 @@ function canAct(permission: Permission | null, roles: OrganizationRole[]): boole
  * on Finance Admin" instead of a button that would 403. Pass `[]` for a session
  * with no granted roles.
  */
-export async function getCommandCenter(roles: OrganizationRole[] = [], now: Date = new Date()): Promise<CommandCenterSnapshot> {
-  const handoffs = await deriveHandoffs(now);
+export async function getCommandCenter(scope: TenantScope, roles: OrganizationRole[] = [], now: Date = new Date()): Promise<CommandCenterSnapshot> {
+  const handoffs = await deriveHandoffs(scope, now);
   const pending = handoffs.filter((h) => h.status === "OPEN" || h.status === "NOTIFIED" || h.status === "CLAIMED");
   const batches = getPayoutBatches();
-  const ledger = getLedgerRows();
+  const ledger = getLedgerRows(scope);
 
   const raw: Record<CommandCenterLane, RawItem[]> = {
     critical: [],

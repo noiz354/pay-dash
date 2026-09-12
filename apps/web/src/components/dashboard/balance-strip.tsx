@@ -2,13 +2,16 @@ import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { getBalanceOverview } from "@/server/data/balance";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 
 // Home-page balance strip (ADR-0012): the single most important merchant
 // figure is derived from the same overview as /balance (ADR-0011), so the
 // two surfaces cannot disagree. Read-only — every mutation stays on
 // /balance and /payouts.
 export async function BalanceStrip() {
-  const o = await getBalanceOverview();
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const o = await getBalanceOverview(scope);
 
   return (
     <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-5 shadow-sm">

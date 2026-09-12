@@ -9,10 +9,11 @@ import {
   VOLUME_ALERT_PCT,
 } from "./risk";
 import { getLedgerRows, getTransaction } from "./transactions";
+import { tenantScope } from "@/domain/security/tenant";
 
 describe("risk store (ADR-0023)", () => {
   it("seeds an app-owned ruleset: four rules, IDR caps, no draft", async () => {
-    const o = await getRiskOverview();
+    const o = await getRiskOverview(tenantScope("org-a"));
     expect(o.draft).toBeNull();
     expect(o.effective).toEqual(o.deployed);
     expect(o.deployed.dailyVolumeLimit).toBe(2_000_000_000);
@@ -27,8 +28,8 @@ describe("risk store (ADR-0023)", () => {
   });
 
   it("derives alerts from the ledger, and every transactionId resolves", async () => {
-    const o = await getRiskOverview();
-    const rows = getLedgerRows();
+    const o = await getRiskOverview(tenantScope("org-a"));
+    const rows = getLedgerRows(tenantScope("org-a"));
     const expected = rows.filter((t) => t.riskScore >= HIGH_RISK_SCORE).length;
     // a volume alert may be present only when usage >= VOLUME_ALERT_PCT
     expect(o.alertCount).toBe(expected);
@@ -37,7 +38,7 @@ describe("risk store (ADR-0023)", () => {
     expect(o.alerts.every((a) => a.id.startsWith("alert_"))).toBe(true);
     for (const a of o.alerts) {
       expect(a.transactionId).toBeDefined();
-      const tx = await getTransaction(a.transactionId!);
+      const tx = await getTransaction(tenantScope("org-a"), a.transactionId!);
       expect(tx).not.toBeNull();
       expect(tx!.riskScore).toBeGreaterThanOrEqual(HIGH_RISK_SCORE);
       // newest-first
@@ -50,8 +51,8 @@ describe("risk store (ADR-0023)", () => {
   });
 
   it("derives cap usage and the score distribution from the ledger", async () => {
-    const o = await getRiskOverview();
-    const rows = getLedgerRows();
+    const o = await getRiskOverview(tenantScope("org-a"));
+    const rows = getLedgerRows(tenantScope("org-a"));
     expect(o.scanned).toBe(rows.length);
     expect(o.usage.dailyVolume24h).toBeGreaterThan(0);
     expect(o.usage.dailyPct).toBeGreaterThanOrEqual(0);
@@ -60,17 +61,17 @@ describe("risk store (ADR-0023)", () => {
   });
 
   it("draft lifecycle: patch -> deploy -> deployed wins, discard reverts", async () => {
-    const before = await getRiskOverview();
+    const before = await getRiskOverview(tenantScope("org-a"));
     const beforeDeployedAt = before.deployedAt;
 
     patchDraft({ dailyVolumeLimit: 3_000_000_000 });
-    let o = await getRiskOverview();
+    let o = await getRiskOverview(tenantScope("org-a"));
     expect(o.draft).not.toBeNull();
     expect(o.effective.dailyVolumeLimit).toBe(3_000_000_000);
     expect(o.deployed.dailyVolumeLimit).toBe(before.deployed.dailyVolumeLimit);
 
     const deployedAt = deployRiskSettings().deployedAt;
-    o = await getRiskOverview();
+    o = await getRiskOverview(tenantScope("org-a"));
     expect(o.draft).toBeNull();
     expect(o.deployed.dailyVolumeLimit).toBe(3_000_000_000);
     expect(o.effective).toEqual(o.deployed);
@@ -84,19 +85,19 @@ describe("risk store (ADR-0023)", () => {
 
     // rule toggle drafts, deploy commits, discard reverts
     patchDraft({ ruleId: "rule_high_value", ruleEnabled: true });
-    o = await getRiskOverview();
+    o = await getRiskOverview(tenantScope("org-a"));
     expect(o.effective.rules.find((r) => r.id === "rule_high_value")?.enabled).toBe(true);
     expect(o.deployed.rules.find((r) => r.id === "rule_high_value")?.enabled).toBe(false);
 
     expect(discardDraft()).toBe(true);
-    o = await getRiskOverview();
+    o = await getRiskOverview(tenantScope("org-a"));
     expect(o.draft).toBeNull();
     expect(o.effective.rules.find((r) => r.id === "rule_high_value")?.enabled).toBe(false);
     expect(discardDraft()).toBe(false);
   });
 
   it("raises the volume alert only when 24h usage reaches the threshold", () => {
-    const rows = getLedgerRows();
+    const rows = getLedgerRows(tenantScope("org-a"));
     const base = {
       dailyVolumeLimit: 2_000_000_000,
       monthlyVolumeLimit: 60_000_000_000,

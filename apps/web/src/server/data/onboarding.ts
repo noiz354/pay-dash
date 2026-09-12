@@ -5,6 +5,7 @@ import { KYC_DOC_TYPES } from "@/lib/kyc-options";
 import { getKycSubmission, profileKycCompleteness } from "./kyc";
 import { getDestinationAccount, listBankAccounts } from "./payouts";
 import { getLedgerRows } from "./transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 import { getMerchantProfile, listApiKeys } from "./settings";
 import { listWebhooks } from "./webhooks";
 
@@ -97,7 +98,7 @@ const profileChecks = (profile: {
   },
 ];
 
-export async function getOnboardingStatus(): Promise<OnboardingStatus> {
+export async function getOnboardingStatus(scope: TenantScope): Promise<OnboardingStatus> {
   const [profile, accounts, destination, keys, webhooks, completeness, submission] =
     await Promise.all([
       getMerchantProfile(),
@@ -160,7 +161,7 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
   // --- Technical Setup (keys + callback log + ledger) ----------------------
   const liveKeys = keys.filter((k) => k.environment === "LIVE").length;
   const sandboxKeys = keys.filter((k) => k.environment === "TEST").length;
-  const succeeded = getLedgerRows().filter((t) => t.status === "SUCCEEDED").length;
+  const succeeded = getLedgerRows(scope).filter((t) => t.status === "SUCCEEDED").length;
   const techChecks: OnboardingCheck[] = [
     {
       id: "tech-keys",

@@ -18,6 +18,8 @@ import { ExpireLinkButton } from "@/components/links/expire-link-button";
 import { SimulatePaymentButton } from "@/components/links/simulate-payment-button";
 import { getLink } from "@/server/data/links";
 import { getTransaction } from "@/server/data/transactions";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { formatMoney, formatDateLong, formatDateTime, formatRelative } from "@/lib/format";
 import { LINK_KIND_LABELS, LINK_STATUS_ICONS, shareUrlOf } from "@/lib/link-status";
 
@@ -48,7 +50,8 @@ function Row({ label, value, mono }: { label: string; value: React.ReactNode; mo
 
 export default async function PaymentLinkDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const link = await getLink(id);
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const link = await getLink(scope, id);
   if (!link) notFound();
 
   const open = link.status === "OPEN";
@@ -56,7 +59,7 @@ export default async function PaymentLinkDetailPage({ params }: { params: Params
   // A simulated payment creates a ledger row whose id equals the link id;
   // seeded pre-window payments have paidAt but no ledger row — "View payment"
   // only points where a record actually exists.
-  const paymentTx = paid ? await getTransaction(link.id) : null;
+  const paymentTx = paid ? await getTransaction(scope, link.id) : null;
 
   return (
     <main className="mx-auto w-full max-w-container-max p-gutter space-y-6 pb-12">

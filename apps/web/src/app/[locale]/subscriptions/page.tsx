@@ -11,6 +11,8 @@ import { SubscriptionRowActions } from "@/components/subscriptions/subscription-
 import { CreateSubscriptionDialog } from "@/components/subscriptions/create-subscription-dialog";
 import { listSubscriptions, subscriptionSummary, type Subscription } from "@/server/data/subscriptions";
 import { listCustomers } from "@/server/data/customers";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import {
   SUBSCRIPTION_STATUS_LABELS,
   SUBSCRIPTION_STATUS_TONES,
@@ -230,9 +232,10 @@ export default async function SubscriptionsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   // The create dialog offers real directory customers (ADR-0021), so
   // "View customer" from a created plan always resolves.
-  const customers = await listCustomers({ pageSize: 100 });
+  const customers = await listCustomers(scope, { pageSize: 100 });
   const directoryCustomers = customers.rows.map((c) => ({ name: c.name, email: c.email }));
 
   return (

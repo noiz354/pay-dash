@@ -13,6 +13,8 @@ import { MovementsFilters } from "@/components/balance/movements-filters";
 import { MovementsTable } from "@/components/balance/movements-table";
 import { getBalanceOverview, getBalanceTrend, listMovements } from "@/server/data/balance";
 import { getDestinationAccount, getPayoutSettings, listBankAccounts } from "@/server/data/payouts";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { nextRunForCadence } from "@/lib/payout-status";
 import { formatMoney, formatRelative } from "@/lib/format";
 import type { MovementStatus, MovementType } from "@/lib/balance-status";
@@ -36,9 +38,10 @@ function one(v: string | string[] | undefined) {
 }
 
 async function BalanceCards() {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const [overview, trend, settings, destination, accounts] = await Promise.all([
-    getBalanceOverview(),
-    getBalanceTrend(30),
+    getBalanceOverview(scope),
+    getBalanceTrend(scope, 30),
     getPayoutSettings(),
     getDestinationAccount(),
     listBankAccounts(),
@@ -102,7 +105,8 @@ async function BalanceCards() {
 
 async function Movements({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
-  const data = await listMovements({
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const data = await listMovements(scope, {
     type: (one(sp.type) as MovementType | "all") ?? "all",
     status: (one(sp.status) as MovementStatus | "all") ?? "all",
     range: (one(sp.range) as "7d" | "30d" | "90d" | "all") ?? "all",

@@ -6,6 +6,9 @@ import { ExportCsvButton } from "@/components/transactions/export-csv-button";
 import { CanonicalTransactionsTable } from "@/components/transactions/canonical-transactions-table";
 import { TableSkeleton } from "@/components/common/table-skeleton";
 import { formatCompactMoney, formatNumber, formatPercent } from "@/lib/format";
+import type { TenantScope } from "@/domain/security/tenant";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import {
   getLedgerMetrics,
   listTransactions,
@@ -31,8 +34,8 @@ function one(v: string | string[] | undefined) {
   return Array.isArray(v) ? v[0] : v;
 }
 
-async function MetricsRow() {
-  const m = await getLedgerMetrics();
+async function MetricsRow({ scope }: { scope: TenantScope }) {
+  const m = await getLedgerMetrics(scope);
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <Card className="bg-[var(--surface)] border-[var(--border-subtle)] p-4">
@@ -66,7 +69,7 @@ async function MetricsRow() {
   );
 }
 
-async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
+async function LedgerTable({ scope, searchParams }: { scope: TenantScope; searchParams: SearchParams }) {
   const sp = await searchParams;
   const page = Number(one(sp.page) ?? 1) || 1;
   const pageSize = Number(one(sp.pageSize) ?? 10) || 10;
@@ -78,7 +81,7 @@ async function LedgerTable({ searchParams }: { searchParams: SearchParams }) {
   // Dual-control refund queue (JRN-003): same fail-open normalization for
   // `?refundState=` — the Role B deep link lands here.
   const refundState = normalizeRefundStateFilter(one(sp.refundState));
-  const result = await listTransactions({
+  const result = await listTransactions(scope, {
     status: (one(sp.status) as TransactionStatus | "ALL") ?? "ALL",
     channel: (one(sp.channel) as Channel | "ALL") ?? "ALL",
     range: (one(sp.range) as "7d" | "30d" | "90d" | "all") ?? "all",
@@ -107,7 +110,9 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   // Awaited inside the streaming child; a stable key makes Suspense re-fire on
   // filter changes so the skeleton shows during server round-trips.
   const sp = await searchParams;
-  const key = new URLSearchParams(
+  const ctx = await resolveSessionOrgContext();
+  const scope = tenantScope(ctx.organizationId);
+  const key = `${scope.organizationId}:` + new URLSearchParams(
     Object.entries(sp).map(([k, v]) => [k, String(one(v) ?? "")])
   ).toString();
 
@@ -136,12 +141,12 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             </div>
           }
         >
-          <MetricsRow />
+          <MetricsRow scope={scope} />
         </Suspense>
       </div>
 
       <Suspense key={key} fallback={<TableSkeleton rows={10} columns={7} />}>
-        <LedgerTable searchParams={searchParams} />
+        <LedgerTable scope={scope} searchParams={searchParams} />
       </Suspense>
     </main>
   );

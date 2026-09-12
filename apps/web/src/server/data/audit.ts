@@ -10,6 +10,7 @@ import { getRiskOverview } from "./risk";
 import { listApiKeys } from "./settings";
 import { listMembers } from "./team";
 import { getLedgerRows } from "./transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 import { listWebhooks } from "./webhooks";
 
 // ---------------------------------------------------------------------------
@@ -91,11 +92,11 @@ const RANGE_DAYS: Record<AuditRangeValue, number | null> = {
 };
 
 /** Synchronous owners: ledger transaction timelines + payout batch timelines. */
-function syncEvents(): AuditEvent[] {
+function syncEvents(scope: TenantScope): AuditEvent[] {
   const events: AuditEvent[] = [];
 
   // --- payments ← ledger transaction timelines ------------------------------
-  for (const tx of getLedgerRows()) {
+  for (const tx of getLedgerRows(scope)) {
     for (const ev of tx.events) {
       events.push({
         id: ev.id,
@@ -128,11 +129,11 @@ function syncEvents(): AuditEvent[] {
 }
 
 /** The full derived event history, newest first. Read-only over the owners. */
-export async function getAuditEvents(): Promise<AuditEvent[]> {
+export async function getAuditEvents(scope: TenantScope): Promise<AuditEvent[]> {
   const [keys, blocklist, risk, members] = await Promise.all([
     listApiKeys(),
     listBlocklist({ page: 1, pageSize: 100 }),
-    getRiskOverview(),
+    getRiskOverview(scope),
     listMembers({ page: 1, pageSize: 100 }),
   ]);
 
@@ -223,17 +224,17 @@ export async function getAuditEvents(): Promise<AuditEvent[]> {
     });
   }
 
-  return [...syncEvents(), ...asyncEvents].sort(
+  return [...syncEvents(scope), ...asyncEvents].sort(
     (a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id)
   );
 }
 
-export async function listAuditEvents(filters: AuditFilters = {}): Promise<PaginatedAuditEvents> {
+export async function listAuditEvents(scope: TenantScope, filters: AuditFilters = {}): Promise<PaginatedAuditEvents> {
   const { q = "", category = "ALL", status = "ALL", range = "all" } = filters;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
 
-  let rows = await getAuditEvents();
+  let rows = await getAuditEvents(scope);
   const needle = q.trim().toLowerCase();
   if (needle) {
     rows = rows.filter(
@@ -266,8 +267,8 @@ export async function listAuditEvents(filters: AuditFilters = {}): Promise<Pagin
   };
 }
 
-export async function auditSummary(): Promise<AuditSummary> {
-  const rows = await getAuditEvents();
+export async function auditSummary(scope: TenantScope): Promise<AuditSummary> {
+  const rows = await getAuditEvents(scope);
   const byCategory: Record<AuditCategory, number> = {
     PAYMENTS: 0,
     PAYOUTS: 0,

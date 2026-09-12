@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createCustomer, updateCustomer } from "@/server/data/customers";
+import { actionScope } from "@/server/services/session-org-context";
 import { CUSTOMER_STATUSES } from "@/lib/customer-status";
 
 // Server Actions for the customer journey. Same contract as the transaction
@@ -75,7 +76,7 @@ export async function createCustomerAction(
       return { status: "error", message: error instanceof Error ? error.message : "Could not create the customer at the provider." };
     }
 
-    const customer = await createCustomer(parsed.data);
+    const customer = await createCustomer(await actionScope(), parsed.data);
     revalidateCustomers(customer.id);
     return {
       status: "success",
@@ -117,7 +118,7 @@ export async function updateCustomerAction(
   }
 
   try {
-    const updated = await updateCustomer(parsed.data);
+    const updated = await updateCustomer(await actionScope(), parsed.data);
     if (!updated) return { status: "error", message: "That customer no longer exists." };
     revalidateCustomers(updated.id);
     return { status: "success", message: `${updated.name} updated`, data: { id: updated.id } };
@@ -139,7 +140,7 @@ export async function archiveCustomerAction(
   const restore = String(formData.get("restore") ?? "") === "1";
   if (!id) return { status: "error", message: "Customer id is required." };
 
-  const updated = await updateCustomer({ id, status: restore ? "ACTIVE" : "BLOCKED" });
+  const updated = await updateCustomer(await actionScope(), { id, status: restore ? "ACTIVE" : "BLOCKED" });
   if (!updated) return { status: "error", message: "That customer no longer exists." };
   revalidateCustomers(updated.id);
   return {

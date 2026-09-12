@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardExport } from "@/server/services/export-guard";
+import { tenantScope } from "@/domain/security/tenant";
 import {
   isAuditCategory,
   isAuditRange,
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
   // BE-004: fail-closed export guard (JRN-017)
   const guard = await guardExport(request, "audit.read");
   if (!guard.ok) return guard.response;
+  const scope = tenantScope(guard.organizationId);
 
   const sp = request.nextUrl.searchParams;
   const category = sp.get("category") ?? "ALL";
@@ -28,10 +30,10 @@ export async function GET(request: NextRequest) {
     range: isAuditRange(range) ? range : "all",
   };
 
-  const first = await listAuditEvents({ ...filters, page: 1, pageSize: 100 });
+  const first = await listAuditEvents(scope, { ...filters, page: 1, pageSize: 100 });
   const rest = await Promise.all(
     Array.from({ length: Math.max(0, first.pageCount - 1) }, (_, i) =>
-      listAuditEvents({ ...filters, page: i + 2, pageSize: 100 })
+      listAuditEvents(scope, { ...filters, page: i + 2, pageSize: 100 })
     )
   );
   const rows = [first, ...rest].flatMap((p) => p.rows);

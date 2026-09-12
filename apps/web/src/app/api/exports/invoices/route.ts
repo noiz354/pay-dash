@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardExport } from "@/server/services/export-guard";
+import { tenantScope } from "@/domain/security/tenant";
 import { invoicesToCsv, listInvoices } from "@/server/data/invoices";
 import type { InvoiceStatus } from "@/lib/invoice-status";
 
@@ -9,9 +10,10 @@ export async function GET(request: NextRequest) {
   // BE-004: fail-closed export guard (JRN-017)
   const guard = await guardExport(request, "transaction.read");
   if (!guard.ok) return guard.response;
+  const scope = tenantScope(guard.organizationId);
 
   const sp = request.nextUrl.searchParams;
-  const { rows } = await listInvoices({
+  const { rows } = await listInvoices(scope, {
     q: sp.get("q") ?? "",
     status: (sp.get("status") as InvoiceStatus | "ALL") ?? "ALL",
     range: (sp.get("range") as "3m" | "6m" | "12m" | "all") ?? "all",

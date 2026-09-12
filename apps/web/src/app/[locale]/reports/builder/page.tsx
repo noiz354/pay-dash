@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { ReportBuilder } from "@/components/reports/report-builder";
 import { getLedgerRows } from "@/server/data/transactions";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { getPayoutBatches } from "@/server/data/payouts";
 import { listCustomers } from "@/server/data/customers";
 
@@ -18,10 +20,11 @@ export const metadata: Metadata = {
 };
 
 export default async function ReportsBuilderPage() {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const [transactions, batches, customersPage] = await Promise.all([
-    getLedgerRows(),
+    getLedgerRows(scope),
     getPayoutBatches(),
-    listCustomers({ pageSize: 500 }),
+    listCustomers(scope, { pageSize: 500 }),
   ]);
 
   return (

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { actionScope } from "@/server/services/session-org-context";
 import { z } from "zod";
 import { PAYMENT_METHODS } from "@/lib/invoice-status";
 import { payInvoice } from "@/server/data/invoices";
@@ -52,7 +53,7 @@ export async function payInvoiceAction(
   }
 
   try {
-    const result = await payInvoice(parsed.data.id, parsed.data.method);
+    const result = await payInvoice(await actionScope(), parsed.data.id, parsed.data.method);
     if (!result) return { status: "error", message: "That invoice no longer exists." };
     revalidateBilling(result.invoice.id);
     return {
@@ -88,7 +89,7 @@ export async function payInvoicesAction(
   let failed = 0;
   for (const id of ids) {
     try {
-      const result = await payInvoice(id, method);
+      const result = await payInvoice(await actionScope(), id, method);
       if (result) paid += 1;
       else failed += 1;
     } catch {

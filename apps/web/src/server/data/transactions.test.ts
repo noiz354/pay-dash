@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getAnalyticsSeries, listTransactions } from "./transactions";
+import { tenantScope } from "@/domain/security/tenant";
+
+const SCOPE_A = tenantScope("org-a");
 
 function resetStores() {
   const g = globalThis as unknown as {
@@ -20,7 +23,7 @@ describe("getAnalyticsSeries", () => {
     [30, "30d"],
     [90, "90d"],
   ])("returns one bucket per day for the %s window", async (days) => {
-    const series = await getAnalyticsSeries(days);
+    const series = await getAnalyticsSeries(SCOPE_A, days);
     expect(series).toHaveLength(days);
     // One bucket per calendar day, oldest first — the chart plots them in order.
     const dates = series.map((p) => p.date);
@@ -39,8 +42,8 @@ describe("getAnalyticsSeries", () => {
   });
 
   it("conserves money: the 30-day series sums to the whole seeded ledger", async () => {
-    const series = await getAnalyticsSeries(30);
-    const { rows } = await listTransactions({ pageSize: 200, page: 1 });
+    const series = await getAnalyticsSeries(SCOPE_A, 30);
+    const { rows } = await listTransactions(SCOPE_A, { pageSize: 200, page: 1 });
     // The seeded ledger window is ~6.5 days, so nothing falls outside 30d.
     expect(rows.length).toBeGreaterThan(0);
     const ledgerTotal = rows.reduce((a, t) => a + t.amount, 0);
@@ -52,10 +55,10 @@ describe("getAnalyticsSeries", () => {
     // Wipe the seeded rows — the chart's empty state must be reachable
     // without a crash (the page maps an all-zero series to it).
     // Touch the store so the lazy seed runs, then wipe the rows.
-    await listTransactions({ pageSize: 1, page: 1 });
+    await listTransactions(SCOPE_A, { pageSize: 1, page: 1 });
     const g = globalThis as unknown as { __kineticTxStore: { rows: unknown[] } };
     g.__kineticTxStore.rows = [];
-    const series = await getAnalyticsSeries(7);
+    const series = await getAnalyticsSeries(SCOPE_A, 7);
     expect(series).toHaveLength(7);
     expect(series.every((p) => p.total === 0 && p.succeeded === 0 && p.failed === 0)).toBe(true);
   });
@@ -89,6 +92,7 @@ function tx(partial: Partial<Transaction> & Pick<Transaction, "id" | "status" | 
     description: "test",
     riskScore: 0,
     refundedAmount: 0,
+    organizationId: "org-a",
     refundState: "NONE",
     refundRequest: null,
     events: [],
@@ -98,11 +102,11 @@ function tx(partial: Partial<Transaction> & Pick<Transaction, "id" | "status" | 
 
 /** Install a fixed ledger and read it back through the public list API,
  *  evaluated at FIXED_NOW so band assertions never depend on the wall clock. */
-async function withLedger(rows: Transaction[], filters: Parameters<typeof listTransactions>[0]) {
-  await listTransactions({ pageSize: 1 });
+async function withLedger(rows: Transaction[], filters: Parameters<typeof listTransactions>[1], scope = SCOPE_A) {
+  await listTransactions(scope, { pageSize: 1 });
   const g = globalThis as unknown as { __kineticTxStore: { rows: Transaction[] } };
   g.__kineticTxStore.rows = rows;
-  return listTransactions(filters, { now: FIXED_NOW });
+  return listTransactions(scope, filters, { now: FIXED_NOW });
 }
 
 describe("SLA band derivation (Wave 4 ledger wiring)", () => {
@@ -217,7 +221,7 @@ describe("SLA ledger filter + sort (server-side)", () => {
     // then 25h past creation → 21h overdue, past the 20h critical threshold.
     // The clock moved, the bands followed.
     const later = new Date(now.getTime() + 24 * HOUR);
-    const atLater = await listTransactions({ sla: "ALL", sort: "sla", direction: "desc", pageSize: 50 }, { now: later });
+    const atLater = await listTransactions(SCOPE_A, { sla: "ALL", sort: "sla", direction: "desc", pageSize: 50 }, { now: later });
     expect(atLater.rows.find((r) => r.id === "txn_normal")?.slaBand).toBe("CRITICAL");
   });
 

@@ -7,6 +7,8 @@ import { CreateCustomerDialog } from "@/components/customers/create-customer-dia
 import { CanonicalCustomersTable } from "@/components/customers/canonical-customers-table";
 import { formatCompactMoney, formatNumber } from "@/lib/format";
 import { getCustomerMetrics, listCustomers } from "@/server/data/customers";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import type { CustomerStatus } from "@/lib/customer-status";
 
 // Customer Directory — SCR-009
@@ -27,7 +29,8 @@ function one(v: string | string[] | undefined): string | undefined {
 }
 
 async function DirectoryMetrics() {
-  const m = await getCustomerMetrics();
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const m = await getCustomerMetrics(scope);
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
       <Card className="border-[var(--border-subtle)] bg-[var(--surface)] p-4">
@@ -53,8 +56,9 @@ async function DirectoryMetrics() {
 }
 
 async function Directory({ searchParams }: { searchParams: SearchParams }) {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const sp = await searchParams;
-  const result = await listCustomers({
+  const result = await listCustomers(scope, {
     q: one(sp.q) ?? "",
     status: (one(sp.status) as CustomerStatus | "ALL") ?? "ALL",
     sort: (one(sp.sort) as "recent" | "name" | "ltv" | "added") ?? "recent",

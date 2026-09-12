@@ -1,3 +1,4 @@
+import { tenantScope } from "@/domain/security/tenant";
 import { describe, expect, it } from "vitest";
 
 import { checkLedgerInvariants } from "@/domain/finance/invariants";
@@ -13,7 +14,7 @@ import { buildLedgerSnapshot, snapshotFromParts } from "./snapshot";
  */
 describe("ledger snapshot over the real stores", () => {
   it("builds a snapshot whose amounts are all integer minor units", async () => {
-    const { snapshot } = await buildLedgerSnapshot();
+    const { snapshot } = await buildLedgerSnapshot(tenantScope("org-a"));
     const amounts = [
       ...snapshot.payments.map((p) => p.captured),
       ...snapshot.refunds.map((r) => r.amount),
@@ -31,14 +32,14 @@ describe("ledger snapshot over the real stores", () => {
   });
 
   it("reports honestly that no double-entry postings exist yet", async () => {
-    const { snapshot, doubleEntryAvailable, source } = await buildLedgerSnapshot();
+    const { snapshot, doubleEntryAvailable, source } = await buildLedgerSnapshot(tenantScope("org-a"));
     expect(doubleEntryAvailable).toBe(false);
     expect(snapshot.postings).toEqual([]);
     expect(source).toBe("in-memory-store");
   });
 
   it("carries real payments, refunds and payouts from the seed", async () => {
-    const { snapshot } = await buildLedgerSnapshot();
+    const { snapshot } = await buildLedgerSnapshot(tenantScope("org-a"));
     expect(snapshot.payments.length).toBeGreaterThan(0);
     expect(snapshot.payouts.length).toBeGreaterThan(0);
     // Every refund must point at a payment that is present.
@@ -49,7 +50,7 @@ describe("ledger snapshot over the real stores", () => {
   });
 
   it("THE GATE — the seeded ledger satisfies every financial invariant", async () => {
-    const { snapshot } = await buildLedgerSnapshot();
+    const { snapshot } = await buildLedgerSnapshot(tenantScope("org-a"));
     const report = checkLedgerInvariants(snapshot);
     // Print the violations so a failure is actionable rather than a bare `false`.
     if (!report.ok) {
@@ -68,7 +69,7 @@ describe("ledger snapshot over the real stores", () => {
   it("PROOF OF SENSITIVITY — a corrupted store is caught by the gate", async () => {
     const { getPayoutBatches } = await import("@/server/data/payouts");
     const batches = getPayoutBatches();
-    const { snapshot: clean } = await buildLedgerSnapshot();
+    const { snapshot: clean } = await buildLedgerSnapshot(tenantScope("org-a"));
     expect(checkLedgerInvariants(clean).ok).toBe(true);
 
     // Inject an impossible payout: bigger than opening + every inflow combined.
@@ -91,7 +92,7 @@ describe("ledger snapshot over the real stores", () => {
   });
 
   it("PROOF OF SENSITIVITY — an over-refund on real data is caught", async () => {
-    const { snapshot } = await buildLedgerSnapshot();
+    const { snapshot } = await buildLedgerSnapshot(tenantScope("org-a"));
     const victim = snapshot.payments.find((p) => p.captured.units > 0);
     expect(victim).toBeDefined();
     const report = checkLedgerInvariants({
@@ -111,13 +112,13 @@ describe("ledger snapshot over the real stores", () => {
   });
 
   it("records the requested organization scope on the snapshot", async () => {
-    const { snapshot } = await buildLedgerSnapshot("org-under-test");
+    const { snapshot } = await buildLedgerSnapshot(tenantScope("org-under-test"));
     expect(snapshot.organizationId).toBe("org-under-test");
   });
 
   it("is stable across two consecutive builds (no clock-induced drift in the money)", async () => {
-    const a = await buildLedgerSnapshot();
-    const b = await buildLedgerSnapshot();
+    const a = await buildLedgerSnapshot(tenantScope("org-a"));
+    const b = await buildLedgerSnapshot(tenantScope("org-a"));
     expect(b.snapshot.balance.available).toEqual(a.snapshot.balance.available);
     expect(b.snapshot.settledInflow).toEqual(a.snapshot.settledInflow);
     expect(b.snapshot.settledOutflow).toEqual(a.snapshot.settledOutflow);

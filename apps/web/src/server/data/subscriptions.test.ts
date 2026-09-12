@@ -1,3 +1,4 @@
+import { tenantScope } from "@/domain/security/tenant";
 import { describe, expect, it } from "vitest";
 import {
   createSubscription,
@@ -15,7 +16,7 @@ describe("subscription store (ADR-0021)", () => {
     const { rows } = await listSubscriptions(ALL);
     expect(rows).toHaveLength(10);
     for (const s of rows) {
-      const customer = await getCustomer(s.customerEmail);
+      const customer = await getCustomer(tenantScope("org-a"), s.customerEmail);
       expect(customer, `no customer for ${s.customerEmail}`).not.toBeNull();
       expect(s.customerId).toBe(customer!.id);
       expect(s.id).toMatch(/^sub_[0-9a-z]+$/);
@@ -99,7 +100,7 @@ describe("subscription store (ADR-0021)", () => {
     expect(after.total).toBe(before + 1);
     expect(after.rows[0].id).toBe(sub.id); // newest first (recent sort)
     // the customer id resolves through the same pure hash the directory uses
-    const customer = await getCustomer(sub.customerEmail);
+    const customer = await getCustomer(tenantScope("org-a"), sub.customerEmail);
     expect(customer?.id).toBe(sub.customerId);
   });
 

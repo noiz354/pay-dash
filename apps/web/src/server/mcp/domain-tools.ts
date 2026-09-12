@@ -16,6 +16,25 @@ import { getMerchantProfile, getSettingsOverview } from "@/server/data/settings"
 import { listSubscriptions } from "@/server/data/subscriptions";
 import { listMembers } from "@/server/data/team";
 import { getTransaction, listTransactions, refundTransaction } from "@/server/data/transactions";
+import { TenantIsolationError } from "@/domain/security/tenant";
+
+/**
+ * Wave 7A SPEC_GAP — the MCP server has no session, so there is no trusted
+ * organization context to scope tenant data by. Every tool below that reads or
+ * writes tenant-owned rows is blocked on BOTH paths: the pg path reads the
+ * same tenant-unaware ledger as the memory path. Synthesizing a scope here
+ * would launder a cross-tenant leak. Unblocks when the MCP route wires
+ * session → TenantScope (Wave 7B).
+ */
+function specGapBlocked(tool: string): () => never {
+  return () => {
+    throw new TenantIsolationError(
+      "MISSING_SCOPE",
+      { surface: `mcp.${tool}`, actorOrg: "", requestedOrg: "" },
+      `SPEC_GAP: mcp.${tool} has no trusted organization context and is blocked until the MCP route provides a session-derived TenantScope.`,
+    );
+  };
+}
 import { getWebhookEvent, listWebhooks } from "@/server/data/webhooks";
 import { dataSourceError, resolveDataSource } from "@/server/settings/data-source";
 import { textResult } from "./handlers";
@@ -64,8 +83,8 @@ export function registerDomainTools(server: McpServer): void {
     async (input) =>
       sourceAware(
         input,
-        () => listTransactions(asFilters<Parameters<typeof listTransactions>[0]>(filterFrom(input))),
-        () => listTransactionsPostgres({ page: input.page, pageSize: input.pageSize })
+        specGapBlocked("list_transactions"),
+        specGapBlocked("list_transactions")
       )
   );
   server.registerTool(
@@ -75,7 +94,7 @@ export function registerDomainTools(server: McpServer): void {
       description: "Get one transaction by id. dataSource=postgres reads the real Cloud SQL ledger.",
       inputSchema: { id: z.string(), ...sourceSchema },
     },
-    async ({ id, ...input }) => sourceAware(input, () => getTransaction(id), () => getTransactionPostgres(id))
+    async ({ id, ...input }) => sourceAware(input, specGapBlocked("get_transaction"), specGapBlocked("get_transaction"))
   );
   server.registerTool(
     "refund_transaction",
@@ -85,7 +104,7 @@ export function registerDomainTools(server: McpServer): void {
       inputSchema: { id: z.string(), amount: z.number().positive().optional(), reason: z.string().optional(), ...sourceSchema },
     },
     async ({ id, amount, reason, ...input }) =>
-      sourceAware(input, () => refundTransaction(id, amount ?? 0, reason ?? "Refunded via MCP"), notImplementedPg("refund_transaction"))
+      sourceAware(input, specGapBlocked("refund_transaction"), notImplementedPg("refund_transaction"))
   );
 
   // Balance
@@ -96,7 +115,7 @@ export function registerDomainTools(server: McpServer): void {
       description: "Balance overview (available, settled, pending). dataSource=postgres derives from Cloud SQL ledger.",
       inputSchema: sourceSchema,
     },
-    async (input) => sourceAware(input, () => getBalanceOverview(), () => getBalanceOverviewPostgres())
+    async (input) => sourceAware(input, specGapBlocked("get_balance"), specGapBlocked("get_balance"))
   );
   server.registerTool(
     "list_movements",
@@ -106,7 +125,7 @@ export function registerDomainTools(server: McpServer): void {
       inputSchema: { ...pageSchema, ...sourceSchema, type: z.string().optional(), status: z.string().optional() },
     },
     async ({ page, pageSize, type, status, ...input }) =>
-      sourceAware(input, () => listMovements(asFilters<Parameters<typeof listMovements>[0]>({ page, pageSize, type, status })), notImplementedPg("list_movements"))
+      sourceAware(input, specGapBlocked("list_movements"), notImplementedPg("list_movements"))
   );
 
   // Payouts
@@ -132,12 +151,12 @@ export function registerDomainTools(server: McpServer): void {
     "list_customers",
     { title: "List customers", description: "List merchants' customers.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
     async ({ page, pageSize, status, ...input }) =>
-      sourceAware(input, () => listCustomers(asFilters<Parameters<typeof listCustomers>[0]>({ page, pageSize, status })), notImplementedPg("list_customers"))
+      sourceAware(input, specGapBlocked("list_customers"), notImplementedPg("list_customers"))
   );
   server.registerTool(
     "get_customer",
     { title: "Get customer", description: "Get a customer by id or email.", inputSchema: { idOrEmail: z.string(), ...sourceSchema } },
-    async ({ idOrEmail, ...input }) => sourceAware(input, () => getCustomer(idOrEmail), notImplementedPg("get_customer"))
+    async ({ idOrEmail, ...input }) => sourceAware(input, specGapBlocked("get_customer"), notImplementedPg("get_customer"))
   );
 
   // Invoices
@@ -145,12 +164,12 @@ export function registerDomainTools(server: McpServer): void {
     "list_invoices",
     { title: "List invoices", description: "List hosted payment invoices.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
     async ({ page, pageSize, status, ...input }) =>
-      sourceAware(input, () => listInvoices(asFilters<Parameters<typeof listInvoices>[0]>({ page, pageSize, status })), notImplementedPg("list_invoices"))
+      sourceAware(input, specGapBlocked("list_invoices"), notImplementedPg("list_invoices"))
   );
   server.registerTool(
     "get_invoice",
     { title: "Get invoice", description: "Get one invoice by id.", inputSchema: { id: z.string(), ...sourceSchema } },
-    async ({ id, ...input }) => sourceAware(input, () => getInvoice(id), notImplementedPg("get_invoice"))
+    async ({ id, ...input }) => sourceAware(input, specGapBlocked("get_invoice"), notImplementedPg("get_invoice"))
   );
 
   // Subscriptions / links / kyc / risk / webhooks / blocklist / settings / team / audit / onboarding
@@ -164,7 +183,7 @@ export function registerDomainTools(server: McpServer): void {
     "list_links",
     { title: "List payment links", description: "List payment links.", inputSchema: { ...pageSchema, ...sourceSchema } },
     async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listLinks(asFilters<Parameters<typeof listLinks>[0]>({ page, pageSize })), notImplementedPg("list_links"))
+      sourceAware(input, specGapBlocked("list_links"), notImplementedPg("list_links"))
   );
   server.registerTool(
     "get_kyc_submission",
@@ -174,18 +193,18 @@ export function registerDomainTools(server: McpServer): void {
   server.registerTool(
     "get_risk_overview",
     { title: "Get risk overview", description: "Risk alerts and settings overview.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getRiskOverview(), notImplementedPg("get_risk_overview"))
+    async (input) => sourceAware(input, specGapBlocked("get_risk_overview"), notImplementedPg("get_risk_overview"))
   );
   server.registerTool(
     "list_webhooks",
     { title: "List webhook deliveries", description: "List webhook events and deliveries.", inputSchema: { ...pageSchema, ...sourceSchema } },
     async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listWebhooks(asFilters<Parameters<typeof listWebhooks>[0]>({ page, pageSize })), notImplementedPg("list_webhooks"))
+      sourceAware(input, specGapBlocked("list_webhooks"), notImplementedPg("list_webhooks"))
   );
   server.registerTool(
     "get_webhook_event",
     { title: "Get webhook event", description: "Get one webhook event by id.", inputSchema: { id: z.string(), ...sourceSchema } },
-    async ({ id, ...input }) => sourceAware(input, () => getWebhookEvent(id), notImplementedPg("get_webhook_event"))
+    async ({ id, ...input }) => sourceAware(input, specGapBlocked("get_webhook_event"), notImplementedPg("get_webhook_event"))
   );
   server.registerTool(
     "list_blocklist",
@@ -213,11 +232,11 @@ export function registerDomainTools(server: McpServer): void {
     "list_audit_events",
     { title: "List audit events", description: "Security/audit event log.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
     async ({ page, pageSize, status, ...input }) =>
-      sourceAware(input, () => listAuditEvents(asFilters<Parameters<typeof listAuditEvents>[0]>({ page, pageSize, status })), notImplementedPg("list_audit_events"))
+      sourceAware(input, specGapBlocked("list_audit_events"), notImplementedPg("list_audit_events"))
   );
   server.registerTool(
     "get_onboarding_status",
     { title: "Get onboarding status", description: "Merchant onboarding progress.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getOnboardingStatus(), notImplementedPg("get_onboarding_status"))
+    async (input) => sourceAware(input, specGapBlocked("get_onboarding_status"), notImplementedPg("get_onboarding_status"))
   );
 }

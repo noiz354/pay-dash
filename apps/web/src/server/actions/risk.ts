@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { parseAmount } from "@/lib/payout-status";
+import { actionScope } from "@/server/services/session-org-context";
 import {
   deployRiskSettings,
   discardDraft,
@@ -48,7 +49,7 @@ export async function setVolumeEnabledAction(
   formData: FormData
 ): Promise<ActionState> {
   const enabled = String(formData.get("enabled") ?? "") === "true";
-  const overview = await getRiskOverview();
+  const overview = await getRiskOverview(await actionScope());
   if (overview.effective.volumeLimitsEnabled === enabled) {
     return { status: "error", message: "Already in that state." };
   }
@@ -67,7 +68,7 @@ export async function toggleRuleAction(
 ): Promise<ActionState> {
   const ruleId = String(formData.get("id") ?? "").trim();
   const enabled = String(formData.get("enabled") ?? "") === "true";
-  const rule = (await getRiskOverview()).effective.rules.find((r) => r.id === ruleId);
+  const rule = (await getRiskOverview(await actionScope())).effective.rules.find((r) => r.id === ruleId);
   if (!rule) return { status: "error", message: "Rule not found." };
   if (rule.enabled === enabled) return { status: "error", message: "Already in that state." };
 
@@ -83,7 +84,7 @@ export async function deployRiskAction(
   _prev: ActionState | undefined,
   _formData: FormData
 ): Promise<ActionState> {
-  const overview = await getRiskOverview();
+  const overview = await getRiskOverview(await actionScope());
   if (!overview.draft) return { status: "error", message: "No draft to deploy." };
   const { ruleCount } = deployRiskSettings();
   revalidateRisk();

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { recordInbound, getWebhookEvent } from "@/server/data/webhooks";
+import { actionScope } from "@/server/services/session-org-context";
 import { SIMULATABLE_WEBHOOK_EVENTS } from "@/lib/webhook-status";
 import type { ActionState } from "./payouts";
 
@@ -55,7 +56,7 @@ export async function simulateWebhookAction(
     },
   };
 
-  const { event: row, deduped } = recordInbound({ eventId, type: event, payload, source: "simulate" });
+  const { event: row, deduped } = recordInbound( { eventId, type: event, payload, source: "simulate" });
   revalidateWebhooks(row.id);
   return {
     status: "success",
@@ -74,13 +75,13 @@ export async function replayWebhookAction(
   formData: FormData
 ): Promise<ActionState<{ id: string; eventId: string }>> {
   const id = String(formData.get("id") ?? "").trim();
-  const original = getWebhookEvent(id);
+  const original = getWebhookEvent( id);
   if (!original) return { status: "error", message: "Webhook event not found." };
   if (original.status === "REJECTED") {
     return { status: "error", message: "Rejected callbacks have no usable payload to replay." };
   }
 
-  const { event: row } = recordInbound({
+  const { event: row } = recordInbound( {
     eventId: original.eventId,
     type: original.type,
     payload: original.payload,

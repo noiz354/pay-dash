@@ -5,6 +5,7 @@ import { CommandCenter, CommandCenterSkeleton } from "@/components/command-cente
 import { COMMAND_CENTER_LANES, type CommandCenterLane } from "@/lib/command-center";
 import { getCommandCenter, toDto } from "@/server/data/command-center";
 import { resolveSessionOrgContext } from "@/server/services/session-org-context";
+import { tenantScope } from "@/domain/security/tenant";
 import { BalanceStrip } from "@/components/dashboard/balance-strip";
 import { ChartRangeTabs, type ChartRange } from "@/components/dashboard/chart-range-tabs";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
@@ -51,13 +52,12 @@ function laneOf(searchParams: Record<string, string | string[] | undefined>): Co
  */
 async function CommandCenterSection({ lane }: { lane: CommandCenterLane | null }) {
   let roles: Awaited<ReturnType<typeof resolveSessionOrgContext>>["roles"] = [];
-  try {
-    const ctx = await resolveSessionOrgContext();
-    roles = ctx.roles;
-  } catch {
-    roles = [];
-  }
-  const snapshot = await getCommandCenter(roles);
+  // resolveSessionOrgContext never throws (demo fallback is internal), so the
+  // command-center read is scoped to the resolved tenant unconditionally.
+  const ctx = await resolveSessionOrgContext();
+  roles = ctx.roles;
+  const scope = tenantScope(ctx.organizationId);
+  const snapshot = await getCommandCenter(scope, roles);
   return <CommandCenter initialData={toDto(snapshot)} focusLane={lane} />;
 }
 
@@ -102,7 +102,8 @@ function MetricTile({
 }
 
 async function MetricsGroup() {
-  const m = await getLedgerMetrics();
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const m = await getLedgerMetrics(scope);
   return (
     <>
       <MetricTile
@@ -134,9 +135,10 @@ async function MetricsGroup() {
 }
 
 async function AnalyticsSection({ range }: { range: ChartRange }) {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const [series, metrics] = await Promise.all([
-    getAnalyticsSeries(CHART_RANGE_DAYS[range]),
-    getLedgerMetrics(),
+    getAnalyticsSeries(scope, CHART_RANGE_DAYS[range]),
+    getLedgerMetrics(scope),
   ]);
   const hasData = series.some((p) => p.total > 0);
   return (
@@ -149,7 +151,8 @@ async function AnalyticsSection({ range }: { range: ChartRange }) {
 }
 
 async function RecentTransactions() {
-  const { rows } = await listTransactions({ pageSize: 5, page: 1 });
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const { rows } = await listTransactions(scope, { pageSize: 5, page: 1 });
   return (
     <TransactionsTable
       rows={rows}

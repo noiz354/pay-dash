@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { addBlocklist } from "./blocklist";
 import { auditEventsToCsv, auditSummary, getAuditEvents, listAuditEvents } from "./audit";
+import { getLedgerRows } from "./transactions";
 import { createApiKey } from "./settings";
+import { tenantScope } from "@/domain/security/tenant";
+const SCOPE = tenantScope("org-a");
 
 function resetAllStores() {
   const g = globalThis as unknown as {
@@ -22,6 +25,13 @@ function resetAllStores() {
   g.__kineticBlocklistStore = undefined;
   g.__kineticRiskStore = undefined;
   g.__kineticTeamStore = undefined;
+  // Wave 7A: the seeded ledger is multi-org (org-a/org-b/demo). This suite
+  // asserts absolute seeded-world counts through the scoped path, so re-own
+  // the deterministic seed to the test scope. Tenant isolation itself is
+  // proven by the S6 cross-tenant matrix, not here.
+  getLedgerRows(SCOPE); // trigger lazy seed
+  const txStore = g as unknown as { __kineticTxStore?: { rows: { organizationId: string }[] } };
+  for (const row of txStore.__kineticTxStore?.rows ?? []) row.organizationId = SCOPE.organizationId;
 }
 
 beforeEach(resetAllStores);
@@ -39,7 +49,7 @@ const SEED_TOTAL = 177;
 
 describe("audit — seeded world", () => {
   it("derives 177 events across the four categories", async () => {
-    const summary = await auditSummary();
+    const summary = await auditSummary(SCOPE, );
     expect(summary.total).toBe(SEED_TOTAL);
     expect(summary.byCategory).toEqual({
       PAYMENTS: 140,
@@ -50,7 +60,7 @@ describe("audit — seeded world", () => {
   });
 
   it("lists newest first with honest status mapping", async () => {
-    const all = await getAuditEvents();
+    const all = await getAuditEvents(SCOPE, );
     expect(all).toHaveLength(SEED_TOTAL);
     for (let i = 1; i < all.length; i++) {
       expect(all[i - 1].at >= all[i].at).toBe(true);
@@ -66,7 +76,7 @@ describe("audit — seeded world", () => {
   });
 
   it("carries the real facts, not the prototype's invented rows", async () => {
-    const all = await getAuditEvents();
+    const all = await getAuditEvents(SCOPE, );
     const text = all.map((e) => `${e.action} ${e.resource} ${e.detail}`).join("\n");
     // off-world actors and invented ids are absent
     expect(text).not.toContain("alice.jones");
@@ -85,38 +95,38 @@ describe("audit — seeded world", () => {
 
 describe("audit — filters", () => {
   it("filters by category, status, range and free text", async () => {
-    const byCategory = await listAuditEvents({ category: "CONFIGURATION" });
+    const byCategory = await listAuditEvents(SCOPE, { category: "CONFIGURATION" });
     expect(byCategory.total).toBe(20);
 
-    const failed = await listAuditEvents({ status: "FAILED" });
+    const failed = await listAuditEvents(SCOPE, { status: "FAILED" });
     expect(failed.total).toBe(4);
     expect(failed.isFiltered).toBe(true);
 
-    const day = await listAuditEvents({ range: "24h" });
+    const day = await listAuditEvents(SCOPE, { range: "24h" });
     expect(day.total).toBeGreaterThan(0);
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     expect(day.rows.every((e) => new Date(e.at).getTime() >= cutoff)).toBe(true);
 
-    const searched = await listAuditEvents({ q: "authorization declined" });
+    const searched = await listAuditEvents(SCOPE, { q: "authorization declined" });
     expect(searched.total).toBe(4);
 
-    const combined = await listAuditEvents({ category: "PAYMENTS", status: "WARNING" });
+    const combined = await listAuditEvents(SCOPE, { category: "PAYMENTS", status: "WARNING" });
     expect(combined.total).toBe(9); // 7 awaiting + 2 refunds
   });
 
   it("paginates the derived history", async () => {
-    const page1 = await listAuditEvents({ page: 1, pageSize: 10 });
+    const page1 = await listAuditEvents(SCOPE, { page: 1, pageSize: 10 });
     expect(page1.pageCount).toBe(18);
     expect(page1.rows).toHaveLength(10);
-    const last = await listAuditEvents({ page: 18, pageSize: 10 });
+    const last = await listAuditEvents(SCOPE, { page: 18, pageSize: 10 });
     expect(last.rows).toHaveLength(7);
     // over-range pages clamp instead of 404-ing
-    const clamped = await listAuditEvents({ page: 99, pageSize: 10 });
+    const clamped = await listAuditEvents(SCOPE, { page: 99, pageSize: 10 });
     expect(clamped.page).toBe(18);
   });
 
   it("has a true empty state when nothing matches", async () => {
-    const none = await listAuditEvents({ q: "zzzz-no-such-event" });
+    const none = await listAuditEvents(SCOPE, { q: "zzzz-no-such-event" });
     expect(none.total).toBe(0);
     expect(none.rows).toHaveLength(0);
   });
@@ -126,7 +136,7 @@ describe("audit — live reads", () => {
   it("re-derives when the owners change", async () => {
     await addBlocklist({ type: "IP", value: "203.0.113.99", reason: "MANUAL_ENTRY" });
     await createApiKey({ name: "Staging", environment: "TEST", scopes: ["read"] });
-    const summary = await auditSummary();
+    const summary = await auditSummary(SCOPE, );
     expect(summary.byCategory.CONFIGURATION).toBe(22);
     expect(summary.total).toBe(SEED_TOTAL + 2);
   });
@@ -134,7 +144,7 @@ describe("audit — live reads", () => {
 
 describe("audit — CSV", () => {
   it("escapes cells and matches the filtered view", async () => {
-    const { rows } = await listAuditEvents({ category: "WEBHOOKS", page: 1, pageSize: 10 });
+    const { rows } = await listAuditEvents(SCOPE, { category: "WEBHOOKS", page: 1, pageSize: 10 });
     const csv = auditEventsToCsv(rows);
     const lines = csv.split("\n");
     expect(lines[0]).toBe("timestamp,category,status,action,resource,detail");

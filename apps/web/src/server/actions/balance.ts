@@ -6,6 +6,7 @@ import { parseAmount } from "@/lib/payout-status";
 import { formatMoney } from "@/lib/format";
 import { TOPUP_METHODS } from "@/lib/balance-status";
 import { topUpBalance, withdrawBalance } from "@/server/data/balance";
+import { actionScope } from "@/server/services/session-org-context";
 import type { ActionState } from "./payouts";
 
 export type { ActionState };
@@ -51,7 +52,7 @@ export async function topUpBalanceAction(
   }
 
   try {
-    const result = await topUpBalance({ amount: parsed.data.amount, method: parsed.data.method });
+    const result = await topUpBalance(await actionScope(), { amount: parsed.data.amount, method: parsed.data.method });
     revalidateBalance();
     return {
       status: "success",
@@ -85,7 +86,7 @@ export async function withdrawBalanceAction(
   }
 
   try {
-    const result = await withdrawBalance({ amount: parsed.data.amount, accountId: parsed.data.accountId });
+    const result = await withdrawBalance(await actionScope(), { amount: parsed.data.amount, accountId: parsed.data.accountId });
     revalidateBalance(result.batchId);
     if (!result.paid) {
       return {

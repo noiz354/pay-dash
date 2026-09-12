@@ -28,6 +28,8 @@ import {
   getInvoiceTimeline,
   getInvoiceTransactions,
 } from "@/server/data/invoices";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 
 // Invoice detail — the destination the prototype already linked to
 // (`/billing/[id]`) but never created.
@@ -37,7 +39,8 @@ type Params = Promise<{ locale: string; id: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;
-  const invoice = await getInvoice(decodeURIComponent(id));
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const invoice = await getInvoice(scope, decodeURIComponent(id));
   return { title: `${invoice?.number ?? id} — Invoice — Kinetic Ledger` };
 }
 
@@ -61,20 +64,23 @@ async function BilledTransactions({ id }: { id: string }) {
 }
 
 async function LineItems({ id }: { id: string }) {
-  const [invoice, items] = await Promise.all([getInvoice(id), getInvoiceLineItems(id)]);
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const [invoice, items] = await Promise.all([getInvoice(scope, id), getInvoiceLineItems(scope, id)]);
   if (!invoice) return null;
   return <InvoiceLineItems items={items} invoice={invoice} />;
 }
 
 async function Timeline({ id }: { id: string }) {
-  const events = await getInvoiceTimeline(id);
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const events = await getInvoiceTimeline(scope, id);
   return <InvoicePaymentTimeline events={events} />;
 }
 
 export default async function InvoiceDetailPage({ params }: { params: Params }) {
   const { id: rawId } = await params;
   const id = decodeURIComponent(rawId);
-  const invoice = await getInvoice(id);
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const invoice = await getInvoice(scope, id);
   if (!invoice) notFound();
 
   return (

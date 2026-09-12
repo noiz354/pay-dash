@@ -35,8 +35,8 @@ import type {
   RefundRecord,
   StatusTransition,
 } from "@/domain/finance/ledger";
-import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 import { getLedgerRows, type Transaction } from "@/server/data/transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 import { getPayoutBatches } from "@/server/data/payouts";
 import { getBalanceOverview, listMovements, OPENING_BALANCE } from "@/server/data/balance";
 
@@ -163,13 +163,13 @@ function transitionsFrom(rows: readonly Transaction[]): StatusTransition[] {
  * movement rules. A divergence means the balance page and its data source
  * disagree — precisely the class of bug ADR-0011 was written to eliminate.
  */
-async function settlementTotals(): Promise<{ settledInflow: Minor; settledOutflow: Minor }> {
+async function settlementTotals(scope: TenantScope): Promise<{ settledInflow: Minor; settledOutflow: Minor }> {
   // Enumerate the balance module's OWN movement list — the same rows the
   // /balance page renders — rather than re-implementing its derivation here.
   // Two independent implementations of one rule is how a checker ends up
   // agreeing with a bug. `listMovements` with a large page size and no filter
   // returns the complete movement set.
-  const { rows } = await listMovements({ range: "all", pageSize: 100_000, page: 1 });
+  const { rows } = await listMovements(scope, { range: "all", pageSize: 100_000, page: 1 });
 
   let inflow = 0;
   let outflow = 0;
@@ -198,14 +198,14 @@ async function settlementTotals(): Promise<{ settledInflow: Minor; settledOutflo
  * makes the store scoped; this function's signature does not change when it does.
  */
 export async function buildLedgerSnapshot(
-  organizationId: string = DEFAULT_DEMO_ORG,
+  scope: TenantScope,
   now: Date = new Date(),
 ): Promise<SnapshotBuildResult> {
-  const rows = getLedgerRows();
-  const overview = await getBalanceOverview();
+  const rows = getLedgerRows(scope);
+  const overview = await getBalanceOverview(scope);
 
   const opening = OPENING_BALANCE;
-  const { settledInflow, settledOutflow } = await settlementTotals();
+  const { settledInflow, settledOutflow } = await settlementTotals(scope);
 
   const balance: BalanceAssertion = {
     opening: fromLegacyNumber(opening, CURRENCY),
@@ -214,7 +214,7 @@ export async function buildLedgerSnapshot(
   };
 
   const snapshot: LedgerSnapshot = {
-    organizationId,
+    organizationId: scope.organizationId,
     currency: CURRENCY,
     asOf: now.toISOString(),
     // No posting table exists yet — see the module docblock. Emitting nothing is

@@ -9,6 +9,8 @@ import { LinksKindTabs } from "@/components/links/links-kind-tabs";
 import { CreateLinkDialog } from "@/components/links/create-link-dialog";
 import { listLinks } from "@/server/data/links";
 import type { LinkKind } from "@/server/data/links";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { LINK_STATUSES } from "@/lib/link-status";
 import type { LinkStatus } from "@/lib/link-status";
 
@@ -41,11 +43,12 @@ function statusOf(v: string | undefined): LinkStatus | "all" {
 // Awaited inside the streaming child; a stable key on the Suspense boundary
 // (see the page export) makes filter changes re-fire with a skeleton.
 async function LinksList({ searchParams, kind }: { searchParams: SearchParams; kind: LinkKind }) {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const sp = await searchParams;
   const q = one(sp.q) ?? "";
   const status = statusOf(one(sp.status));
 
-  const data = listLinks({
+  const data = listLinks(scope, {
     q,
     status,
     kind,

@@ -12,6 +12,8 @@ import { InvoiceFilters } from "@/components/billing/invoice-filters";
 import { InvoicesTable } from "@/components/billing/invoices-table";
 import { SavePaymentMethodDialog } from "@/components/billing/save-payment-method-dialog";
 import { getBillingSummary, listInvoices } from "@/server/data/invoices";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import type { InvoiceStatus } from "@/lib/invoice-status";
 
 // Billing & Invoices — screens/desktop/billing_invoices.
@@ -31,8 +33,8 @@ function one(v: string | string[] | undefined) {
 }
 
 async function SummaryRow() {
-  const summary = await getBillingSummary();
-  const { rows } = await listInvoices({ status: "ALL", sort: "due", pageSize: 100 });
+  const summary = await getBillingSummary(scope);
+  const { rows } = await listInvoices(scope, { status: "ALL", sort: "due", pageSize: 100 });
   const payable = rows.filter((i) => i.status === "OVERDUE" || i.status === "PENDING");
   const overdue = rows.find((i) => i.status === "OVERDUE") ?? null;
 
@@ -46,7 +48,8 @@ async function SummaryRow() {
 
 async function InvoiceHistory({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
-  const result = await listInvoices({
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const result = await listInvoices(scope, {
     q: one(sp.q) ?? "",
     status: (one(sp.status) as InvoiceStatus | "ALL") ?? "ALL",
     range: (one(sp.range) as "3m" | "6m" | "12m" | "all") ?? "all",

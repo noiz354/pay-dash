@@ -1,6 +1,17 @@
 import "server-only";
 
-import type { ProviderReadResult, ProviderTransaction } from "@/domain/payments/provider-read";
+import type { ProviderReadResult } from "@/domain/payments/provider-read";
+import {
+  assertTenantMatch,
+  belongsToScope,
+  scopeRecord,
+  scopeRecords,
+  tenantDenialEvent,
+  TenantIsolationError,
+  type TenantScope,
+} from "@/domain/security/tenant";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
+import { recordTenantDenial } from "./tenant-denials";
 import { SLA_BANDS, compareSla, evaluateSla, type SlaBand, type SlaEntityType } from "@/lib/sla";
 
 // ---------------------------------------------------------------------------
@@ -60,6 +71,8 @@ export type RefundRequest = {
 };
 
 export type Transaction = {
+  /** Wave 7A — owning tenant. Every read/write predicates on this field first. */
+  organizationId: string;
   id: string;
   referenceId: string;
   createdAt: string;
@@ -312,6 +325,7 @@ function seed(count = 46): Transaction[] {
     const createdAt = new Date(anchor.getTime() - i * (3.4 * 60 * 60 * 1000) - Math.floor(rng() * 90) * 60_000);
     const id = `txn_${Math.floor(mulberry32(i + 7)() * 1e12).toString(36).padStart(8, "0").slice(0, 10)}`;
     const partial: Omit<Transaction, "events"> = {
+      organizationId: SEED_ORGANIZATIONS[i % SEED_ORGANIZATIONS.length],
       id,
       referenceId: id,
       createdAt: createdAt.toISOString(),
@@ -346,35 +360,6 @@ function store(): Store {
 
 // --- reads -----------------------------------------------------------------
 
-/** Map a provider transaction to the UI `Transaction` DTO (live data source).
- *  UI-only enrichment fields get safe defaults; provider fields are authoritative. */
-function providerTransactionToRow(p: ProviderTransaction): Transaction {
-  const channel = (CHANNELS as readonly string[]).includes(p.channel) ? (p.channel as Channel) : "CARD";
-  return {
-    id: p.id,
-    referenceId: p.referenceId,
-    createdAt: p.at,
-    updatedAt: p.at,
-    amount: p.amount,
-    currency: p.currency,
-    fee: p.fee ?? 0,
-    net: p.net ?? p.amount,
-    status: p.status,
-    channel,
-    methodLabel: p.methodLabel,
-    customerName: p.customerName ?? "Live provider",
-    customerEmail: p.customerEmail ?? "",
-    description: p.description ?? "",
-    riskScore: 0,
-    refundedAmount: p.status === "REFUNDED" ? p.amount : 0,
-    // Provider rows carry no local dual-control state; the refund lifecycle is
-    // owned by this ledger, so a provider-sourced row starts clean.
-    refundState: "NONE",
-    refundRequest: null,
-    events: [{ id: `evt-${p.id}`, at: p.at, label: "Provider transaction", detail: p.status, kind: "info" }],
-  };
-}
-
 function withinRange(iso: string, range: TransactionFilters["range"], now: Date = new Date()): boolean {
   if (range === "all" || !range) return true;
   const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
@@ -385,11 +370,11 @@ function withinRange(iso: string, range: TransactionFilters["range"], now: Date 
  *  the SDK/client boundary which reads server env; in a non-server (jsdom test)
  *  context that import fails and we fall back to `{ connected: false }`. In the
  *  real server the SDK loads and the read reaches the provider. */
-async function tryProviderTransactions(): Promise<ProviderReadResult<ProviderTransaction[]>> {
+async function tryProviderTransactions(organizationId: string): Promise<ProviderReadResult<unknown>> {
   try {
     const { getProviderReadService } = await import("@/server/repositories/provider-read");
     const service = await getProviderReadService();
-    return await service.readTransactions();
+    return await service.readTransactions(organizationId);
   } catch {
     return { connected: false };
   }
@@ -407,7 +392,46 @@ export type ListTransactionsOptions = {
 
 const SLA_SORT_KEYS = ["date", "amount", "status", "sla"] as const;
 
-export async function listTransactions(filters: TransactionFilters = {}, options: ListTransactionsOptions = {}): Promise<Paginated<LedgerRow>> {
+// --- Wave 7A tenant helpers --------------------------------------------------
+
+/**
+ * Deterministic multi-org seed owners. org-a/org-b are the isolation-test pair;
+ * the demo slice keeps AUTH_ENFORCED=off dev parity (strict mode denies demo
+ * fallback regardless, so demo rows are never reachable in production).
+ */
+const SEED_ORGANIZATIONS = ["org-a", "org-b", DEFAULT_DEMO_ORG] as const;
+
+/**
+ * Resolve a mutable row for a write within `scope`.
+ * Missing → undefined (caller maps to NOT_FOUND, no enumeration oracle).
+ * Foreign → records a tenant-denial audit event and throws TenantIsolationError.
+ */
+function ownedRow(scope: TenantScope, id: string, surface: string): Transaction | undefined {
+  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+  if (!tx) return undefined;
+  if (!belongsToScope(scope, tx)) {
+    recordTenantDenial(tenantDenialEvent(surface, scope, tx.organizationId));
+    assertTenantMatch(scope, tx, surface);
+  }
+  return tx;
+}
+
+/**
+ * Reject a client-supplied organization claim that disagrees with the trusted scope.
+ * Ownership always comes from the scope; a mismatched claim is a denied write.
+ */
+function rejectClientOrganization(scope: TenantScope, surface: string, claimed: unknown): void {
+  if (typeof claimed === "string" && claimed.trim() !== "" && claimed !== scope.organizationId) {
+    recordTenantDenial(tenantDenialEvent(surface, scope, claimed));
+    throw new TenantIsolationError(
+      "CROSS_TENANT_WRITE",
+      { surface, actorOrg: scope.organizationId, requestedOrg: claimed },
+      `Refusing ${surface}: client-supplied organization ${claimed} does not match the session scope ${scope.organizationId}.`,
+    );
+  }
+}
+
+export async function listTransactions(scope: TenantScope, filters: TransactionFilters = {}, options: ListTransactionsOptions = {}): Promise<Paginated<LedgerRow>> {
   const { status = "ALL", channel = "ALL", range = "all", q = "", sort = "date", direction = "desc", refundState = "ALL", sla = "ALL" } = filters;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
@@ -464,21 +488,38 @@ export async function listTransactions(filters: TransactionFilters = {}, options
   // secret resolves for the org, provider transactions are authoritative. A
   // configured-but-failing provider propagates (never mocked); with no
   // connection the in-memory dev/demo ledger is the fallback.
-  const providerResult = await tryProviderTransactions();
+  // Wave 7A — the live provider path is tenant-BLOCKED until a per-org provider
+  // connection mapping proves ownership BEFORE fetch (attributing rows
+  // after fetch would launder a cross-tenant leak). A connected provider for
+  // this org therefore throws SPEC_GAP instead of merging rows.
+  const providerResult = await tryProviderTransactions(scope.organizationId);
   if (providerResult.connected) {
-    return finalize(providerResult.data.map(providerTransactionToRow));
+    recordTenantDenial(tenantDenialEvent("transactions.provider-read", scope, "provider:unattributed"));
+    throw new TenantIsolationError(
+      "PROVIDER_TENANT_GAP",
+      {
+        surface: "transactions.provider-read",
+        actorOrg: scope.organizationId,
+        requestedOrg: "provider:unattributed",
+      },
+      `Provider transaction read for ${scope.organizationId} is blocked: no per-organization provider connection mapping proves row ownership before fetch.`,
+    );
   }
 
-  return finalize(store().rows);
+  // Tenant predicate FIRST — search/filter/sort/pagination/aggregation below
+  // only ever see this org's rows.
+  return finalize(scopeRecords(scope, store().rows));
 }
 
-export async function getTransaction(id: string): Promise<Transaction | null> {
-  return store().rows.find((t) => t.id === id || t.referenceId === id) ?? null;
+export async function getTransaction(scope: TenantScope, id: string): Promise<Transaction | null> {
+  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+  // Anti-enumeration: foreign and absent are indistinguishable (null).
+  return scopeRecord(scope, tx);
 }
 
 /** Detail-page read: the row plus its SLA view against one server instant. */
-export async function getTransactionWithSla(id: string, now: Date = new Date()): Promise<LedgerRow | null> {
-  const tx = await getTransaction(id);
+export async function getTransactionWithSla(scope: TenantScope, id: string, now: Date = new Date()): Promise<LedgerRow | null> {
+  const tx = await getTransaction(scope, id);
   if (!tx) return null;
   return { ...tx, ...evaluateTransactionSla(tx, now) };
 }
@@ -487,8 +528,8 @@ export async function getTransactionWithSla(id: string, now: Date = new Date()):
  * Read-only view of the whole ledger for derived data sources (the balance
  * module, ADR-0011). Rows are copies; callers must not mutate them.
  */
-export function getLedgerRows(): Transaction[] {
-  return store().rows.map((t) => ({ ...t }));
+export function getLedgerRows(scope: TenantScope): Transaction[] {
+  return scopeRecords(scope, store().rows).map((t) => ({ ...t }));
 }
 
 export type LedgerMetrics = {
@@ -504,8 +545,8 @@ export type LedgerMetrics = {
   total: number;
 };
 
-export async function getLedgerMetrics(): Promise<LedgerMetrics> {
-  const rows = store().rows;
+export async function getLedgerMetrics(scope: TenantScope): Promise<LedgerMetrics> {
+  const rows = scopeRecords(scope, store().rows);
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
   const current = rows.filter((t) => now - new Date(t.createdAt).getTime() <= 7 * day);
@@ -541,8 +582,8 @@ export async function getLedgerMetrics(): Promise<LedgerMetrics> {
 
 export type AnalyticsPoint = { date: string; total: number; succeeded: number; failed: number };
 
-export async function getAnalyticsSeries(days = 7): Promise<AnalyticsPoint[]> {
-  const rows = store().rows;
+export async function getAnalyticsSeries(scope: TenantScope, days = 7): Promise<AnalyticsPoint[]> {
+  const rows = scopeRecords(scope, store().rows);
   const fmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", timeZone: "UTC" });
   const buckets: AnalyticsPoint[] = [];
   const today = new Date();
@@ -574,13 +615,21 @@ export type CreateTransactionInput = {
   customerEmail: string;
   description?: string;
   referenceId?: string;
+  /**
+   * Wave 7A — NEVER trusted. Carries a client-supplied organization claim (if
+   * any) so createTransaction can reject a cross-tenant mint instead of
+   * silently stripping it. Ownership always comes from the scope.
+   */
+  organizationId?: unknown;
 };
 
-export async function createTransaction(input: CreateTransactionInput): Promise<Transaction> {
+export async function createTransaction(scope: TenantScope, input: CreateTransactionInput): Promise<Transaction> {
+  rejectClientOrganization(scope, "transactions.create", input.organizationId);
   const now = new Date();
   const id = input.referenceId?.trim() || `txn_${now.getTime().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
   const fee = Math.round(input.amount * 0.029 + 2_000);
   const partial: Omit<Transaction, "events"> = {
+    organizationId: scope.organizationId,
     id,
     referenceId: id,
     createdAt: now.toISOString(),
@@ -606,8 +655,8 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
   return tx;
 }
 
-export async function refundTransaction(id: string, amount: number, reason: string): Promise<Transaction | null> {
-  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+export async function refundTransaction(scope: TenantScope, id: string, amount: number, reason: string): Promise<Transaction | null> {
+  const tx = ownedRow(scope, id, "transactions.refund");
   if (!tx) return null;
   const refunded = Math.min(tx.amount, tx.refundedAmount + amount);
   tx.refundedAmount = refunded;
@@ -676,14 +725,14 @@ function appendEvent(tx: Transaction, label: string, detail: string, kind: Trans
  * (`created: false`) rather than stacking a second queue item — a double submit
  * must not produce two approvals.
  */
-export async function requestRefund(input: {
+export async function requestRefund(scope: TenantScope, input: {
   transactionId: string;
   amount: number;
   reason: string;
   requestedBy: string;
   now?: Date;
 }): Promise<RefundRequestResult> {
-  const tx = store().rows.find((t) => t.id === input.transactionId || t.referenceId === input.transactionId);
+  const tx = ownedRow(scope, input.transactionId, "transactions.refund-request");
   if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   if (tx.status === "FAILED") {
     return { ok: false, code: "NOT_REFUNDABLE", message: "Failed payments cannot be refunded — retry it instead." };
@@ -754,12 +803,12 @@ export async function requestRefund(input: {
  * Role B approves the pending refund. Money moves only here, and only for an
  * actor distinct from the requester.
  */
-export async function approveRefund(input: {
+export async function approveRefund(scope: TenantScope, input: {
   transactionId: string;
   approvedBy: string;
   now?: Date;
 }): Promise<RefundDecisionResult> {
-  const tx = store().rows.find((t) => t.id === input.transactionId || t.referenceId === input.transactionId);
+  const tx = ownedRow(scope, input.transactionId, "transactions.refund-approve");
   if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   if (tx.refundState !== "AWAITING_APPROVAL" || !tx.refundRequest) {
     return { ok: false, code: "NOT_AWAITING", message: "This transaction has no refund awaiting approval." };
@@ -797,13 +846,13 @@ export async function approveRefund(input: {
 }
 
 /** Role B rejects the pending refund. No money moves. */
-export async function rejectRefund(input: {
+export async function rejectRefund(scope: TenantScope, input: {
   transactionId: string;
   rejectedBy: string;
   reason?: string;
   now?: Date;
 }): Promise<RefundDecisionResult> {
-  const tx = store().rows.find((t) => t.id === input.transactionId || t.referenceId === input.transactionId);
+  const tx = ownedRow(scope, input.transactionId, "transactions.refund-reject");
   if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   if (tx.refundState !== "AWAITING_APPROVAL" || !tx.refundRequest) {
     return { ok: false, code: "NOT_AWAITING", message: "This transaction has no refund awaiting approval." };
@@ -830,14 +879,14 @@ export async function rejectRefund(input: {
 }
 
 /** Role B's queue: every transaction with a refund awaiting a second approval. */
-export function listRefundsAwaiting(): Transaction[] {
-  return store()
-    .rows.filter((t) => t.refundState === "AWAITING_APPROVAL")
+export function listRefundsAwaiting(scope: TenantScope): Transaction[] {
+  return scopeRecords(scope, store().rows)
+    .filter((t) => t.refundState === "AWAITING_APPROVAL")
     .sort((a, b) => (a.refundRequest?.requestedAt ?? "").localeCompare(b.refundRequest?.requestedAt ?? ""));
 }
 
-export async function retryTransaction(id: string): Promise<Transaction | null> {
-  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+export async function retryTransaction(scope: TenantScope, id: string): Promise<Transaction | null> {
+  const tx = ownedRow(scope, id, "transactions.retry");
   if (!tx) return null;
   tx.status = "PROCESSING";
   tx.updatedAt = new Date().toISOString();
@@ -870,8 +919,8 @@ export type RetryResult =
  * moved since the viewer saw it, refuse with CONFLICT instead of applying a
  * blind mutation on top of someone else's change.
  */
-export async function retryTransactionWithVersion(id: string, expectedUpdatedAt?: string | null): Promise<RetryResult> {
-  const tx = store().rows.find((t) => t.id === id || t.referenceId === id);
+export async function retryTransactionWithVersion(scope: TenantScope, id: string, expectedUpdatedAt?: string | null): Promise<RetryResult> {
+  const tx = ownedRow(scope, id, "transactions.retry");
   if (!tx) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   if (expectedUpdatedAt && tx.updatedAt !== expectedUpdatedAt) {
     return {
@@ -881,7 +930,7 @@ export async function retryTransactionWithVersion(id: string, expectedUpdatedAt?
       latest: { ...tx },
     };
   }
-  const retried = await retryTransaction(id);
+  const retried = await retryTransaction(scope, id);
   if (!retried) return { ok: false, code: "NOT_FOUND", message: "Transaction not found." };
   return { ok: true, transaction: retried };
 }

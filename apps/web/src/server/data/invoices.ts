@@ -1,6 +1,7 @@
 import "server-only";
 
 import { listTransactions, type Transaction } from "./transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 import { getMerchantProfile } from "./settings";
 import { INVOICE_STATUSES, isPayable, type InvoiceStatus } from "@/lib/invoice-status";
 
@@ -190,8 +191,8 @@ function billableRows(rows: Transaction[]) {
   return rows.filter((t) => t.status === "SUCCEEDED" || t.status === "REFUNDED");
 }
 
-async function allLedgerRows(): Promise<Transaction[]> {
-  const { rows } = await listTransactions({ page: 1, pageSize: 100 });
+async function allLedgerRows(scope: TenantScope): Promise<Transaction[]> {
+  const { rows } = await listTransactions(scope, { page: 1, pageSize: 100 });
   return rows;
 }
 
@@ -216,8 +217,8 @@ function applyPayment(invoice: Invoice): Invoice {
 
 // --- derivation -------------------------------------------------------------
 
-async function buildInvoices(): Promise<Invoice[]> {
-  const rows = await allLedgerRows();
+async function buildInvoices(scope: TenantScope): Promise<Invoice[]> {
+  const rows = await allLedgerRows(scope);
   const byMonth = new Map<string, Transaction[]>();
   for (const t of billableRows(rows)) {
     const key = monthKey(t.createdAt);
@@ -266,13 +267,13 @@ async function buildInvoices(): Promise<Invoice[]> {
 
 // --- reads ------------------------------------------------------------------
 
-export async function listInvoices(filters: InvoiceFilters = {}): Promise<PaginatedInvoices> {
+export async function listInvoices(scope: TenantScope, filters: InvoiceFilters = {}): Promise<PaginatedInvoices> {
   const { q = "", status = "ALL", range = "all", sort = "recent" } = filters;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
 
-  const all = await buildInvoices();
+  const all = await buildInvoices(scope);
   const cutoff =
     range === "all" ? 0 : Date.now() - { "3m": 90, "6m": 180, "12m": 365 }[range] * 86_400_000;
 
@@ -304,16 +305,16 @@ export async function listInvoices(filters: InvoiceFilters = {}): Promise<Pagina
   };
 }
 
-export async function getInvoice(id: string): Promise<Invoice | null> {
-  const all = await buildInvoices();
+export async function getInvoice(scope: TenantScope, id: string): Promise<Invoice | null> {
+  const all = await buildInvoices(scope);
   return all.find((i) => i.id === id || i.number === id) ?? null;
 }
 
 /** Transactions whose fees make up an invoice — the "show your work" link. */
-export async function getInvoiceTransactions(id: string): Promise<Transaction[]> {
-  const invoice = await getInvoice(id);
+export async function getInvoiceTransactions(scope: TenantScope, id: string): Promise<Transaction[]> {
+  const invoice = await getInvoice(scope, id);
   if (!invoice) return [];
-  const rows = await allLedgerRows();
+  const rows = await allLedgerRows(scope);
   const from = new Date(invoice.periodStart).getTime();
   const to = new Date(invoice.periodEnd).getTime();
   return billableRows(rows).filter((t) => {
@@ -322,11 +323,11 @@ export async function getInvoiceTransactions(id: string): Promise<Transaction[]>
   });
 }
 
-export async function getInvoiceLineItems(id: string): Promise<InvoiceLineItem[]> {
-  const invoice = await getInvoice(id);
+export async function getInvoiceLineItems(scope: TenantScope, id: string): Promise<InvoiceLineItem[]> {
+  const invoice = await getInvoice(scope, id);
   if (!invoice) return [];
 
-  const txns = await getInvoiceTransactions(id);
+  const txns = await getInvoiceTransactions(scope, id);
   if (txns.length === 0) {
     // Seeded (pre-ledger) invoices still deserve a breakdown rather than a
     // blank panel: reconstruct a plausible two-line summary from the totals.
@@ -373,8 +374,8 @@ export async function getInvoiceLineItems(id: string): Promise<InvoiceLineItem[]
     .sort((a, b) => b.amount - a.amount);
 }
 
-export async function getInvoiceTimeline(id: string): Promise<InvoicePaymentEvent[]> {
-  const invoice = await getInvoice(id);
+export async function getInvoiceTimeline(scope: TenantScope, id: string): Promise<InvoicePaymentEvent[]> {
+  const invoice = await getInvoice(scope, id);
   if (!invoice) return [];
 
   const events: InvoicePaymentEvent[] = [
@@ -443,8 +444,8 @@ export type BillingSummary = {
   lastPaidAt: string | null;
 };
 
-export async function getBillingSummary(): Promise<BillingSummary> {
-  const rows = billableRows(await allLedgerRows());
+export async function getBillingSummary(scope: TenantScope, ): Promise<BillingSummary> {
+  const rows = billableRows(await allLedgerRows(scope));
   const profile = await getMerchantProfile();
   const now = new Date();
   const thisKey = monthKey(now.toISOString());
@@ -457,7 +458,7 @@ export async function getBillingSummary(): Promise<BillingSummary> {
   const previous = sumFees(prevKey);
   const accruedDelta = previous ? ((accruedThisMonth - previous) / previous) * 100 : 0;
 
-  const invoices = await buildInvoices();
+  const invoices = await buildInvoices(scope);
   const outstanding = invoices.filter((i) => isPayable(i.status));
   const paid = invoices
     .filter((i) => i.status === "PAID")
@@ -483,8 +484,8 @@ export async function getBillingSummary(): Promise<BillingSummary> {
 
 export type PayInvoiceResult = { invoice: Invoice; reference: string };
 
-export async function payInvoice(id: string, method: string): Promise<PayInvoiceResult | null> {
-  const invoice = await getInvoice(id);
+export async function payInvoice(scope: TenantScope, id: string, method: string): Promise<PayInvoiceResult | null> {
+  const invoice = await getInvoice(scope, id);
   if (!invoice) return null;
   if (!isPayable(invoice.status)) {
     throw new Error(`Invoice ${invoice.number} is already ${invoice.status.toLowerCase()}`);
@@ -493,7 +494,7 @@ export async function payInvoice(id: string, method: string): Promise<PayInvoice
   const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
   store().payments[invoice.id] = { paidAt: new Date().toISOString(), method, reference };
 
-  const updated = await getInvoice(id);
+  const updated = await getInvoice(scope, id);
   if (!updated) return null;
   return { invoice: updated, reference };
 }
@@ -534,10 +535,10 @@ export function invoicesToCsv(rows: Invoice[]) {
 }
 
 /** Single-invoice statement used by the per-row download action. */
-export async function invoiceStatementCsv(id: string): Promise<string | null> {
-  const invoice = await getInvoice(id);
+export async function invoiceStatementCsv(scope: TenantScope, id: string): Promise<string | null> {
+  const invoice = await getInvoice(scope, id);
   if (!invoice) return null;
-  const items = await getInvoiceLineItems(id);
+  const items = await getInvoiceLineItems(scope, id);
   const escape = (v: string | number | null) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
   const head = [

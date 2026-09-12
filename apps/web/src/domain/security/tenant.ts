@@ -22,7 +22,7 @@
 
 export class TenantIsolationError extends Error {
   constructor(
-    readonly code: "CROSS_TENANT_WRITE" | "MISSING_SCOPE",
+    readonly code: "CROSS_TENANT_WRITE" | "MISSING_SCOPE" | "PROVIDER_TENANT_GAP",
     readonly detail: { surface: string; actorOrg: string; requestedOrg: string },
     message: string,
   ) {
@@ -58,6 +58,17 @@ export function tenantScope(organizationId: string): TenantScope {
 export type TenantOwned = { readonly organizationId: string };
 
 export function belongsToScope(scope: TenantScope, record: TenantOwned): boolean {
+  // Fail-closed: a missing or empty scope must throw (MISSING_SCOPE), never
+  // evaluate to false and never crash with a TypeError. Silence here would let
+  // an unscoped call path look tenant-safe while touching every tenant's rows.
+  const actorOrg = (scope as TenantScope | undefined | null)?.organizationId;
+  if (typeof actorOrg !== 'string' || actorOrg.trim() === '') {
+    throw new TenantIsolationError(
+      'MISSING_SCOPE',
+      { surface: 'belongsToScope', actorOrg: '', requestedOrg: record?.organizationId ?? 'unknown' },
+      'Refusing to evaluate tenant membership without a session-derived tenant scope.',
+    );
+  }
   return record.organizationId === scope.organizationId;
 }
 

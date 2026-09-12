@@ -4,6 +4,7 @@ import { authorizeOrgContext, demoOrgContext, PrismaOrgContextDb, buildOrgContex
 import { DEFAULT_DEMO_ORG as DEMO_ORGANIZATION_ID } from "@/domain/payments/runtime-defaults";
 import type { Permission } from "@/domain/organization/roles";
 import { loadLazyPrisma } from "@/server/repositories/prisma-runtime";
+import { tenantScope, type TenantScope } from "@/domain/security/tenant";
 
 /**
  * Resolve the authenticated session's organization context (multi-tenant.
@@ -112,3 +113,28 @@ export async function requireStrictOrgContext(permission: Permission, input?: { 
   return ctx;
 }
 
+/**
+ * Wave 7A — session-derived tenant scope for server actions that have no
+ * fitting RBAC permission (links, invoice pay, risk toggles, webhook replay).
+ * Resolves the session org, denies demo fallback unless AUTH_ENFORCED=off
+ * (same fail-closed rule as requireStrictOrgContext), and returns a branded
+ * TenantScope. Never synthesizes a tenant: no session + strict → throw.
+ */
+export async function actionScope(): Promise<TenantScope> {
+  const raw = process.env.AUTH_ENFORCED;
+  const mode = raw === "off" || raw === "0" || raw === "false" ? "off" : raw === "preview" ? "preview" : "strict";
+  const ctx = await resolveSessionOrgContext();
+  if (mode === "off") return tenantScope(ctx.organizationId);
+  if (mode === "preview") {
+    try {
+      const { headers } = await import("next/headers");
+      const h = await headers();
+      if (h.get("x-preview-bypass") === "1") return tenantScope(ctx.organizationId);
+    } catch {}
+  }
+  if (ctx.isDemoFallback) {
+    const { OrgContextError } = await import("./org-context");
+    throw new OrgContextError("FORBIDDEN", "Authentication required");
+  }
+  return tenantScope(ctx.organizationId);
+}

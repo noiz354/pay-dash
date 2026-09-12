@@ -1,5 +1,6 @@
 import "server-only";
 import { createTransaction, getLedgerRows } from "./transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 import { LINK_STATUSES } from "@/lib/link-status";
 import type { LinkStatus } from "@/lib/link-status";
 
@@ -188,17 +189,17 @@ export function deriveLinkStatus(link: PaymentLink, paidReferenceIds: ReadonlySe
   return "OPEN";
 }
 
-function paidReferenceIds(): Set<string> {
+function paidReferenceIds(scope: TenantScope): Set<string> {
   const ids = new Set<string>();
-  for (const t of getLedgerRows()) {
+  for (const t of getLedgerRows(scope)) {
     if (t.status === "SUCCEEDED" && t.referenceId) ids.add(t.referenceId);
   }
   return ids;
 }
 
-export function listLinks(filters: LinkFilters = {}): PaginatedLinks {
+export function listLinks(scope: TenantScope, filters: LinkFilters = {}): PaginatedLinks {
   const { q = "", status = "all", kind = "all", page = 1, pageSize = 10 } = filters;
-  const paid = paidReferenceIds();
+  const paid = paidReferenceIds(scope);
   const needle = q.trim().toLowerCase();
 
   const all = store().links
@@ -225,10 +226,10 @@ export function listLinks(filters: LinkFilters = {}): PaginatedLinks {
   };
 }
 
-export function getLink(id: string): LinkRow | null {
+export function getLink(scope: TenantScope, id: string): LinkRow | null {
   const link = store().links.find((l) => l.id === id.trim());
   if (!link) return null;
-  return { ...link, status: deriveLinkStatus(link, paidReferenceIds()), total: totalOf(link) };
+  return { ...link, status: deriveLinkStatus(link, paidReferenceIds(scope)), total: totalOf(link) };
 }
 
 export type CreateLinkInput = {
@@ -255,10 +256,10 @@ export function createLink(input: CreateLinkInput): PaymentLink {
   return { ...link, items: link.items.map((i) => ({ ...i })) };
 }
 
-export function expireLink(id: string): PaymentLink {
+export function expireLink(scope: TenantScope, id: string): PaymentLink {
   const link = store().links.find((l) => l.id === id.trim());
   if (!link) throw new Error("Unknown payment link.");
-  const status = deriveLinkStatus(link, paidReferenceIds());
+  const status = deriveLinkStatus(link, paidReferenceIds(scope));
   if (status === "CANCELLED") throw new Error("This link is already closed.");
   if (status === "PAID") throw new Error("A paid link cannot be expired — the money already moved.");
   if (status === "EXPIRED") throw new Error("This link has already expired.");
@@ -273,14 +274,14 @@ export function expireLink(id: string): PaymentLink {
  * which is what flips the derived status to PAID. The mutation mirrors how
  * `retryTransaction`/`refundTransaction` update rows in place.
  */
-export async function recordLinkPayment(id: string): Promise<{ link: PaymentLink; transactionId: string; total: number }> {
+export async function recordLinkPayment(scope: TenantScope, id: string): Promise<{ link: PaymentLink; transactionId: string; total: number }> {
   const link = store().links.find((l) => l.id === id.trim());
   if (!link) throw new Error("Unknown payment link.");
-  const status = deriveLinkStatus(link, paidReferenceIds());
+  const status = deriveLinkStatus(link, paidReferenceIds(scope));
   if (status !== "OPEN") throw new Error(`Only open links can be paid — this one is ${status.toLowerCase()}.`);
 
   const total = totalOf(link);
-  const tx = await createTransaction({
+  const tx = await createTransaction(scope, {
     amount: total,
     currency: CURRENCY,
     channel: "CARD",

@@ -8,6 +8,8 @@ import { getBalanceOverview } from "@/server/data/balance";
 import { getPayoutsOverview } from "@/server/data/payouts";
 import { getRiskOverview } from "@/server/data/risk";
 import { getLedgerMetrics, listTransactions } from "@/server/data/transactions";
+import { tenantScope } from "@/domain/security/tenant";
+import { resolveSessionOrgContext } from "@/server/services/session-org-context";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
 
 export const dynamic = "force-dynamic";
@@ -30,13 +32,14 @@ function SignalCard({ label, value, detail, icon }: { label: string; value: stri
 }
 
 export default async function MerchantOpsCopilotPage() {
+  const scope = tenantScope((await resolveSessionOrgContext()).organizationId);
   const [metrics, balance, payouts, risk, webhooks, failed] = await Promise.all([
-    getLedgerMetrics(),
-    getBalanceOverview(),
+    getLedgerMetrics(scope),
+    getBalanceOverview(scope),
     getPayoutsOverview(),
-    getRiskOverview(),
+    getRiskOverview(scope),
     Promise.resolve(getSystemWebhookSummary()),
-    listTransactions({ status: "FAILED", pageSize: 5 }),
+    listTransactions(scope, { status: "FAILED", pageSize: 5 }),
   ]);
 
   const failedRows = failed.rows

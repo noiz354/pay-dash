@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { OrgContextError } from "@/server/services/org-context";
 import { requireStrictOrgContext, resolveSessionOrgContext } from "@/server/services/session-org-context";
+import { tenantScope } from "@/domain/security/tenant";
 import { hasPermission } from "@/domain/organization/roles";
 import { requiresDualControl, isApproverDistinct } from "@/domain/security/step-up";
 import {
@@ -54,8 +55,9 @@ export async function createTransactionAction(
   formData: FormData
 ): Promise<ActionState<{ id: string }>> {
   // BE-003/BE-002: enforce money-in permission fail-closed (JRN-002)
+  let moneyInCtx: Awaited<ReturnType<typeof requireStrictOrgContext>>;
   try {
-    await requireStrictOrgContext("money_in.create");
+    moneyInCtx = await requireStrictOrgContext("money_in.create");
   } catch (e) {
     if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to create payments." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
@@ -78,7 +80,10 @@ export async function createTransactionAction(
   }
 
   try {
-    const tx = await createTransaction(parsed.data);
+    const tx = await createTransaction(tenantScope(moneyInCtx.organizationId), {
+      ...parsed.data,
+      organizationId: formData.get("organizationId"),
+    });
     revalidatePath("/[locale]/dashboard", "page");
     revalidatePath("/[locale]/transactions", "page");
     return {
@@ -119,7 +124,9 @@ export async function refundTransactionAction(
     };
   }
 
-  const existing = await getTransaction(parsed.data.id);
+  // Scoped read — foreign ids are indistinguishable from missing ones.
+  const readScope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  const existing = await getTransaction(readScope, parsed.data.id);
   if (!existing) return { status: "error", message: "Transaction not found." };
   if (existing.status === "FAILED") {
     return { status: "error", message: "Failed payments cannot be refunded — retry it instead." };
@@ -203,7 +210,8 @@ export async function refundTransactionAction(
     return { status: "error", message: error instanceof Error ? error.message : "Refund failed." };
   }
 
-  await refundTransaction(parsed.data.id, parsed.data.amount, parsed.data.reason ?? "");
+  const refundScope = tenantScope((await resolveSessionOrgContext()).organizationId);
+  await refundTransaction(refundScope, parsed.data.id, parsed.data.amount, parsed.data.reason ?? "");
   revalidatePath("/[locale]/transactions/[id]", "page");
   revalidatePath("/[locale]/transactions", "page");
   revalidatePath("/[locale]/dashboard", "page");
@@ -215,8 +223,9 @@ export async function retryTransactionAction(
   formData: FormData
 ): Promise<ActionState> {
   // BE-003: retry requires money-in permission (resubmit)
+  let retryCtx: Awaited<ReturnType<typeof requireStrictOrgContext>>;
   try {
-    await requireStrictOrgContext("money_in.create");
+    retryCtx = await requireStrictOrgContext("money_in.create");
   } catch (e) {
     if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payments." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
@@ -228,7 +237,7 @@ export async function retryTransactionAction(
   // rendered. If the row moved since then, the server refuses with a conflict
   // payload instead of applying a blind mutation.
   const expectedUpdatedAt = (formData.get("expectedUpdatedAt") as string | null) || null;
-  const result = await retryTransactionWithVersion(id, expectedUpdatedAt);
+  const result = await retryTransactionWithVersion(tenantScope(retryCtx.organizationId), id, expectedUpdatedAt);
   if (!result.ok) {
     if (result.code === "CONFLICT") {
       return {
@@ -322,7 +331,7 @@ export async function requestRefundAction(
     };
   }
 
-  const result = await requestRefund({
+  const result = await requestRefund(tenantScope(ctx.organizationId), {
     transactionId: parsed.data.id,
     amount: parsed.data.amount,
     reason: parsed.data.reason ?? "",
@@ -364,7 +373,7 @@ export async function approveRefundAction(
     };
   }
 
-  const result = await approveRefund({ transactionId: parsed.data.id, approvedBy: ctx.userId ?? "unknown" });
+  const result = await approveRefund(tenantScope(ctx.organizationId), { transactionId: parsed.data.id, approvedBy: ctx.userId ?? "unknown" });
   if (!result.ok) return { status: "error", message: result.message };
 
   revalidateRefundSurfaces();
@@ -392,7 +401,7 @@ export async function rejectRefundAction(
     };
   }
 
-  const result = await rejectRefund({
+  const result = await rejectRefund(tenantScope(ctx.organizationId), {
     transactionId: parsed.data.id,
     rejectedBy: ctx.userId ?? "unknown",
     reason: parsed.data.reason,

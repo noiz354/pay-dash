@@ -14,6 +14,8 @@ import { __resetHandoffStore, openHandoff, rolesWithPermission, type OpenHandoff
 import { getCommandCenter, toDto, worstBand, type CommandCenterSnapshot } from "./command-center";
 import { getPayoutBatches } from "./payouts";
 import { listTransactions, requestRefund } from "./transactions";
+import { tenantScope } from "@/domain/security/tenant";
+const SCOPE = tenantScope("org-a");
 
 // Wave 4 §2 — the Command Center.
 //
@@ -67,7 +69,7 @@ function staleInvite(): OpenHandoffInput {
 
 describe("lane structure", () => {
   it("returns exactly the six spec §7 lanes, keyed and ordered", async () => {
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
     expect(Object.keys(cc.lanes)).toEqual(COMMAND_CENTER_LANES);
     expect(COMMAND_CENTER_LANES).toEqual([
       "critical",
@@ -82,7 +84,7 @@ describe("lane structure", () => {
   });
 
   it("gives every item a deep link, a tone and a concrete sample", async () => {
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
     let seen = 0;
     for (const lane of COMMAND_CENTER_LANES) {
       for (const item of laneOf(cc, lane)) {
@@ -105,7 +107,7 @@ describe("lane structure", () => {
   });
 
   it("keeps PII out of the sample labels (spec §26)", async () => {
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
     for (const lane of COMMAND_CENTER_LANES) {
       for (const item of laneOf(cc, lane)) {
         for (const sample of item.samples) {
@@ -119,7 +121,7 @@ describe("lane structure", () => {
 
   it("sorts each lane worst-first", async () => {
     openHandoff(staleInvite(), NOW);
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
     for (const lane of COMMAND_CENTER_LANES) {
       const items = laneOf(cc, lane);
       for (let i = 1; i < items.length; i += 1) {
@@ -137,8 +139,8 @@ describe("permission awareness (§2)", () => {
     );
     if (!hasFailedRecipient) return;
 
-    const owner = await getCommandCenter(["OWNER"], NOW);
-    const support = await getCommandCenter(["SUPPORT"], NOW);
+    const owner = await getCommandCenter(SCOPE, ["OWNER"], NOW);
+    const support = await getCommandCenter(SCOPE, ["SUPPORT"], NOW);
     expect(itemOf(owner, "failed", "failed-recipients")?.canAct).toBe(true);
     expect(itemOf(support, "failed", "failed-recipients")?.canAct).toBe(false);
     // Still shown — hiding it recreates the dead end §4 forbids.
@@ -148,8 +150,8 @@ describe("permission awareness (§2)", () => {
   it("derives canAct for the aggregated handoff lanes from the underlying handoffs", async () => {
     openHandoff(staleInvite(), NOW);
     const able = rolesWithPermission("team.manage");
-    const owner = await getCommandCenter(["OWNER"], NOW);
-    const support = await getCommandCenter(["SUPPORT"], NOW);
+    const owner = await getCommandCenter(SCOPE, ["OWNER"], NOW);
+    const support = await getCommandCenter(SCOPE, ["SUPPORT"], NOW);
 
     // `critical-sla` / `overdue-handoffs` have a null permission because they
     // aggregate journeys; the override makes them truthful anyway.
@@ -162,14 +164,14 @@ describe("permission awareness (§2)", () => {
   });
 
   it("counts a real two-phase refund as pending approval for the approver only", async () => {
-    const { rows } = await listTransactions({ pageSize: 50, page: 1 });
+    const { rows } = await listTransactions(SCOPE, { pageSize: 50, page: 1 });
     const row = rows.find((t) => t.status !== "FAILED" && t.refundedAmount === 0);
     expect(row).toBeDefined();
     if (!row) return;
-    await requestRefund({ transactionId: row.id, amount: 5_000, reason: "Duplicate", requestedBy: AGUS, now: NOW });
+    await requestRefund(SCOPE, { transactionId: row.id, amount: 5_000, reason: "Duplicate", requestedBy: AGUS, now: NOW });
 
-    const admin = await getCommandCenter(["FINANCE_ADMIN"], NOW);
-    const support = await getCommandCenter(["SUPPORT"], NOW);
+    const admin = await getCommandCenter(SCOPE, ["FINANCE_ADMIN"], NOW);
+    const support = await getCommandCenter(SCOPE, ["SUPPORT"], NOW);
     const adminCard = itemOf(admin, "pending_approval", "pending-handoffs");
     expect(adminCard).toBeDefined();
     expect(adminCard?.canAct).toBe(true);
@@ -179,7 +181,7 @@ describe("permission awareness (§2)", () => {
   });
 
   it("reports allClear only when no exception lane has work", async () => {
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
     expect(cc.allClear).toBe(cc.totals.exceptions === 0);
     // The demo ledger always has exceptions; if that ever changes this asserts
     // the celebrate state is reached rather than stuck on.
@@ -193,7 +195,7 @@ describe("permission awareness (§2)", () => {
 describe("totals and the overdue cross-cut", () => {
   it("sums the exception lanes and excludes the overdue cross-cut", async () => {
     openHandoff(staleInvite(), NOW);
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
 
     for (const lane of COMMAND_CENTER_LANES) {
       expect(cc.totals[lane]).toBe(laneOf(cc, lane).reduce((sum, i) => sum + i.count, 0));
@@ -212,7 +214,7 @@ describe("totals and the overdue cross-cut", () => {
 
   it("exposes the worst band for the page banner", async () => {
     openHandoff(staleInvite(), NOW);
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
     expect(worstBand(cc)).toBe("CRITICAL");
   });
 
@@ -243,7 +245,7 @@ function emptySnapshot(): CommandCenterSnapshot {
 
 describe("client DTO (§8 — polled over the wire)", () => {
   it("survives JSON round-tripping into the shape the client validates", async () => {
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
     const json = JSON.parse(JSON.stringify(toDto(cc)));
     expect(isCommandCenterDto(json)).toBe(true);
     expect(json.generatedAt).toBe(cc.generatedAt);
@@ -278,7 +280,7 @@ describe("recently completed — proof the queue drains", () => {
     const { completeHandoff } = await import("./handoff-store");
     completeHandoff(tracked.id, { actor: "persona_hendri", outcome: "approved", enforceDistinctActor: true, now: NOW });
 
-    const cc = await getCommandCenter(["OWNER"], NOW);
+    const cc = await getCommandCenter(SCOPE, ["OWNER"], NOW);
     const recent = itemOf(cc, "recently_completed", "recently-completed");
     expect(recent?.samples).toContain("inv_stale");
     // Nothing in the lane may be older than the window it advertises.

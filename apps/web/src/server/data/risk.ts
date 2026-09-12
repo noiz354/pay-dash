@@ -15,6 +15,7 @@ import "server-only";
 
 import { HIGH_RISK_SCORE, VOLUME_ALERT_PCT } from "@/lib/risk-options";
 import { getLedgerRows, type Transaction } from "./transactions";
+import type { TenantScope } from "@/domain/security/tenant";
 
 export { HIGH_RISK_SCORE, VOLUME_ALERT_PCT } from "@/lib/risk-options";
 
@@ -199,9 +200,9 @@ export function deriveAlerts(settings: RiskSettings, rows: Transaction[]): RiskA
   return alerts.sort((a, b) => b.at.localeCompare(a.at));
 }
 
-export async function getRiskOverview(): Promise<RiskOverview> {
+export async function getRiskOverview(scope: TenantScope): Promise<RiskOverview> {
   const s = store();
-  const rows = getLedgerRows();
+  const rows = getLedgerRows(scope);
 
   const dailyVolume24h = settleVolumeSince(rows, DAY_MS);
   const monthlyVolume30d = settleVolumeSince(rows, 30 * DAY_MS);

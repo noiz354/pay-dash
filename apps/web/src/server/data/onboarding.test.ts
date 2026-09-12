@@ -1,3 +1,4 @@
+import { tenantScope } from "@/domain/security/tenant";
 import { beforeEach, describe, expect, it } from "vitest";
 import { removeKycDocument, submitKycDocument } from "./kyc";
 import { getOnboardingStatus } from "./onboarding";
@@ -28,7 +29,7 @@ beforeEach(resetAllStores);
 
 describe("getOnboardingStatus — seeded world", () => {
   it("derives 4 sections in page order and a full app-owned progress", async () => {
-    const status = await getOnboardingStatus();
+    const status = await getOnboardingStatus(tenantScope("org-a"));
     expect(status.sections.map((s) => s.id)).toEqual(["profile", "compliance", "bank", "technical"]);
     expect(status.merchantName).toBe("Acme Corporation LLC");
     expect(status.trackedTotal).toBe(3);
@@ -38,7 +39,7 @@ describe("getOnboardingStatus — seeded world", () => {
   });
 
   it("derives the business profile checks from the merchant profile", async () => {
-    const status = await getOnboardingStatus();
+    const status = await getOnboardingStatus(tenantScope("org-a"));
     const profile = status.sections[0];
     expect(profile.badge).toBe("COMPLETED");
     expect(profile.href).toBe("/settings/merchant");
@@ -51,7 +52,7 @@ describe("getOnboardingStatus — seeded world", () => {
   });
 
   it("shows the real destination account, not an invented one", async () => {
-    const status = await getOnboardingStatus();
+    const status = await getOnboardingStatus(tenantScope("org-a"));
     const bank = status.sections[2];
     expect(bank.badge).toBe("COMPLETED");
     expect(bank.checks[0].detail).toBe("Bank Central Asia · **** 1234 (default)");
@@ -59,7 +60,7 @@ describe("getOnboardingStatus — seeded world", () => {
   });
 
   it("states the real API keys, webhook log and ledger facts", async () => {
-    const status = await getOnboardingStatus();
+    const status = await getOnboardingStatus(tenantScope("org-a"));
     const tech = status.sections[3];
     expect(tech.badge).toBe("COMPLETED");
     expect(tech.checks.map((c) => c.detail)).toEqual([
@@ -72,7 +73,7 @@ describe("getOnboardingStatus — seeded world", () => {
 
 describe("getOnboardingStatus — the compliance ruling", () => {
   it("never claims compliance COMPLETED and never counts it", async () => {
-    const status = await getOnboardingStatus();
+    const status = await getOnboardingStatus(tenantScope("org-a"));
     const compliance = status.sections[1];
     // Unseeded KYC: basic info complete, document not submitted.
     expect(compliance.badge).toBe("ACTION REQUIRED");
@@ -91,7 +92,7 @@ describe("getOnboardingStatus — the compliance ruling", () => {
       docType: "incorporation",
       jurisdiction: "US",
     });
-    const status = await getOnboardingStatus();
+    const status = await getOnboardingStatus(tenantScope("org-a"));
     const compliance = status.sections[1];
     expect(compliance.badge).toBe("REVIEW PENDING");
     expect(compliance.tone).toBe("pending");
@@ -101,7 +102,7 @@ describe("getOnboardingStatus — the compliance ruling", () => {
     expect(status.allDone).toBe(true);
 
     removeKycDocument();
-    const again = await getOnboardingStatus();
+    const again = await getOnboardingStatus(tenantScope("org-a"));
     expect(again.sections[1].badge).toBe("ACTION REQUIRED");
   });
 });
@@ -109,7 +110,7 @@ describe("getOnboardingStatus — the compliance ruling", () => {
 describe("getOnboardingStatus — live reads", () => {
   it("re-derives when the stores change", async () => {
     await createApiKey({ name: "Staging", environment: "TEST", scopes: ["read"] });
-    const status = await getOnboardingStatus();
+    const status = await getOnboardingStatus(tenantScope("org-a"));
     expect(status.sections[3].checks[0].detail).toBe("4 keys on file · 2 live, 2 sandbox");
     expect(status.progress).toBe(100);
   });
