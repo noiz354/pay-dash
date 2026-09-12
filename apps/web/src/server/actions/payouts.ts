@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseRecipientsCsv } from "@/lib/payout-csv";
 import { PAYOUT_CADENCES, WEEKDAYS, isValidAccountNumber, parseAmount } from "@/lib/payout-status";
+import { OrgContextError } from "@/server/services/org-context";
+import { requireStrictOrgContext } from "@/server/services/session-org-context";
 import {
   addBankAccount,
   approveBatch,
@@ -58,6 +60,14 @@ export async function createBatchAction(
   _prev: ActionState<{ id: string; recipients: number; amount: number }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string; recipients: number; amount: number }>> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.create");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to create payouts." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const parsed = CreateBatchSchema.safeParse({
     name: formData.get("name"),
     source: formData.get("source") ?? "Manual",
@@ -117,6 +127,14 @@ export async function approveBatchAction(
   _prev: ActionState<{ id: string; paid: number; failed: number }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string; paid: number; failed: number }>> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.release");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to release payouts." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const parsed = BatchConfirmSchema.safeParse({ id: formData.get("id"), confirm: formData.get("confirm") });
   if (!parsed.success) {
     return { status: "error", message: "Confirm before releasing funds.", fieldErrors: fieldErrorsOf(parsed.error) };
@@ -141,6 +159,14 @@ export async function cancelBatchAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.cancel");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to cancel payouts." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const parsed = BatchConfirmSchema.safeParse({ id: formData.get("id"), confirm: formData.get("confirm") });
   if (!parsed.success) {
     return { status: "error", message: "Confirm before cancelling.", fieldErrors: fieldErrorsOf(parsed.error) };
@@ -159,6 +185,14 @@ export async function retryBatchAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.retry");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payouts." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { status: "error", message: "Missing batch id." };
   try {
@@ -180,6 +214,14 @@ export async function retryRecipientAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.retry");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payouts." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const batchId = String(formData.get("batchId") ?? "").trim();
   const recipientId = String(formData.get("recipientId") ?? "").trim();
   if (!batchId || !recipientId) return { status: "error", message: "Missing recipient." };
@@ -221,6 +263,14 @@ export async function updatePayoutScheduleAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.create");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to update payout schedule." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const rawMinimum = String(formData.get("minimumAmount") ?? "");
   const minimumAmount = parseAmount(rawMinimum);
 
@@ -256,6 +306,14 @@ export async function setDestinationAccountAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.create");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to update payout settings." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const id = String(formData.get("accountId") ?? "").trim();
   if (!id) return { status: "error", message: "Choose an account." };
   try {
@@ -276,6 +334,14 @@ export async function toggleAutoWithdrawalAction(
   _prev: ActionState<{ automated: boolean }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ automated: boolean }>> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.create");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to toggle auto-withdrawal." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const enabled = formData.get("automated") === "on";
   try {
     const current = await getPayoutSettings();
@@ -304,6 +370,14 @@ export async function addBankAccountAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  try {
+    await requireStrictOrgContext("payout.create");
+  } catch (e) {
+    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to add bank accounts." };
+    return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
+  }
+
   const parsed = AddAccountSchema.safeParse({
     bank: formData.get("bank"),
     holder: formData.get("holder"),
