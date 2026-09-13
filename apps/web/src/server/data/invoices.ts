@@ -558,11 +558,11 @@ export type BillingSummary = {
 export async function getBillingSummary(ctx: OrganizationContext): Promise<BillingSummary> {
   scopeOf(ctx);
   const rows = billableRows(await scopedLedgerRows(ctx));
-  // Cross-slice dependency, recorded not fixed here: the merchant profile is the
-  // settings slice's record and is not tenant-scoped until Wave 7F. It supplies
-  // one boolean (`autoDebit`) — no invoice, fee or counterparty data — so the
-  // billing aggregate below stays single-tenant either way.
-  const profile = await getMerchantProfile();
+  // Wave 7F closed the cross-slice note 7D recorded here: the merchant profile
+  // is tenant-scoped now, so the `autoDebit` boolean below is *this* merchant's
+  // mandate rather than the demo persona's. A billing summary that claimed
+  // auto-debit because another tenant enabled it would be a money-shaped lie.
+  const profile = await getMerchantProfile(ctx);
   const now = new Date();
   const thisKey = monthKey(now.toISOString());
   const prevKey = monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15)).toISOString());

@@ -8,6 +8,7 @@ import { formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { getOnboardingStatus } from "@/server/data/onboarding";
 import { getPayoutSettings } from "@/server/data/payouts";
 import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 import { getRiskOverview } from "@/server/data/risk";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
 
@@ -64,8 +65,13 @@ function ReadinessSignal({ label, complete, detail }: { label: string; complete:
 
 export default async function LaunchReadinessAgentPage() {
   const { context: payoutContext } = await resolvePayoutOrganizationContext();
+  // Wave 7F: the readiness agent quotes the onboarding checklist, so it reads
+  // that checklist through the identity slice's own seam rather than assuming
+  // one process-wide merchant. Both seams resolve the same session tenant; each
+  // gates its demo fallback on its own stores.
+  const { context: identityContext } = await resolveIdentityOrganizationContext();
   const [onboarding, risk, webhooks, payoutSettings] = await Promise.all([
-    getOnboardingStatus(),
+    getOnboardingStatus(identityContext),
     getRiskOverview(),
     Promise.resolve(getSystemWebhookSummary()),
     getPayoutSettings(payoutContext),

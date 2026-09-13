@@ -2,7 +2,7 @@
 
 Date: 2026-09-13 · Branch: `wave-7d-derived-scoping` (main@a4b595a, Waves 7A/7B/7C PASS, 7D/7E Proposed)
 Predecessors: 7A Transactions, 7B Payouts+Refunds, 7C Customers (PASS) · 7D Billing (Proposed). Runs **before** 7E — this wave clears the `onboarding` entry in `LEGACY_LEDGER_SURFACES`, which 7E's ES-6 deletion needs (`WAVE_ROADMAP_7D_TO_11.md` §2.2–2.3)
-Status: **Proposed** · Follows ADR-0041/0042/0043 · Reuses `domain/tenancy/organization-context.ts` unchanged
+Status: **Implemented** (Wave 7F Q7, 2026-09-13 — see `WAVE_7F_IMPLEMENTATION_REPORT.md`, `IDENTITY_TENANT_ISOLATION_MATRIX.md`, `docs/adr/0046-identity-tenant-isolation.md`) · Follows ADR-0041/0042/0043/0044 · Reuses `domain/tenancy/organization-context.ts` unchanged
 
 ---
 
@@ -58,6 +58,17 @@ session-only resolution, fail-closed quarantine with surface-naming.
 
 ## 4. Quarantine design (one per DAL, established pattern)
 
+> **Outcome at Q2 (approved deviation, report §7.1).** All three modules were created, including the
+> conditional `kyc-unscoped.ts` — **earned** by `server/data/handoff.ts`, whose `kyc_review` lane
+> derives from the submission slot. Its creation is recorded in `WAVE_ROADMAP_7D_TO_11.md` §4.2 with
+> the forcing caller, as the last-resort rule below requires. Allowlists froze at exactly one surface
+> each: `LEGACY_TEAM_SURFACES = ["audit"]`, `LEGACY_SETTINGS_SURFACES = ["audit"]`,
+> `LEGACY_KYC_SURFACES = ["handoff"]`. Wiring `audit.ts` in-wave was not available: it is a Wave 7E
+> derived surface over four unscoped owners (ledger, payouts, webhooks, identity), so scoping it here
+> would have pulled 7E's whole retrofit into 7F. In the same commit one *legacy* allowlist shrank —
+> `LEGACY_LEDGER_SURFACES` 11 → 10 (`onboarding`, which now reads the scoped `getLedgerRows(ctx)`) and
+> S-2's `ALLOWED_UNSCOPED_CONSUMERS` 10 → 9 — the clearance §ES-6 needs.
+
 `server/data/team-unscoped.ts` + `server/data/settings-unscoped.ts` (+ `kyc-unscoped.ts`
 ONLY if a KYC caller cannot be wired in-wave — default = wire all four modules directly):
 `LEGACY_TEAM_SURFACES` / `LEGACY_SETTINGS_SURFACES` (seed at Q2, frozen, shrink-only) +
@@ -76,6 +87,15 @@ is itself recorded in the roadmap ledger with the caller that forced it.
 
 ## 5. Tests
 
+> **Outcome: 119 tests across 8 files** (drafted as "40-ish") — `team.tenant-isolation.test.ts` 20,
+> `settings.tenant-isolation.test.ts` 18, `kyc.tenant-isolation.test.ts` 11,
+> `onboarding.tenant-isolation.test.ts` 7, `identity-structural.test.ts` 31 (FS-1..FS-5),
+> `exports/team/route.tenant.test.ts` 6, `mcp/identity-tools.tenant.test.ts` 7,
+> `actions/identity.tenant.test.ts` 19; plus the 2 probe GAP rows flipped to CLOSED. The Q4.3 action
+> suite grew because verification found **16 identity actions with no permission check at all**
+> (report §2.3) — not listed in §3's P-1..P-10 — and each now needs a no-session, no-permission and
+> foreign-id case. Cell-by-cell evidence: `IDENTITY_TENANT_ISOLATION_MATRIX.md`.
+
 - **F-1..F-12** isolation: member list/detail, invite lands in caller org + invisible to B,
   role change/deactivate/reactivate own-vs-foreign, profile read/update, notification
   settings, API key listing scope, KYC submit/read/remove/completeness, onboarding status,
@@ -88,6 +108,12 @@ is itself recorded in the roadmap ledger with the caller that forced it.
 - Probe: identity GAP tests added in Q1, flipped to PASS in Q5.
 
 ## 6. Plan Q0..Q7 (serial, same gates)
+
+> **Executed as planned, all eight quarters, one commit.** Q6 reddened 8/8 mutations with no survivors
+> (`scripts/wave-7f-q6-mutations.py`). Q5 gates: full suite **1681 passed / 2 failed / 3 failed files**
+> (identical to the pre-existing baseline at `f7cb1e2`: 2 `balance.test.ts` clock-drift expectations +
+> 2 prisma-env-blocked MCP files), typecheck clean, lint 0 errors / 40 pre-existing warnings, probe
+> 13/13 with `gaps.length === 0`. Deviations recorded in `WAVE_7F_IMPLEMENTATION_REPORT.md` §7.
 
 Q0 spec (this doc) → Q1 5 failing test files (40-ish tests, red for missing ctx + identity
 GAPs) → Q2 scoped DALs + partitioned stores + seam + session wiring vs quarantine → Q3

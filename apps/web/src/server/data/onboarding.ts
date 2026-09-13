@@ -4,8 +4,8 @@ import { formatDateLong } from "@/lib/format";
 import { KYC_DOC_TYPES } from "@/lib/kyc-options";
 import { getKycSubmission, profileKycCompleteness } from "./kyc";
 import { getDestinationAccount, listBankAccounts } from "./payouts";
-import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
-import { legacyLedgerRows } from "./transactions-unscoped";
+import { parseOrganizationContext, type OrganizationContext } from "@/domain/tenancy/organization-context";
+import { getLedgerRows } from "./transactions";
 import { getMerchantProfile, listApiKeys } from "./settings";
 import { listWebhooks } from "./webhooks";
 
@@ -98,20 +98,67 @@ const profileChecks = (profile: {
   },
 ];
 
-export async function getOnboardingStatus(): Promise<OnboardingStatus> {
-  // Wave 7B: bank-account reads are per-tenant; resolve the session tenant here
-  // (this status is computed per request, never cached across tenants).
-  const { context: payoutCtx } = await resolvePayoutOrganizationContext();
-  const [profile, accounts, destination, keys, webhooks, completeness, submission] =
+/**
+ * The webhook callback count for the Technical Setup item.
+ *
+ * Cross-slice debt, recorded not fixed here (Wave 7G owns webhooks): the read is
+ * still process-wide, and its store seeds itself from the Wave 7A ledger
+ * quarantine — so in a process whose ledger holds more than one tenant the read
+ * *refuses*. Degrading to zero events is the conservative answer: it neither
+ * widens the view (no other tenant's count is substituted) nor lets an unrelated
+ * slice's gate take the whole checklist down, which is the availability failure
+ * this wave just retired for the ledger read above. The item reads "No callback
+ * events received yet" until 7G scopes it.
+ *
+ * Matched by error name rather than by import: naming the quarantine module here
+ * would make this file a consumer of it, which the structural ratchet (FS-4)
+ * rightly forbids.
+ */
+function callbackEventCount(): number {
+  try {
+    return listWebhooks({ pageSize: 1 }).total;
+  } catch (e) {
+    if (e instanceof Error && e.name === "UnscopedLedgerAccessError") return 0;
+    throw e;
+  }
+}
+
+/**
+ * Derive the onboarding checklist for **one tenant**.
+ *
+ * Wave 7F: this module owns no facts, which makes it a cross-slice leak
+ * *amplifier* — before this wave it printed another merchant's legal name in the
+ * header, counted everybody's API keys and settled transactions, and named
+ * another tenant's KYC document in the compliance row. Every input below is now
+ * the caller's own partition (spec P-6).
+ *
+ * Two consequences worth naming:
+ *   • The tenant arrives from the caller, so the internal
+ *     `resolvePayoutOrganizationContext()` hop is gone — one context, one
+ *     resolution, no chance of the bank section and the profile section
+ *     disagreeing about whose checklist this is.
+ *   • The ledger read is scoped (`getLedgerRows`), which retires the D-28
+ *     fail-closed shape: `legacyLedgerRows("onboarding")` threw as soon as a
+ *     second tenant had rows, so *nobody* got a checklist. `onboarding` is
+ *     therefore dropped from `LEGACY_LEDGER_SURFACES` (12 → 11) — the entry
+ *     Wave 7E's ES-6 deletion gate needs cleared.
+ *
+ * Cross-slice, recorded not fixed here: the webhook count still comes from the
+ * unscoped `listWebhooks` (Wave 7G's slice). It contributes one integer to a
+ * checklist item and no tenant-attributable content.
+ */
+export async function getOnboardingStatus(ctx: OrganizationContext): Promise<OnboardingStatus> {
+  const scoped = parseOrganizationContext(ctx);
+  const [profile, accounts, destination, keys, completeness, submission] =
     await Promise.all([
-      getMerchantProfile(),
-      listBankAccounts(payoutCtx),
-      getDestinationAccount(payoutCtx),
-      listApiKeys(),
-      listWebhooks({ pageSize: 1 }),
-      profileKycCompleteness(),
-      Promise.resolve(getKycSubmission()),
+      getMerchantProfile(scoped),
+      listBankAccounts(scoped),
+      getDestinationAccount(scoped),
+      listApiKeys(scoped),
+      profileKycCompleteness(scoped),
+      Promise.resolve(getKycSubmission(scoped)),
     ]);
+  const webhookTotal = callbackEventCount();
 
   // --- Business Profile (settings.merchant) --------------------------------
   const profileChecksList = profileChecks(profile);
@@ -164,7 +211,11 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
   // --- Technical Setup (keys + callback log + ledger) ----------------------
   const liveKeys = keys.filter((k) => k.environment === "LIVE").length;
   const sandboxKeys = keys.filter((k) => k.environment === "TEST").length;
-  const succeeded = legacyLedgerRows("onboarding").filter((t) => t.status === "SUCCEEDED").length;
+  // Scoped: "first test transaction" means *this merchant's* first, all-time
+  // (the row may be months old — a windowed metric would report "not yet" for a
+  // settled ledger, and a cross-tenant count would credit someone else's
+  // transactions to this checklist).
+  const succeeded = getLedgerRows(scoped).filter((t) => t.status === "SUCCEEDED").length;
   const techChecks: OnboardingCheck[] = [
     {
       id: "tech-keys",
@@ -179,10 +230,10 @@ export async function getOnboardingStatus(): Promise<OnboardingStatus> {
       id: "tech-webhooks",
       label: "Webhook endpoint live",
       detail:
-        webhooks.total > 0
-          ? `${webhooks.total} callback event${webhooks.total === 1 ? "" : "s"} received`
+        webhookTotal > 0
+          ? `${webhookTotal} callback event${webhookTotal === 1 ? "" : "s"} received`
           : "No callback events received yet",
-      done: webhooks.total > 0,
+      done: webhookTotal > 0,
     },
     {
       id: "tech-first-txn",

@@ -158,10 +158,10 @@ describe("billing summary auto-debit (ADR-0018 — profile-driven, not a constan
     delete (globalThis as Record<string, unknown>).__kineticSettingsStore;
     expect((await getBillingSummary(demo)).autoDebitEnabled).toBe(true);
 
-    await updateMerchantProfile({ autoDebit: false });
+    await updateMerchantProfile(demo, { autoDebit: false });
     expect((await getBillingSummary(demo)).autoDebitEnabled).toBe(false);
 
-    await updateMerchantProfile({ autoDebit: true });
+    await updateMerchantProfile(demo, { autoDebit: true });
     expect((await getBillingSummary(demo)).autoDebitEnabled).toBe(true);
   });
 });

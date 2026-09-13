@@ -3,6 +3,7 @@ import { Link } from "@/i18n/navigation";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { MerchantProfileForm } from "@/components/settings/merchant-profile-form";
 import { getMerchantProfile } from "@/server/data/settings";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 
 export const metadata: Metadata = {
   title: "Merchant Profile · Settings",
@@ -10,7 +11,11 @@ export const metadata: Metadata = {
 };
 
 export default async function MerchantProfilePage() {
-  const profile = await getMerchantProfile();
+  // Wave 7F: the form is pre-filled from *this* merchant's legal identity. A
+  // tenant that has saved nothing sees its own blank fields, never the demo
+  // persona's name, address and tax id waiting to be overwritten.
+  const { context } = await resolveIdentityOrganizationContext();
+  const profile = await getMerchantProfile(context);
 
   return (
     <main className="flex-1 flex flex-col min-h-screen bg-[var(--surface-canvas)]">

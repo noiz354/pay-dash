@@ -5,7 +5,7 @@ import { compareSla, evaluateSla, isOverdueBand, type SlaBand, type SlaEntityTyp
 import { legacyPayoutBatches } from "./payouts-unscoped";
 import { legacyLedgerRows, legacyRefundQueue } from "./transactions-unscoped";
 import { getRiskOverview } from "./risk";
-import { getKycSubmission } from "./kyc";
+import { legacyKycSubmission } from "./kyc-unscoped";
 import { listWebhooks } from "./webhooks";
 import {
   canActOnHandoff,
@@ -241,7 +241,10 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   }
 
   // 5. KYC document submitted and awaiting verification.
-  const kyc = getKycSubmission();
+  // Wave 7F: the KYC store is tenant-scoped now; handoff is a Wave 7E derived
+  // surface over four unscoped owners, so this read rides the slice quarantine
+  // (it refuses outright once a second tenant has submitted a document).
+  const kyc = legacyKycSubmission("handoff");
   if (kyc) {
     sources.push({
       journey: "kyc_review",

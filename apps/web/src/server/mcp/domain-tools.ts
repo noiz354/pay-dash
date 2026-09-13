@@ -258,8 +258,16 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
   );
   server.registerTool(
     "get_kyc_submission",
-    { title: "Get KYC submission", description: "Current KYC submission status.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getKycSubmission(), notImplementedPg("get_kyc_submission"))
+    {
+      title: "Get KYC submission",
+      description:
+        "Current KYC submission status **for the organization bound to this request**. A compliance document is PII about a legal entity, so an unbound request is refused rather than answered with somebody's document.",
+      inputSchema: sourceSchema,
+    },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getKycSubmission(scoped), notImplementedPg("get_kyc_submission"));
+    }
   );
   server.registerTool(
     "get_risk_overview",
@@ -285,19 +293,46 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
   );
   server.registerTool(
     "get_merchant_profile",
-    { title: "Get merchant profile", description: "Merchant profile settings.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getMerchantProfile(), notImplementedPg("get_merchant_profile"))
+    {
+      title: "Get merchant profile",
+      description:
+        "Merchant profile settings **for the organization bound to this request** — legal name, tax id and contact details of that tenant only.",
+      inputSchema: sourceSchema,
+    },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getMerchantProfile(scoped), notImplementedPg("get_merchant_profile"));
+    }
   );
   server.registerTool(
     "get_settings_overview",
-    { title: "Get settings overview", description: "High-level settings section summary.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getSettingsOverview(), notImplementedPg("get_settings_overview"))
+    {
+      title: "Get settings overview",
+      description:
+        "High-level settings section summary **for the organization bound to this request**. The counts are aggregates over that tenant's own keys, topics and IP rules — never a process-wide tally.",
+      inputSchema: sourceSchema,
+    },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getSettingsOverview(scoped), notImplementedPg("get_settings_overview"));
+    }
   );
   server.registerTool(
     "list_team_members",
-    { title: "List team members", description: "List organization members.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listMembers(asFilters<Parameters<typeof listMembers>[0]>({ page, pageSize })), notImplementedPg("list_team_members"))
+    {
+      title: "List team members",
+      description:
+        "List organization members **for the organization bound to this request**. Roles are per tenant: an Admin here is a stranger in any other organization.",
+      inputSchema: { ...pageSchema, ...sourceSchema },
+    },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(
+        input,
+        () => listMembers(scoped, asFilters<Parameters<typeof listMembers>[1]>({ page, pageSize })),
+        notImplementedPg("list_team_members"),
+      );
+    }
   );
   server.registerTool(
     "list_audit_events",
@@ -307,7 +342,15 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
   );
   server.registerTool(
     "get_onboarding_status",
-    { title: "Get onboarding status", description: "Merchant onboarding progress.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getOnboardingStatus(), notImplementedPg("get_onboarding_status"))
+    {
+      title: "Get onboarding status",
+      description:
+        "Merchant onboarding progress **for the organization bound to this request**. The checklist is derived from five stores, so an unbound request would print another merchant's profile, keys and compliance document.",
+      inputSchema: sourceSchema,
+    },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getOnboardingStatus(scoped), notImplementedPg("get_onboarding_status"));
+    }
   );
 }

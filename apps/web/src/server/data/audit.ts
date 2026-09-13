@@ -7,8 +7,8 @@ import { ROLE_LABELS } from "@/lib/team-roles";
 import { listBlocklist } from "./blocklist";
 import { legacyPayoutBatches } from "./payouts-unscoped";
 import { getRiskOverview } from "./risk";
-import { listApiKeys } from "./settings";
-import { listMembers } from "./team";
+import { legacyListApiKeys } from "./settings-unscoped";
+import { legacyListMembers } from "./team-unscoped";
 import { legacyLedgerRows } from "./transactions-unscoped";
 import { listWebhooks } from "./webhooks";
 
@@ -130,10 +130,13 @@ function syncEvents(): AuditEvent[] {
 /** The full derived event history, newest first. Read-only over the owners. */
 export async function getAuditEvents(): Promise<AuditEvent[]> {
   const [keys, blocklist, risk, members] = await Promise.all([
-    listApiKeys(),
+    // Wave 7F: the identity owners are tenant-scoped now; audit is a Wave 7E
+    // derived surface over four unscoped owners, so these two reads ride the
+    // slice quarantines (fail closed the moment a second tenant holds rows).
+    legacyListApiKeys("audit"),
     listBlocklist({ page: 1, pageSize: 100 }),
     getRiskOverview(),
-    listMembers({ page: 1, pageSize: 100 }),
+    legacyListMembers("audit", { page: 1, pageSize: 100 }),
   ]);
 
   const asyncEvents: AuditEvent[] = [];

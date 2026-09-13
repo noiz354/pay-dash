@@ -64,6 +64,7 @@ One file per decision: **Context / Decision / Alternatives / Trade-offs / Conseq
 | [0042](./0042-payout-tenant-isolation.md) | Payout tenant isolation on the Wave 7A contract | W7B |
 | [0043](./0043-customer-tenant-isolation.md) | Customer tenant isolation on the Wave 7A contract | W7C |
 | [0044](./0044-billing-tenant-isolation.md) | Billing tenant isolation on the Wave 7A contract — derived aggregates, composite month keys, tenant-before-write on `payInvoice` | W7D |
+| [0046](./0046-identity-tenant-isolation.md) | Identity & access tenant isolation on the Wave 7A contract — per-tenant roles, tenant-bound secrets, tenant-before-role-check on `changeMemberRole`, KYC PII as the highest confidentiality class | W7F |
 
 ## Reserved ADR numbers (Wave 7D–11 — allocated, files not yet written)
 
@@ -80,7 +81,7 @@ One file per decision: **Context / Decision / Alternatives / Trade-offs / Conseq
 |---|---|---|---|---|
 | 0044 | Billing tenant isolation (subscriptions + invoices; `payInvoice` money mutation, tenant-before-ledger-write) | W7D | `WAVE_7D_BILLING_SPEC.md` | **Written** — [0044-billing-tenant-isolation.md](./0044-billing-tenant-isolation.md), moved into the index above |
 | 0045 | Derived-surface tenant isolation + quarantine deletion criterion (delete is earned, not scheduled) | W7E | `WAVE_7E_DERIVED_SPEC.md` | Reserved — Proposed |
-| 0046 | Identity & access tenant isolation (team, settings, KYC, onboarding; tenant-before-role-check) | W7F | `WAVE_7F_IDENTITY_SPEC.md` | Reserved — Proposed |
+| 0046 | Identity & access tenant isolation (team, settings, KYC, onboarding; tenant-before-role-check) | W7F | `WAVE_7F_IDENTITY_SPEC.md` | **Written** — [0046-identity-tenant-isolation.md](./0046-identity-tenant-isolation.md), moved into the index above (0045 stays reserved for W7E, which runs after W7F) |
 | 0047 | Ingest & integrity tenant isolation (webhooks, idempotency keys, links, blocklist; attribution over silent pass) | W7G | `WAVE_7G_INGEST_SPEC.md` | Reserved — Proposed |
 | 0048 | Persistence tenant column + Postgres RLS as the second enforcer (defense in depth; closes D-26/D-27) | W7H | `WAVE_7H_PERSISTENCE_SPEC.md` | Reserved — Proposed |
 | 0049 | MCP & auth hardening (rate limits, call audit with digests, constant-time compare, token scopes) | W8 | `WAVE_8_MCP_AUTH_HARDENING_SPEC.md` | Reserved — Proposed |
