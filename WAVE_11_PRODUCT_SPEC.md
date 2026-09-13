@@ -80,5 +80,5 @@ shared: audit events for P-1/P-4 deploys and expiries.
 ## 6. Plan (serial, sub-slice order P-6, P-4, P-1, P-3, P-5, P-2 — deletions and crons first)
 
 Q0 spec (this doc) → Q1 failing tests per sub-slice → Q2–Q5 sub-slices in order (each:
-implement → wire → adjacent-test updates) → Q6 negatives above → Q7 report + ADR +
+implement → wire → adjacent-test updates) → Q6 negatives above → Q7 report + ADR-0051 +
 close D-10/D-11/D-12/D-13/D-15/D-16 + commit (up to six commits, one report).

@@ -61,3 +61,30 @@ One file per decision: **Context / Decision / Alternatives / Trade-offs / Conseq
 | ADR | Decision | Wave |
 |---|---|---|
 | [0041](./0041-canonical-tenant-scoping.md) | Canonical tenant scoping — required `OrganizationContext` at the data boundary, remainder quarantined fail-closed | W7A |
+| [0042](./0042-payout-tenant-isolation.md) | Payout tenant isolation on the Wave 7A contract | W7B |
+| [0043](./0043-customer-tenant-isolation.md) | Customer tenant isolation on the Wave 7A contract | W7C |
+
+## Reserved ADR numbers (Wave 7D–11 — allocated, files not yet written)
+
+> **Why this table exists.** Every one of the eight pending specs ends its Q7 with "report +
+> matrix + ADR" but none of them named a number, so two slices executed out of order (or in
+> parallel) would have collided on the same next free number. Numbers are therefore allocated
+> here **up front, in execution order**; each spec's Q7 line now cites its own number.
+> Rule: write the file at the reserved number when the wave's Q7 lands, then move the row into
+> the table above and delete it from this one. Do not renumber, do not reuse a number if a wave
+> is cancelled — mark the row `WITHDRAWN` and leave the gap (the register's auditability rule).
+> Execution order + dependencies: `WAVE_ROADMAP_7D_TO_11.md`.
+
+| ADR (reserved) | Decision (working title) | Wave | Spec | Status |
+|---|---|---|---|---|
+| 0044 | Billing tenant isolation (subscriptions + invoices; `payInvoice` money mutation, tenant-before-ledger-write) | W7D | `WAVE_7D_BILLING_SPEC.md` | Reserved — Proposed |
+| 0045 | Derived-surface tenant isolation + quarantine deletion criterion (delete is earned, not scheduled) | W7E | `WAVE_7E_DERIVED_SPEC.md` | Reserved — Proposed |
+| 0046 | Identity & access tenant isolation (team, settings, KYC, onboarding; tenant-before-role-check) | W7F | `WAVE_7F_IDENTITY_SPEC.md` | Reserved — Proposed |
+| 0047 | Ingest & integrity tenant isolation (webhooks, idempotency keys, links, blocklist; attribution over silent pass) | W7G | `WAVE_7G_INGEST_SPEC.md` | Reserved — Proposed |
+| 0048 | Persistence tenant column + Postgres RLS as the second enforcer (defense in depth; closes D-26/D-27) | W7H | `WAVE_7H_PERSISTENCE_SPEC.md` | Reserved — Proposed |
+| 0049 | MCP & auth hardening (rate limits, call audit with digests, constant-time compare, token scopes) | W8 | `WAVE_8_MCP_AUTH_HARDENING_SPEC.md` | Reserved — Proposed |
+| 0050 | Platform hardening (Prisma seam swap, offline font self-hosting, single middleware chain, Sentry instrumentation pattern) | W10 | `WAVE_10_PLATFORM_SPEC.md` | Reserved — Proposed |
+| 0051 | Product gaps (SLA admin surface, analytics dashboard over emitted events, QuickPay drawer, invite-expiry cron, legacy table retirement) | W11 | `WAVE_11_PRODUCT_SPEC.md` | Reserved — Proposed |
+
+Wave 9 (`WAVE_9_VERIFICATION_SPEC.md`) is an **execution** wave and plans no ADR — its
+deliverable is evidence plus the Release Readiness verdict, not a decision.

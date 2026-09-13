@@ -79,4 +79,4 @@ commits, single Q7 report.
 Q0 spec (this doc) → Q1 failing/parity tests (red: no persistence, offline build red,
 dual middleware, deprecated init) → Q2 P-1 Prisma swap → Q3 P-2 fonts → Q4 P-3
 middleware + P-4 Sentry → Q5 full gates (incl. offline build + parity) → Q6 negatives
-above → Q7 report + ADR + close D-09/D-14/D-18/D-19 + commit (up to four commits, one report).
+above → Q7 report + ADR-0050 + close D-09/D-14/D-18/D-19 + commit (up to four commits, one report).

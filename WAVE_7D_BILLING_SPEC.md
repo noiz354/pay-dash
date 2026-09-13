@@ -72,6 +72,15 @@ New seam: `server/services/billing-organization-context.ts` (resolve/require +
 refuseMultiTenantDemo, shared slice seam for both modules — one slice, one seam).
 No change to `mcp/auth.ts` (reuse `registerDomainTools` org param — 7B decision stands).
 
+Deletion ownership (roadmap finding G-1): these two modules are **slice** quarantines, not
+legacy ones — Wave 7E's ES-6 gate pins the three legacy paths by name and does *not* assert
+on these. Deletion criterion is 7E P-10 verbatim (allowlist empty AND consumer scan green
+AND full suite green without the file); it is executed at the Q7 of whichever wave empties
+the list — this one if Q2/Q4 wire every caller, a later slice otherwise. Whatever survives
+this wave's Q7 is recorded in `WAVE_ROADMAP_7D_TO_11.md` §4 with its remaining surfaces and
+an owner. Shrink-only: an allowlist may never re-grow, and no new `*-unscoped.ts` file may
+appear after 7G (roadmap §4 is the ratchet).
+
 ## 5. Tests
 
 - **B-1..B-12** isolation per module subset: list/search/detail/create (+pay/bulk-pay for
@@ -95,4 +104,4 @@ GAPs) → Q2 scoped DALs + partitioned stores + seam + session wiring vs quarant
 (folded: legacy tests to demo ctx) → Q4 export routes + MCP + action tests → Q5 probe
 final + full gates → Q6 8 mutations (predicate removal, global lookup, hardcoded export
 org, MCP bypass, quarantine import in prod path, org col in CSV, per-org status
-loosening, pay-before-tenant-check) → Q7 report + matrix + ADR + commit one slice.
+loosening, pay-before-tenant-check) → Q7 report + matrix + ADR-0044 + commit one slice.

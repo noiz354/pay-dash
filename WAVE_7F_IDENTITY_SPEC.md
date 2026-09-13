@@ -1,7 +1,7 @@
 # Wave 7F — Identity & Access Tenant Isolation (Spec)
 
 Date: 2026-09-13 · Branch: `wave-7d-derived-scoping` (main@a4b595a, Waves 7A/7B/7C PASS, 7D/7E Proposed)
-Predecessors: 7A Transactions, 7B Payouts+Refunds, 7C Customers, 7D Billing, 7E Derived (all prior Proposed where noted)
+Predecessors: 7A Transactions, 7B Payouts+Refunds, 7C Customers (PASS) · 7D Billing (Proposed). Runs **before** 7E — this wave clears the `onboarding` entry in `LEGACY_LEDGER_SURFACES`, which 7E's ES-6 deletion needs (`WAVE_ROADMAP_7D_TO_11.md` §2.2–2.3)
 Status: **Proposed** · Follows ADR-0041/0042/0043 · Reuses `domain/tenancy/organization-context.ts` unchanged
 
 ---
@@ -67,6 +67,13 @@ structural pins).
 New seam: `server/services/identity-organization-context.ts` (resolve/require +
 refuseMultiTenantDemo, shared slice seam). No change to `mcp/auth.ts`.
 
+Deletion ownership (roadmap finding G-1): slice quarantines, outside Wave 7E's ES-6 (which
+pins the three legacy paths by name). 7E P-10's criterion applies verbatim; deletion happens
+at the Q7 of whichever wave empties the allowlist, and any survivor is recorded with its
+remaining surfaces + owner in `WAVE_ROADMAP_7D_TO_11.md` §4. Shrink-only, never re-grow.
+The conditional `kyc-unscoped.ts` is a *last resort*: if it is created at all, its creation
+is itself recorded in the roadmap ledger with the caller that forced it.
+
 ## 5. Tests
 
 - **F-1..F-12** isolation: member list/detail, invite lands in caller org + invisible to B,
@@ -87,5 +94,5 @@ GAPs) → Q2 scoped DALs + partitioned stores + seam + session wiring vs quarant
 (folded: legacy tests to demo ctx) → Q4 export route + MCP + action tests → Q5 probe
 final + full gates → Q6 8 mutations (member predicate removal, global getMember,
 hardcoded export org, MCP bypass, quarantine import in prod path, API key metadata leak,
-role-before-tenant-check, KYC-doc cross-tenant read) → Q7 report + matrix + ADR + commit
+role-before-tenant-check, KYC-doc cross-tenant read) → Q7 report + matrix + ADR-0046 + commit
 one slice.

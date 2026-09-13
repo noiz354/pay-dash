@@ -1,7 +1,7 @@
 # Wave 7G — Ingest & Integrity Tenant Isolation (Spec)
 
 Date: 2026-09-13 · Branch: `wave-7d-derived-scoping` (main@a4b595a, Waves 7A/7B/7C PASS, 7D/7E/7F Proposed)
-Predecessors: 7A Transactions, 7B Payouts+Refunds, 7C Customers, 7D Billing, 7E Derived, 7F Identity (Proposed where noted)
+Predecessors: 7A Transactions, 7B Payouts+Refunds, 7C Customers (PASS) · 7D Billing, 7F Identity (Proposed). Runs **before** 7E — this wave clears `links`, `webhooks` and `risk` in `LEGACY_LEDGER_SURFACES`, which 7E's ES-6 deletion needs. Last wave permitted to create an `*-unscoped.ts` module (`WAVE_ROADMAP_7D_TO_11.md` §2.2–2.3, §4)
 Status: **Proposed** · Follows ADR-0041/0042/0043 · Reuses `domain/tenancy/organization-context.ts` unchanged
 
 ---
@@ -72,6 +72,15 @@ not a silent pass. No CSV vocab changes (structural pins).
 New seam: `server/services/ingest-organization-context.ts` (resolve/require +
 refuseMultiTenantDemo, shared slice seam). No change to `mcp/auth.ts`.
 
+Deletion ownership (roadmap finding G-1): slice quarantines, outside Wave 7E's ES-6 (which
+pins the three legacy paths by name). 7E P-10's criterion applies verbatim; deletion happens
+at the Q7 of whichever wave empties the allowlist, and any survivor is recorded with its
+remaining surfaces + owner in `WAVE_ROADMAP_7D_TO_11.md` §4. Shrink-only, never re-grow.
+7G is the **last** wave permitted to create an `*-unscoped.ts` module (conditional
+`blocklist-unscoped.ts` included): after 7G's Q7 the roadmap ledger's "may create" column is
+closed, so Waves 8–11 can only shrink what exists. Ingress-attribution debt that cannot be
+resolved in-wave keeps a *named surface* in the ledger — never a silent global read.
+
 ## 5. Tests
 
 - **G-1..G-12** isolation: webhook list/detail/summary own-vs-foreign, inbound attribution
@@ -94,4 +103,4 @@ GAPs) → Q2 scoped DALs + ingress attribution + seam + session wiring vs quaran
 (folded: legacy tests to demo ctx) → Q4 export route + MCP + action tests → Q5 probe
 final + full gates → Q6 8 mutations (webhook predicate removal, unattributed-default,
 idempotency key without org, global getLink, expire foreign link, hardcoded export org,
-MCP bypass, quarantine import in prod path) → Q7 report + matrix + ADR + commit one slice.
+MCP bypass, quarantine import in prod path) → Q7 report + matrix + ADR-0047 + commit one slice.
