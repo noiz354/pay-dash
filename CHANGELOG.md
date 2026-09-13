@@ -5,6 +5,8 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 ## [Unreleased]
 
 ### Added
+- **Wave 7C — Customers tenant isolation** (ADR-0043). Tenant-partitioned customer DAL (`server/data/customers.ts`: `organizationId`, `Map<org, { manual, overrides }>`, ctx-first reads/writes + derived composition scoped ledger in → scoped directory out, composite key `(organizationId, id)` with pure `customerIdFromEmail`, per-tenant email uniqueness, `TenantIsolationError`+audit on foreign update, `customersToCsv` frozen without org columns), fail-closed quarantine for the 2 remaining derived readers (`server/data/customers-unscoped.ts`, `LEGACY_CUSTOMER_SURFACES = ["reports","subscriptions"]`, `legacyListCustomers` NOT async so gate throws synchronously), session→tenant seam (`server/services/customer-organization-context.ts`), scoped CSV export route (`private, no-store` + `Vary: Cookie`, client `?organizationId=` flagged) and tenant-bound MCP customer tools (reuse `registerDomainTools` org param). 29 new tests (isolation 14, structural 8, route 4, MCP 3 + probe flip) + 8 mutation checks; probe customers PASS.
+- `WAVE_7C_IMPLEMENTATION_REPORT.md`, `CUSTOMERS_TENANT_ISOLATION_MATRIX.md`; debt **D-28** updated (customers done, 2+6 readers quarantined fail-closed).
 - **Wave 7B — Payouts + Refunds tenant isolation** (ADR-0042). Tenant-partitioned payout DAL
   (`server/data/payouts.ts`: `organizationId` + `createdBy`, ctx-first reads/writes/mutations,
   per-org settings/bank, dual-control after the tenant check), fail-closed quarantine for the 6
