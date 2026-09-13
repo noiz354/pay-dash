@@ -13,6 +13,7 @@ import { MovementsFilters } from "@/components/balance/movements-filters";
 import { MovementsTable } from "@/components/balance/movements-table";
 import { getBalanceOverview, getBalanceTrend, listMovements } from "@/server/data/balance";
 import { getDestinationAccount, getPayoutSettings, listBankAccounts } from "@/server/data/payouts";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import { nextRunForCadence } from "@/lib/payout-status";
 import { formatMoney, formatRelative } from "@/lib/format";
 import type { MovementStatus, MovementType } from "@/lib/balance-status";
@@ -36,12 +37,13 @@ function one(v: string | string[] | undefined) {
 }
 
 async function BalanceCards() {
+  const { context: payoutCtx } = await resolvePayoutOrganizationContext();
   const [overview, trend, settings, destination, accounts] = await Promise.all([
     getBalanceOverview(),
     getBalanceTrend(30),
-    getPayoutSettings(),
-    getDestinationAccount(),
-    listBankAccounts(),
+    getPayoutSettings(payoutCtx),
+    getDestinationAccount(payoutCtx),
+    listBankAccounts(payoutCtx),
   ]);
   const nextRunAt = settings.automated
     ? nextRunForCadence(settings.cadence, settings.weekday, settings.monthDay)

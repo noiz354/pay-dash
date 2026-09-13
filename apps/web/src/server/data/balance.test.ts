@@ -9,6 +9,11 @@ import {
   withdrawBalance,
 } from "./balance";
 import { listBatches } from "./payouts";
+import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
+
+// Wave 7B: payout writes read through the tenant-scoped DAL; legacy
+// single-tenant expectations run scoped to the demo tenant that owns the seeds.
+const ctx = parseOrganizationContext({ organizationId: "org_demo" });
 
 function resetAllStores() {
   const g = globalThis as unknown as {
@@ -150,7 +155,7 @@ describe("topUpBalance", () => {
 describe("withdrawBalance", () => {
   it("routes through the batch flow: one single-recipient batch, paid immediately", async () => {
     const before = await getBalanceOverview();
-    const result = await withdrawBalance({ amount: 1_000_000, accountId: "acct_bca_1234" });
+    const result = await withdrawBalance({ amount: 1_000_000, accountId: "acct_bca_1234" }, ctx);
 
     expect(result.paid).toBe(true);
     expect(result.batchId).toMatch(/^BATCH-/);
@@ -158,7 +163,7 @@ describe("withdrawBalance", () => {
     expect((await getBalanceOverview()).available).toBe(before.available - 1_000_000);
 
     // The batch is real payout history.
-    const batches = await listBatches({ q: result.batchId });
+    const batches = await listBatches(ctx, { q: result.batchId });
     expect(batches.total).toBe(1);
     expect(batches.rows[0].name).toBe("Withdrawal to Bank Central Asia **** 1234");
 
@@ -173,18 +178,18 @@ describe("withdrawBalance", () => {
 
   it("validates destination before funds: unknown, unverified, then over-balance", async () => {
     const overview = await getBalanceOverview();
-    await expect(withdrawBalance({ amount: 1_000_000, accountId: "acct_nope" })).rejects.toThrow(
+    await expect(withdrawBalance({ amount: 1_000_000, accountId: "acct_nope" }, ctx)).rejects.toThrow(
       /does not exist/
     );
     await expect(
-      withdrawBalance({ amount: 1_000_000, accountId: "acct_bni_4420" })
+      withdrawBalance({ amount: 1_000_000, accountId: "acct_bni_4420" }, ctx)
     ).rejects.toThrow(/not verified yet/);
     await expect(
-      withdrawBalance({ amount: overview.available + 1, accountId: "acct_bca_1234" })
+      withdrawBalance({ amount: overview.available + 1, accountId: "acct_bca_1234" }, ctx)
     ).rejects.toThrow(/exceeds/);
     // Nothing moved.
     expect((await getBalanceOverview()).available).toBe(overview.available);
-    expect((await listBatches()).total).toBe(5);
+    expect((await listBatches(ctx)).total).toBe(5);
   });
 });
 

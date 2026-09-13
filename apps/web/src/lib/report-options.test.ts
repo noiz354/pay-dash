@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { getLedgerRows } from "@/server/data/transactions";
 import { getPayoutBatches } from "@/server/data/payouts";
 import { listCustomers } from "@/server/data/customers";
+import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 import { DEMO_CONTEXT } from "@/test/organization-context";
 import {
   buildReportCsv,
@@ -35,7 +37,7 @@ describe("report row mappers (ADR-0020)", () => {
   });
 
   it("maps payout batches with the recipient total as the amount", () => {
-    const batches = getPayoutBatches();
+    const batches = getPayoutBatches(DEMO_CONTEXT);
     const rows = payoutsToReportRows(batches);
     expect(rows).toHaveLength(batches.length);
     for (const [i, row] of rows.entries()) {
@@ -47,7 +49,8 @@ describe("report row mappers (ADR-0020)", () => {
   });
 
   it("maps customers with lifetime value as the amount", async () => {
-    const { rows: customers } = await listCustomers({ pageSize: 500 });
+    const demo = parseOrganizationContext({ organizationId: DEFAULT_DEMO_ORG });
+    const { rows: customers } = await listCustomers(demo, { pageSize: 500 });
     const rows = customersToReportRows(customers);
     expect(rows).toHaveLength(customers.length);
     for (const [i, row] of rows.entries()) {

@@ -66,8 +66,8 @@ describe("ledger snapshot over the real stores", () => {
    * received) and proves the gate above would actually catch it.
    */
   it("PROOF OF SENSITIVITY — a corrupted store is caught by the gate", async () => {
-    const { getPayoutBatches } = await import("@/server/data/payouts");
-    const batches = getPayoutBatches();
+    const { legacyPayoutBatches } = await import("@/server/data/payouts-unscoped");
+    const batches = legacyPayoutBatches("finance-snapshot");
     const { snapshot: clean } = await buildLedgerSnapshot();
     expect(checkLedgerInvariants(clean).ok).toBe(true);
 

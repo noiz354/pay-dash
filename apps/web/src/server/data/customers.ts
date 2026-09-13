@@ -1,7 +1,11 @@
 import "server-only";
 
 import { type Transaction } from "./transactions";
-import { legacyListTransactions } from "./transactions-unscoped";
+import { countLedgerTenants, listTransactions, soleLedgerOrganizationId } from "./transactions";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
+import { parseOrganizationContext, type OrganizationContext } from "@/domain/tenancy/organization-context";
+import { TenantIsolationError } from "@/domain/security/tenant";
+import { recordTenantDenial } from "@/server/services/tenant-denial";
 // Status vocabulary lives in a client-safe module; re-exported here so server
 // code keeps a single import site for everything customer-shaped.
 import { CUSTOMER_STATUSES, type CustomerStatus } from "@/lib/customer-status";
@@ -10,15 +14,18 @@ export { CUSTOMER_STATUSES };
 export type { CustomerStatus };
 
 // ---------------------------------------------------------------------------
-// Customer directory.
+// Customer directory (Wave 7C — tenant-scoped).
 // Derived from the same ledger store as transactions, so a customer's lifetime
-// value and their payment list can never disagree. Manually-created customers
-// live alongside the derived ones behind the same seam (swap for Prisma in one
-// place, exactly like `transactions.ts`).
+// value and their payment list can never disagree. The derivation composes on
+// the Wave 7A slice: scoped ledger in, scoped directory out. Manually-created
+// customers live alongside the derived ones behind the same seam, partitioned
+// per tenant (swap for Prisma in one place, exactly like `transactions.ts`).
 // ---------------------------------------------------------------------------
 
 export type Customer = {
   id: string;
+  /** Owner tenant. Same email in two tenants ⇒ two rows (composite key). */
+  organizationId: string;
   name: string;
   email: string;
   referenceId: string;
@@ -64,6 +71,7 @@ export type PaginatedCustomers = {
 
 type ManualRecord = {
   id: string;
+  organizationId: string;
   name: string;
   email: string;
   referenceId: string;
@@ -75,11 +83,14 @@ type ManualRecord = {
 };
 
 type Overrides = Record<string, { name?: string; status?: CustomerStatus; notes?: string }>;
-type Store = { manual: ManualRecord[]; overrides: Overrides };
+type TenantCustomerState = { manual: ManualRecord[]; overrides: Overrides };
+type Store = { tenants: Map<string, TenantCustomerState> };
 
 export function customerIdFromEmail(email: string) {
   // Stable, URL-safe id derived from the email so ledger rows and the directory
-  // always resolve to the same customer page.
+  // always resolve to the same customer page. Pure and tenant-free BY DESIGN:
+  // the id shape is the same in every tenant; the (organizationId, id) pair is
+  // the key (spec P-10, 7A txn_shared pattern).
   const normalised = email.trim().toLowerCase();
   let hash = 0;
   for (let i = 0; i < normalised.length; i++) {
@@ -92,8 +103,9 @@ export function customerIdFromEmail(email: string) {
 // hard-coded rows whose LTV strings had lost their currency prefix (",520.00").
 // Instead of deleting them they are seeded into the store as real records with
 // real numbers, so the page keeps rendering exactly the customers it always did
-// — now clickable, searchable and formatted through `formatMoney`.
-const PROTOTYPE_SEED: ManualRecord[] = [
+// — now clickable, searchable and formatted through `formatMoney`. Seeds belong
+// to the demo organization only: any other tenant starts empty.
+const PROTOTYPE_SEED: Array<Omit<ManualRecord, "organizationId">> = [
   {
     id: customerIdFromEmail("contact@acmecorp.com"),
     name: "Acme Corporation",
@@ -132,9 +144,107 @@ const PROTOTYPE_SEED: ManualRecord[] = [
 const globalStore = globalThis as unknown as { __kineticCustomerStore?: Store };
 function store(): Store {
   if (!globalStore.__kineticCustomerStore) {
-    globalStore.__kineticCustomerStore = { manual: [...PROTOTYPE_SEED], overrides: {} };
+    // The demo organization is seeded eagerly so a first read already renders
+    // the prototype world; every other tenant starts empty on first write.
+    // (Seeds are manual records, so the demo tenant always counts in
+    // countCustomerTenants — the single-tenant demo is tenant #1, not #0.)
+    globalStore.__kineticCustomerStore = {
+      tenants: new Map([
+        [
+          DEFAULT_DEMO_ORG,
+          {
+            manual: PROTOTYPE_SEED.map((m) => ({ ...m, organizationId: DEFAULT_DEMO_ORG })),
+            overrides: {},
+          },
+        ],
+      ]),
+    };
   }
   return globalStore.__kineticCustomerStore;
+}
+
+// --- Wave 7C: tenancy seam ---------------------------------------------------
+//
+// Mirrors `server/data/transactions.ts` (7A) and `server/data/payouts.ts`
+// (7B): the tenant predicate lives at the data boundary. Every read filters
+// on the resolved context BEFORE any search/filter/sort/pagination; foreign
+// reads answer `null`; foreign writes throw `TenantIsolationError` (audited)
+// so the wire can answer not-found without the log going silent.
+
+function scopeOf(ctx: OrganizationContext): OrganizationContext {
+  return parseOrganizationContext(ctx);
+}
+
+function freshTenantState(): TenantCustomerState {
+  return { manual: [], overrides: {} };
+}
+
+/** Read-only view of one tenant's partition; never persists. */
+function readPartition(organizationId: string): TenantCustomerState {
+  return store().tenants.get(organizationId) ?? freshTenantState();
+}
+
+/** Writable view of one tenant's partition; persists the partition. */
+function writePartition(organizationId: string): TenantCustomerState {
+  const s = store();
+  let partition = s.tenants.get(organizationId);
+  if (!partition) {
+    // The demo organization keeps the prototype world; every other tenant
+    // starts empty (an empty tenant gets `[]`, not the demo directory).
+    const manual =
+      organizationId === DEFAULT_DEMO_ORG
+        ? PROTOTYPE_SEED.map((m) => ({ ...m, organizationId }))
+        : [];
+    partition = { manual, overrides: {} };
+    s.tenants.set(organizationId, partition);
+  }
+  return partition;
+}
+
+/**
+ * How many tenants hold customers. Manual records are counted directly; the
+ * ledger side is folded in via the 7A probes, because a tenant whose buyers
+ * exist only as ledger rows still owns a directory. The quarantine
+ * (`customers-unscoped.ts`) fails closed on `> 1`.
+ */
+export function countCustomerTenants(): number {
+  const ids = new Set<string>();
+  for (const [id, t] of store().tenants.entries()) {
+    if (t.manual.length > 0) ids.add(id);
+  }
+  if (countLedgerTenants() > 1) return 2;
+  const sole = soleLedgerOrganizationId();
+  if (sole) ids.add(sole);
+  return ids.size;
+}
+
+/**
+ * The identity of the only customer-holding tenant, or `null` when there is
+ * not exactly one. Tenancy *probe*: answers a question about the store, never
+ * a row — the quarantine's gate.
+ */
+export function soleCustomerOrganizationId(): string | null {
+  if (countLedgerTenants() > 1) return null;
+  const ids = new Set<string>();
+  for (const [id, t] of store().tenants.entries()) {
+    if (t.manual.length > 0) ids.add(id);
+  }
+  const sole = soleLedgerOrganizationId();
+  if (sole) ids.add(sole);
+  return ids.size === 1 ? ([...ids][0] ?? null) : null;
+}
+
+/** Every ledger row of one tenant (paged through the scoped 7A read). */
+async function scopedLedgerRows(ctx: OrganizationContext): Promise<Transaction[]> {
+  const rows: Transaction[] = [];
+  let page = 1;
+  for (;;) {
+    const { rows: batch } = await listTransactions(ctx, { page, pageSize: 100 });
+    rows.push(...batch);
+    if (batch.length < 100) break;
+    page += 1;
+  }
+  return rows;
 }
 
 function initialsOf(name: string) {
@@ -148,11 +258,6 @@ function initialsOf(name: string) {
   );
 }
 
-async function allLedgerRows(): Promise<Transaction[]> {
-  const { rows } = await legacyListTransactions("customers", { page: 1, pageSize: 100 });
-  return rows;
-}
-
 function statusFor(succeeded: number, failed: number, total: number, lastSeen: string | null): CustomerStatus {
   if (total === 0) return "NEW";
   const failRate = total ? failed / total : 0;
@@ -163,8 +268,9 @@ function statusFor(succeeded: number, failed: number, total: number, lastSeen: s
   return succeeded > 0 ? "ACTIVE" : "REVIEW";
 }
 
-async function buildDirectory(): Promise<Customer[]> {
-  const rows = await allLedgerRows();
+async function buildDirectory(ctx: OrganizationContext): Promise<Customer[]> {
+  const { organizationId } = scopeOf(ctx);
+  const rows = await scopedLedgerRows(ctx);
   const byEmail = new Map<string, Transaction[]>();
   for (const t of rows) {
     const key = t.customerEmail.toLowerCase();
@@ -173,7 +279,7 @@ async function buildDirectory(): Promise<Customer[]> {
     else byEmail.set(key, [t]);
   }
 
-  const { manual, overrides } = store();
+  const { manual, overrides } = readPartition(organizationId);
 
   const derived: Customer[] = Array.from(byEmail.entries()).map(([email, txns]) => {
     const sorted = [...txns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -186,6 +292,7 @@ async function buildDirectory(): Promise<Customer[]> {
     const name = override.name ?? first.customerName;
     return {
       id,
+      organizationId,
       name,
       email,
       referenceId: `REF-${id.slice(4).toUpperCase()}`,
@@ -215,6 +322,7 @@ async function buildDirectory(): Promise<Customer[]> {
       const name = override.name ?? m.name;
       return {
         id: m.id,
+        organizationId,
         name,
         email: m.email,
         referenceId: m.referenceId,
@@ -238,7 +346,10 @@ async function buildDirectory(): Promise<Customer[]> {
   return [...manualCustomers, ...derived];
 }
 
-export async function listCustomers(filters: CustomerFilters = {}): Promise<PaginatedCustomers> {
+export async function listCustomers(ctx: OrganizationContext, filters: CustomerFilters = {}): Promise<PaginatedCustomers> {
+  // The predicate ran inside buildDirectory (partition + scoped ledger);
+  // filter/sort/page below only ever see the caller's rows.
+  scopeOf(ctx);
   const { q = "", status = "ALL", sort = "recent", direction } = filters;
   // Each sort key has a natural reading order: names go A-Z, everything else is
   // newest/largest first. An explicit `direction` from the URL overrides it; when
@@ -248,7 +359,7 @@ export async function listCustomers(filters: CustomerFilters = {}): Promise<Pagi
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
 
-  const all = await buildDirectory();
+  const all = await buildDirectory(ctx);
   const filtered = all.filter((c) => {
     if (status !== "ALL" && c.status !== status) return false;
     if (needle) {
@@ -281,14 +392,14 @@ export async function listCustomers(filters: CustomerFilters = {}): Promise<Pagi
   };
 }
 
-export async function getCustomer(idOrEmail: string): Promise<Customer | null> {
-  const all = await buildDirectory();
+export async function getCustomer(ctx: OrganizationContext, idOrEmail: string): Promise<Customer | null> {
+  const all = await buildDirectory(ctx);
   const needle = idOrEmail.trim().toLowerCase();
   return all.find((c) => c.id === idOrEmail || c.email.toLowerCase() === needle) ?? null;
 }
 
-export async function getCustomerTransactions(email: string): Promise<Transaction[]> {
-  const rows = await allLedgerRows();
+export async function getCustomerTransactions(ctx: OrganizationContext, email: string): Promise<Transaction[]> {
+  const rows = await scopedLedgerRows(ctx);
   return rows.filter((t) => t.customerEmail.toLowerCase() === email.toLowerCase());
 }
 
@@ -301,8 +412,8 @@ export type CustomerMetrics = {
   currency: string;
 };
 
-export async function getCustomerMetrics(): Promise<CustomerMetrics> {
-  const all = await buildDirectory();
+export async function getCustomerMetrics(ctx: OrganizationContext): Promise<CustomerMetrics> {
+  const all = await buildDirectory(ctx);
   const weekAgo = Date.now() - 7 * 86_400_000;
   return {
     total: all.length,
@@ -321,14 +432,18 @@ export type CreateCustomerInput = {
   notes?: string;
 };
 
-export async function createCustomer(input: CreateCustomerInput): Promise<Customer> {
+export async function createCustomer(ctx: OrganizationContext, input: CreateCustomerInput): Promise<Customer> {
+  const { organizationId } = scopeOf(ctx);
   const email = input.email.trim().toLowerCase();
-  const existing = await getCustomer(email);
+  // Uniqueness is per-tenant (composite key, spec P-10): the same email in
+  // another tenant is a different row, twice in one tenant is a duplicate.
+  const existing = await getCustomer(ctx, email);
   if (existing) throw new Error("A customer with this email already exists");
 
   const id = customerIdFromEmail(email);
-  store().manual.unshift({
+  writePartition(organizationId).manual.unshift({
     id,
+    organizationId,
     name: input.name.trim(),
     email,
     referenceId: `REF-${id.slice(4).toUpperCase()}`,
@@ -337,7 +452,7 @@ export async function createCustomer(input: CreateCustomerInput): Promise<Custom
     notes: input.notes?.trim() || undefined,
   });
 
-  const created = await getCustomer(id);
+  const created = await getCustomer(ctx, id);
   if (!created) throw new Error("Customer could not be created");
   return created;
 }
@@ -349,17 +464,51 @@ export type UpdateCustomerInput = {
   notes?: string;
 };
 
-export async function updateCustomer(input: UpdateCustomerInput): Promise<Customer | null> {
-  const existing = await getCustomer(input.id);
-  if (!existing) return null;
-  const s = store();
-  s.overrides[input.id] = {
-    ...s.overrides[input.id],
-    ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-    ...(input.status !== undefined ? { status: input.status } : {}),
-    ...(input.notes !== undefined ? { notes: input.notes.trim() } : {}),
-  };
-  return getCustomer(input.id);
+/**
+ * own id     → updated
+ * unknown id → `null` (the caller's existing NOT_FOUND path)
+ * foreign id → throws `TenantIsolationError` after recording the denial, so
+ *   the wire can answer not-found without the log going silent.
+ */
+export async function updateCustomer(ctx: OrganizationContext, input: UpdateCustomerInput): Promise<Customer | null> {
+  const { organizationId } = scopeOf(ctx);
+  const existing = await getCustomer(ctx, input.id);
+  if (existing) {
+    const s = writePartition(organizationId);
+    s.overrides[input.id] = {
+      ...s.overrides[input.id],
+      ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.notes !== undefined ? { notes: input.notes.trim() } : {}),
+    };
+    return getCustomer(ctx, input.id);
+  }
+  const foreignOwner = customerOwnedByAnotherTenant(organizationId, input.id);
+  if (foreignOwner) {
+    recordTenantDenial({
+      surface: "server/data/customers.updateCustomer",
+      actorOrganizationId: organizationId,
+      requestedOrganizationId: foreignOwner,
+      actorId: null,
+      resourceId: typeof input.id === "string" ? input.id : null,
+    });
+    throw new TenantIsolationError(
+      "CROSS_TENANT_WRITE",
+      { surface: "server/data/customers.updateCustomer", actorOrg: organizationId, requestedOrg: foreignOwner },
+      "Refusing a cross-tenant write on server/data/customers.updateCustomer: the customer belongs to another organization.",
+    );
+  }
+  return null;
+}
+
+/** Which other tenant (if any) owns a manual record or override with this id. */
+function customerOwnedByAnotherTenant(organizationId: string, id: string): string | null {
+  for (const [tenantId, state] of store().tenants.entries()) {
+    if (tenantId === organizationId) continue;
+    if (state.manual.some((m) => m.id === id)) return tenantId;
+    if (state.overrides[id]) return tenantId;
+  }
+  return null;
 }
 
 export function customersToCsv(rows: Customer[]) {

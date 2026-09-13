@@ -10,6 +10,13 @@ import {
   type Weekday,
 } from "@/lib/payout-status";
 import type { RecipientDraft } from "@/lib/payout-csv";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
+import {
+  parseOrganizationContext,
+  type OrganizationContext,
+} from "@/domain/tenancy/organization-context";
+import { TenantIsolationError } from "@/domain/security/tenant";
+import { recordTenantDenial } from "@/server/services/tenant-denial";
 
 export { PAYOUT_STATUSES };
 export type { PayoutStatus, RecipientStatus, PayoutCadence, Weekday };
@@ -49,6 +56,20 @@ export type PayoutEvent = {
 };
 
 export type PayoutBatch = {
+  /**
+   * Wave 7B — the owning tenant. Part of the row, not of a query: a batch
+   * without an owner is unreachable by construction (every read filters on
+   * equality with the resolved context). Recipients and timeline entries are
+   * owned transitively through their batch — there is no standalone
+   * unscoped recipient or timeline reader.
+   */
+  organizationId: string;
+  /**
+   * Wave 7B — the actor that created the batch, for money-out dual control.
+   * The creator may not approve their own batch. `null` for seeded/demo rows
+   * that predate actor tracking (any authorized approver may release those).
+   */
+  createdBy: string | null;
   id: string;
   name: string;
   source: "CSV upload" | "Manual" | "API";
@@ -114,12 +135,30 @@ export type PayoutSettings = {
   updatedAt: string | null;
 };
 
-type Store = {
+/**
+ * Wave 7B (P-6 decision) — bank accounts and payout settings are partitioned
+ * per organization alongside batches. Account numbers and destination settings
+ * are tenant-sensitive (they direct money), so a shared/global partition would
+ * be a cross-tenant read by construction. There is no global payout setting.
+ */
+export type TenantPayoutState = {
   batches: PayoutBatch[];
   accounts: BankAccount[];
   settings: PayoutSettings;
+};
+
+type Store = {
+  tenants: Map<string, TenantPayoutState>;
   sequence: number;
 };
+
+function defaultTenantState(
+  batches: PayoutBatch[],
+  accounts: BankAccount[],
+  settings: PayoutSettings,
+): TenantPayoutState {
+  return { batches, accounts, settings };
+}
 
 const CURRENCY = "IDR";
 
@@ -148,7 +187,7 @@ function recipient(
 }
 
 function defaultStore(): Store {
-  const batches: PayoutBatch[] = [
+  const batches: Array<Omit<PayoutBatch, "organizationId" | "createdBy">> = [
     {
       id: "BATCH-2026-08-014",
       name: "Vendor settlement — week 35",
@@ -358,21 +397,28 @@ function defaultStore(): Store {
   ];
 
   return {
-    batches,
-    accounts,
-    settings: {
-      automated: true,
-      cadence: "weekly",
-      weekday: "Friday",
-      monthDay: 1,
-      minimumAmount: 50_000,
-      currency: CURRENCY,
-      notifyInitiated: true,
-      notifyCompleted: true,
-      notifyFailed: true,
-      destinationAccountId: "acct_bca_1234",
-      updatedAt: null,
-    },
+    tenants: new Map([
+      [
+        DEFAULT_DEMO_ORG,
+        defaultTenantState(
+          batches.map((b) => ({ organizationId: DEFAULT_DEMO_ORG, createdBy: null, ...b })),
+          accounts,
+          {
+            automated: true,
+            cadence: "weekly",
+            weekday: "Friday",
+            monthDay: 1,
+            minimumAmount: 50_000,
+            currency: CURRENCY,
+            notifyInitiated: true,
+            notifyCompleted: true,
+            notifyFailed: true,
+            destinationAccountId: "acct_bca_1234",
+            updatedAt: null,
+          },
+        ),
+      ],
+    ]),
     sequence: 15,
   };
 }
@@ -381,6 +427,156 @@ const globalStore = globalThis as unknown as { __kineticPayoutStore?: Store };
 function store(): Store {
   if (!globalStore.__kineticPayoutStore) globalStore.__kineticPayoutStore = defaultStore();
   return globalStore.__kineticPayoutStore;
+}
+
+// --- Wave 7B: tenancy seam ---------------------------------------------------
+//
+// Mirrors `server/data/transactions.ts` (Wave 7A): the tenant predicate lives
+// at the data boundary. Every read filters on the resolved context BEFORE any
+// search/filter/sort/pagination; foreign reads answer `null`; foreign writes
+// throw `TenantIsolationError` (audited) so the wire can answer not-found
+// without the log going silent.
+
+function scopeOf(ctx: OrganizationContext): OrganizationContext {
+  return parseOrganizationContext(ctx);
+}
+
+function freshTenantState(): TenantPayoutState {
+  return {
+    batches: [],
+    accounts: [],
+    settings: {
+      automated: false,
+      cadence: "manual",
+      weekday: "Friday",
+      monthDay: 1,
+      minimumAmount: 0,
+      currency: CURRENCY,
+      notifyInitiated: true,
+      notifyCompleted: true,
+      notifyFailed: true,
+      destinationAccountId: "",
+      updatedAt: null,
+    },
+  };
+}
+
+/** Read-only view of one tenant's partition; never persists. */
+function readPartition(organizationId: string): TenantPayoutState {
+  return store().tenants.get(organizationId) ?? freshTenantState();
+}
+
+/** Writable view of one tenant's partition; persists the partition. */
+function writePartition(organizationId: string): TenantPayoutState {
+  const s = store();
+  let partition = s.tenants.get(organizationId);
+  if (!partition) {
+    partition = freshTenantState();
+    s.tenants.set(organizationId, partition);
+  }
+  return partition;
+}
+
+/**
+ * How many tenants hold batches. The quarantine (`payouts-unscoped.ts`) fails
+ * closed on `> 1`, so "the demo store is single-tenant" is a checked fact.
+ */
+export function countPayoutTenants(): number {
+  return [...store().tenants.entries()].filter(([, t]) => t.batches.length > 0).length;
+}
+
+/**
+ * The identity of the only batch-holding tenant, or `null` when there is not
+ * exactly one. Tenancy *probe*: answers a question about the store, never a
+ * row — the quarantine's gate.
+ */
+export function solePayoutOrganizationId(): string | null {
+  const ids = [...store().tenants.entries()]
+    .filter(([, t]) => t.batches.length > 0)
+    .map(([id]) => id);
+  return ids.length === 1 ? (ids[0] ?? null) : null;
+}
+
+/** One tenant's batches, defensively copied, ownership re-checked per row. */
+function scopedBatches(ctx: OrganizationContext): PayoutBatch[] {
+  const { organizationId } = scopeOf(ctx);
+  return (readPartition(organizationId).batches ?? [])
+    .filter((b) => b.organizationId === organizationId)
+    .map((b) => copyBatch(b));
+}
+
+function copyBatch(batch: PayoutBatch): PayoutBatch {
+  return {
+    ...batch,
+    status: deriveStatus(batch),
+    recipients: batch.recipients.map((r) => ({ ...r })),
+    timeline: batch.timeline.map((e) => ({ ...e })),
+  };
+}
+
+function batchKeyMatches(batch: PayoutBatch, id: string): boolean {
+  const needle = typeof id === "string" ? id.trim() : "";
+  if (!needle) return false;
+  return batch.id.toLowerCase() === needle.toLowerCase();
+}
+
+/**
+ * The caller's own batch for an id. A foreign id and an unknown id both answer
+ * `null` — that indistinguishability is the anti-enumeration property, so it
+ * is implemented here, once, rather than at each call site. Timeline and
+ * recipients inherit this scope: they are only reachable through the batch.
+ */
+function findOwnedBatch(ctx: OrganizationContext, id: string): PayoutBatch | null {
+  const { organizationId } = scopeOf(ctx);
+  return (
+    (readPartition(organizationId).batches ?? []).find(
+      (b) => b.organizationId === organizationId && batchKeyMatches(b, id),
+    ) ?? null
+  );
+}
+
+/** Cross-partition probe. Answers yes/no for the audit record only — the
+ *  foreign batch itself is never returned to a scoped caller. */
+function batchOwnedByAnotherTenant(organizationId: string, id: string): string | null {
+  for (const [tenant, state] of store().tenants) {
+    if (tenant === organizationId) continue;
+    if ((state.batches ?? []).some((b) => batchKeyMatches(b, id))) return tenant;
+  }
+  return null;
+}
+
+/**
+ * Resolve the batch a **write** will mutate (live reference, not a copy).
+ *
+ *   own batch  → returned
+ *   unknown id → `null` (the caller's existing NOT_FOUND path)
+ *   foreign id → throws `TenantIsolationError` after recording the denial
+ */
+function writableBatch(
+  ctx: OrganizationContext,
+  id: string,
+  surface: string,
+  actorId?: string | null,
+): PayoutBatch | null {
+  const own = findOwnedBatch(ctx, id);
+  if (own) return own;
+  const { organizationId } = scopeOf(ctx);
+  const foreignOwner = batchOwnedByAnotherTenant(organizationId, id);
+  if (foreignOwner) {
+    recordTenantDenial({
+      surface,
+      actorOrganizationId: organizationId,
+      requestedOrganizationId: foreignOwner,
+      actorId: actorId ?? null,
+      resourceId: typeof id === "string" ? id : null,
+    });
+    throw new TenantIsolationError(
+      "CROSS_TENANT_WRITE",
+      { surface, actorOrg: organizationId, requestedOrg: foreignOwner },
+      `Refusing a cross-tenant write on ${surface}: the batch belongs to another organization.`,
+    );
+  }
+  return null;
 }
 
 // --- derivation --------------------------------------------------------------
@@ -406,6 +602,8 @@ export function summarise(batch: PayoutBatch): BatchSummary {
   const paidRows = batch.recipients.filter((r) => r.status === "PAID");
   const failedRows = batch.recipients.filter((r) => r.status === "FAILED" || r.status === "RETURNED");
   return {
+    organizationId: batch.organizationId,
+    createdBy: batch.createdBy,
     id: batch.id,
     name: batch.name,
     source: batch.source,
@@ -433,7 +631,11 @@ const RANGE_DAYS: Record<NonNullable<BatchFilters["range"]>, number | null> = {
   all: null,
 };
 
-export async function listBatches(filters: BatchFilters = {}): Promise<PaginatedBatches> {
+export async function listBatches(
+  ctx: OrganizationContext,
+  filters: BatchFilters = {},
+): Promise<PaginatedBatches> {
+  const { organizationId } = scopeOf(ctx);
   const {
     q = "",
     status = "ALL",
@@ -445,7 +647,11 @@ export async function listBatches(filters: BatchFilters = {}): Promise<Paginated
   } = filters;
   const dir = direction === "asc" ? 1 : -1;
 
-  let rows = store().batches.map(summarise);
+  // The tenant predicate first: everything below narrows the caller's own
+  // partition, so a filter can never widen the view to another tenant.
+  let rows = (readPartition(organizationId).batches ?? [])
+    .filter((b) => b.organizationId === organizationId)
+    .map(summarise);
   const term = q.trim().toLowerCase();
 
   if (term) {
@@ -482,23 +688,20 @@ export async function listBatches(filters: BatchFilters = {}): Promise<Paginated
   };
 }
 
-export async function getBatch(id: string): Promise<PayoutBatch | null> {
-  const batch = store().batches.find((b) => b.id.toLowerCase() === id.toLowerCase());
+export async function getBatch(ctx: OrganizationContext, id: string): Promise<PayoutBatch | null> {
+  const batch = findOwnedBatch(ctx, id);
   if (!batch) return null;
-  return { ...batch, status: deriveStatus(batch), recipients: batch.recipients.map((r) => ({ ...r })) };
+  return copyBatch(batch);
 }
 
 /**
- * Read-only view of every batch (recipients included) for derived data
- * sources — the balance module (ADR-0011) reconciles its available figure
- * against recipients that are still in flight. Copies only; do not mutate.
+ * Scoped view of one tenant's batches (recipients included) for callers that
+ * have resolved a tenant. Unscoped derived readers use `payouts-unscoped.ts`
+ * until Wave 7C — they may not call this without a context. Copies only; do
+ * not mutate.
  */
-export function getPayoutBatches(): PayoutBatch[] {
-  return store().batches.map((b) => ({
-    ...b,
-    status: deriveStatus(b),
-    recipients: b.recipients.map((r) => ({ ...r })),
-  }));
+export function getPayoutBatches(ctx: OrganizationContext): PayoutBatch[] {
+  return scopedBatches(ctx);
 }
 
 export type PayoutsOverview = {
@@ -513,21 +716,24 @@ export type PayoutsOverview = {
   currency: string;
 };
 
-export async function getPayoutsOverview(): Promise<PayoutsOverview> {
-  const summaries = store().batches.map(summarise);
+export async function getPayoutsOverview(ctx: OrganizationContext): Promise<PayoutsOverview> {
+  const { organizationId } = scopeOf(ctx);
+  const partition = readPartition(organizationId);
+  const own = (partition.batches ?? []).filter((b) => b.organizationId === organizationId);
+  const summaries = own.map(summarise);
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
   const inFlight = summaries.filter((b) => b.status === "SCHEDULED" || b.status === "PROCESSING" || b.status === "DRAFT");
-  const pendingRecipients = store()
-    .batches.flatMap((b) => b.recipients)
+  const pendingRecipients = own
+    .flatMap((b) => b.recipients)
     .filter((r) => r.status === "PENDING");
 
   const completed = summaries.filter(
     (b) => b.completedAt && new Date(b.completedAt).getTime() >= cutoff
   );
 
-  const failedRows = store()
-    .batches.flatMap((b) => b.recipients)
+  const failedRows = own
+    .flatMap((b) => b.recipients)
     .filter((r) => r.status === "FAILED" || r.status === "RETURNED");
 
   const upcoming = summaries
@@ -568,10 +774,20 @@ export type CreateBatchInput = {
   recipients: RecipientDraft[];
 };
 
-export async function createBatch(input: CreateBatchInput): Promise<PayoutBatch> {
+export async function createBatch(
+  ctx: OrganizationContext,
+  input: CreateBatchInput,
+  opts: { createdBy?: string | null } = {},
+): Promise<PayoutBatch> {
+  const { organizationId } = scopeOf(ctx);
   const id = nextBatchId();
   const now = new Date().toISOString();
+  // The owner comes from the resolved context only. Any `organizationId`
+  // smuggled inside `input` is ignored — a caller cannot mint a batch for
+  // another tenant by shaping its payload.
   const batch: PayoutBatch = {
+    organizationId,
+    createdBy: opts.createdBy ?? null,
     id,
     name: input.name.trim(),
     source: input.source ?? "Manual",
@@ -604,7 +820,9 @@ export async function createBatch(input: CreateBatchInput): Promise<PayoutBatch>
       },
     ],
   };
-  store().batches.unshift(batch);
+  writePartition(organizationId).batches.unshift(batch);
+  // Wave 7A convention: creates return the stored row (reads return copies) —
+  // a caller that captures the row for a follow-up write must see mutations.
   return batch;
 }
 
@@ -613,9 +831,20 @@ export async function createBatch(input: CreateBatchInput): Promise<PayoutBatch>
  * reproducible: rows whose account number ends in "0000" are rejected by the
  * partner, everything else settles.
  */
-export async function approveBatch(id: string): Promise<{ batch: PayoutBatch; paid: number; failed: number } | null> {
-  const batch = store().batches.find((b) => b.id.toLowerCase() === id.toLowerCase());
+export async function approveBatch(
+  ctx: OrganizationContext,
+  id: string,
+  opts: { actorId?: string | null } = {},
+): Promise<{ batch: PayoutBatch; paid: number; failed: number } | null> {
+  const batch = writableBatch(ctx, id, "payouts.approve", opts.actorId);
   if (!batch) return null;
+  // Money-out dual control, checked AFTER the tenant check so a cross-tenant
+  // probe learns nothing about the batch's workflow state: the creator may not
+  // approve their own batch. Seeded rows predate actor tracking
+  // (`createdBy: null`) and stay releasable by any authorized approver.
+  if (batch.createdBy && opts.actorId && batch.createdBy === opts.actorId) {
+    throw new Error("The batch creator cannot approve their own batch — a different user must release this payout.");
+  }
   if (!isApprovable(deriveStatus(batch))) {
     throw new Error(`${batch.id} is already ${deriveStatus(batch).toLowerCase()} — it cannot be sent again`);
   }
@@ -711,8 +940,12 @@ export async function approveBatch(id: string): Promise<{ batch: PayoutBatch; pa
   return { batch, paid, failed };
 }
 
-export async function cancelBatch(id: string): Promise<PayoutBatch | null> {
-  const batch = store().batches.find((b) => b.id.toLowerCase() === id.toLowerCase());
+export async function cancelBatch(
+  ctx: OrganizationContext,
+  id: string,
+  opts: { actorId?: string | null } = {},
+): Promise<PayoutBatch | null> {
+  const batch = writableBatch(ctx, id, "payouts.cancel", opts.actorId);
   if (!batch) return null;
   if (!isCancellable(deriveStatus(batch))) {
     throw new Error(`${batch.id} has already started — it can no longer be cancelled`);
@@ -736,9 +969,11 @@ export async function cancelBatch(id: string): Promise<PayoutBatch | null> {
 
 /** Retry every failed/returned row in a batch. */
 export async function retryBatchFailures(
-  id: string
+  ctx: OrganizationContext,
+  id: string,
+  opts: { actorId?: string | null } = {},
 ): Promise<{ batch: PayoutBatch; retried: number; paid: number; failed: number } | null> {
-  const batch = store().batches.find((b) => b.id.toLowerCase() === id.toLowerCase());
+  const batch = writableBatch(ctx, id, "payouts.retry", opts.actorId);
   if (!batch) return null;
   const targets = batch.recipients.filter((r) => r.status === "FAILED" || r.status === "RETURNED");
   if (targets.length === 0) throw new Error("There is nothing to retry in this batch");
@@ -769,8 +1004,13 @@ export async function retryBatchFailures(
   return { batch, retried: targets.length, paid, failed };
 }
 
-export async function retryRecipient(batchId: string, recipientId: string): Promise<Recipient | null> {
-  const batch = store().batches.find((b) => b.id.toLowerCase() === batchId.toLowerCase());
+export async function retryRecipient(
+  ctx: OrganizationContext,
+  batchId: string,
+  recipientId: string,
+  opts: { actorId?: string | null } = {},
+): Promise<Recipient | null> {
+  const batch = writableBatch(ctx, batchId, "payouts.retry-recipient", opts.actorId);
   if (!batch) return null;
   const row = batch.recipients.find((r) => r.id === recipientId);
   if (!row) return null;
@@ -798,14 +1038,17 @@ export async function retryRecipient(batchId: string, recipientId: string): Prom
 
 // --- settings & bank accounts -------------------------------------------------
 
-export async function getPayoutSettings(): Promise<PayoutSettings> {
-  return { ...store().settings };
+export async function getPayoutSettings(ctx: OrganizationContext): Promise<PayoutSettings> {
+  const { organizationId } = scopeOf(ctx);
+  return { ...readPartition(organizationId).settings };
 }
 
 export async function updatePayoutSettings(
+  ctx: OrganizationContext,
   input: Partial<Omit<PayoutSettings, "updatedAt" | "currency">>
 ): Promise<PayoutSettings> {
-  const s = store();
+  const { organizationId } = scopeOf(ctx);
+  const s = writePartition(organizationId);
   if (input.destinationAccountId) {
     const account = s.accounts.find((a) => a.id === input.destinationAccountId);
     if (!account) throw new Error("That destination account does not exist");
@@ -822,21 +1065,27 @@ export async function updatePayoutSettings(
   return { ...s.settings };
 }
 
-export async function listBankAccounts(): Promise<BankAccount[]> {
-  return store().accounts.map((a) => ({ ...a }));
+export async function listBankAccounts(ctx: OrganizationContext): Promise<BankAccount[]> {
+  const { organizationId } = scopeOf(ctx);
+  return readPartition(organizationId).accounts.map((a) => ({ ...a }));
 }
 
-export async function getDestinationAccount(): Promise<BankAccount | null> {
-  const s = store();
+export async function getDestinationAccount(ctx: OrganizationContext): Promise<BankAccount | null> {
+  const { organizationId } = scopeOf(ctx);
+  const s = readPartition(organizationId);
   return s.accounts.find((a) => a.id === s.settings.destinationAccountId) ?? null;
 }
 
-export async function addBankAccount(input: {
-  bank: string;
-  holder: string;
-  accountNumber: string;
-}): Promise<BankAccount> {
-  const s = store();
+export async function addBankAccount(
+  ctx: OrganizationContext,
+  input: {
+    bank: string;
+    holder: string;
+    accountNumber: string;
+  }
+): Promise<BankAccount> {
+  const { organizationId } = scopeOf(ctx);
+  const s = writePartition(organizationId);
   const digits = input.accountNumber.replace(/[\s-]/g, "");
   if (s.accounts.some((a) => a.accountNumber === digits)) {
     throw new Error("That account is already on file");

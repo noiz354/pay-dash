@@ -51,6 +51,14 @@ export type GuardResult =
   | { ok: false; response: NextResponse };
 
 /**
+ * Wave 7B Q4 — the sentinel for "no tenant was resolved" in non-enforcing
+ * (off/preview-bypass) mode. Routes that serve tenant data must treat this as
+ * unresolved and refuse (401), never as a tenant to query. Exported so every
+ * consumer names the same value instead of re-literalising `"unknown"`.
+ */
+export const UNRESOLVED_ORGANIZATION_ID = "unknown";
+
+/**
  * Check session + permission for an export route.
  * Usage:
  *   const guard = await guardExport(request, "transaction.read");
@@ -64,7 +72,7 @@ export async function guardExport(request: Request, permission: Permission): Pro
       const ctx = await resolveSessionOrgContext();
       return { ok: true, organizationId: ctx.organizationId };
     } catch {
-      return { ok: true, organizationId: "unknown" };
+      return { ok: true, organizationId: UNRESOLVED_ORGANIZATION_ID };
     }
   }
 
@@ -116,7 +124,7 @@ export async function guardExportAny(request: Request, permissions: Permission[]
       const ctx = await resolveSessionOrgContext();
       return { ok: true, organizationId: ctx.organizationId };
     } catch {
-      return { ok: true, organizationId: "unknown" };
+      return { ok: true, organizationId: UNRESOLVED_ORGANIZATION_ID };
     }
   }
   let ctx;
@@ -160,7 +168,7 @@ export async function guardApiRead(request: Request, permission?: Permission): P
       const ctx = await resolveSessionOrgContext();
       return { ok: true, organizationId: ctx.organizationId };
     } catch {
-      return { ok: true, organizationId: "unknown" };
+      return { ok: true, organizationId: UNRESOLVED_ORGANIZATION_ID };
     }
   }
 

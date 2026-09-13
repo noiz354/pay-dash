@@ -7,6 +7,7 @@ import { SubmissionToolkit } from "@/components/ai-journal/submission-toolkit";
 import { formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 import { getOnboardingStatus } from "@/server/data/onboarding";
 import { getPayoutSettings } from "@/server/data/payouts";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import { getRiskOverview } from "@/server/data/risk";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
 
@@ -62,11 +63,12 @@ function ReadinessSignal({ label, complete, detail }: { label: string; complete:
 }
 
 export default async function LaunchReadinessAgentPage() {
+  const { context: payoutContext } = await resolvePayoutOrganizationContext();
   const [onboarding, risk, webhooks, payoutSettings] = await Promise.all([
     getOnboardingStatus(),
     getRiskOverview(),
     Promise.resolve(getSystemWebhookSummary()),
-    getPayoutSettings(),
+    getPayoutSettings(payoutContext),
   ]);
 
   const technical = onboarding.sections.find((section) => section.id === "technical");

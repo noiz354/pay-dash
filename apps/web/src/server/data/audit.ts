@@ -5,7 +5,7 @@ import type { AuditCategoryValue, AuditRangeValue, AuditStatusValue } from "@/li
 import { BLOCKLIST_REASON_LABELS, BLOCKLIST_TYPE_LABELS } from "@/lib/blocklist-options";
 import { ROLE_LABELS } from "@/lib/team-roles";
 import { listBlocklist } from "./blocklist";
-import { getPayoutBatches } from "./payouts";
+import { legacyPayoutBatches } from "./payouts-unscoped";
 import { getRiskOverview } from "./risk";
 import { listApiKeys } from "./settings";
 import { listMembers } from "./team";
@@ -110,7 +110,7 @@ function syncEvents(): AuditEvent[] {
   }
 
   // --- payouts ← batch timelines --------------------------------------------
-  for (const batch of getPayoutBatches()) {
+  for (const batch of legacyPayoutBatches("audit")) {
     for (const ev of batch.timeline) {
       events.push({
         id: `${batch.id}:${ev.id}`,

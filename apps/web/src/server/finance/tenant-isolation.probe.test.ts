@@ -25,7 +25,6 @@ import type { CanonicalStatusMap } from "@/domain/payments/projection";
 import { scopeRecord, scopeRecords, tenantScope, TenantIsolationError } from "@/domain/security/tenant";
 import { getLedgerRows, listTransactions, countLedgerTenants, seedDemoLedgerForOrganization } from "@/server/data/transactions";
 import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
-import { getPayoutBatches } from "@/server/data/payouts";
 
 const ORG_A = "org-a";
 const ORG_B = "org-b";
@@ -146,16 +145,84 @@ describe("tenant isolation matrix — in-memory data layer", () => {
     record({ surface: "server/data/transactions detail + retry", isolated: true, mechanism: "read ∅ / write throws" });
   });
 
-  it("CURRENT GAP — getPayoutBatches() is process-wide and rows carry no owner", () => {
-    const batches = getPayoutBatches();
-    expect(getPayoutBatches.length).toBe(0);
-    if (batches.length > 0) {
-      expect(Object.keys(batches[0])).not.toContain("organizationId");
-    }
+  it("Wave 7B — server/data/payouts requires a tenant scope on every read/write", async () => {
+    (globalThis as unknown as { __kineticPayoutStore?: unknown }).__kineticPayoutStore = undefined;
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+    const { createBatch, listBatches, getBatch } = await import("@/server/data/payouts");
+    const mk = (name: string) => ({
+      name,
+      recipients: [{ line: 1, name: `${name} supplier`, bank: "BCA", accountNumber: "1111111111", amount: 1_000_000, reference: name }],
+    });
+    const foreign = await createBatch(scopeB, mk("Beta probe batch"), { createdBy: "user_b" });
+    await createBatch(scopeA, mk("Alpha probe batch"), { createdBy: "user_a" });
+
+    const rows = await listBatches(scopeA, { pageSize: 50 });
+    expect(rows.total).toBe(1);
+    expect(rows.rows.every((r) => r.organizationId === ORG_A)).toBe(true);
+    // Arity is the evidence in the other direction now: a scope is required
+    // ((ctx, filters = {}) → length 1: everything after ctx is optional).
+    expect(listBatches.length).toBe(1);
+    expect(await getBatch(scopeA, foreign.id)).toBeNull();
+
     record({
-      surface: "server/data/payouts.getPayoutBatches",
-      isolated: false,
-      mechanism: "NONE — single-tenant demo store (D-09 / Wave 7)",
+      surface: "server/data/payouts (list/get)",
+      isolated: true,
+      mechanism: "required OrganizationContext + per-tenant partition",
+    });
+  });
+
+  it("Wave 7B — payout CSV exports refuse unauthenticated callers (401, no data)", async () => {
+    // No session, strict mode (default test env): the guard resolves no tenant
+    // and both export endpoints refuse before touching the store. This pins the
+    // edge of the payout surface — the scoped-CSV interior is pinned by
+    // app/api/exports/payouts/route.tenant.test.ts (5/5), which runs the same
+    // handlers with a bound tenant.
+    const { NextRequest } = await import("next/server");
+    const { GET: exportLog } = await import("@/app/api/exports/payouts/route");
+    const { GET: exportBatch } = await import("@/app/api/exports/payouts/[id]/route");
+
+    const log = await exportLog(new NextRequest("http://localhost/api/exports/payouts") as never);
+    expect(log.status).toBe(401);
+    expect(await log.text()).not.toMatch(/batch_id|Alpha|Beta/i);
+
+    const batch = await exportBatch(
+      new NextRequest("http://localhost/api/exports/payouts/BATCH-X") as never,
+      { params: Promise.resolve({ id: "BATCH-X" }) },
+    );
+    expect(batch.status).toBe(401);
+
+    record({
+      surface: "app/api/exports/payouts (list + [id], unauthenticated)",
+      isolated: true,
+      mechanism: "guardExport fail-closed (401) before any store read",
+    });
+  });
+
+  it("Wave 7C — server/data/customers requires a tenant scope on every read/write", async () => {
+    (globalThis as unknown as { __kineticCustomerStore?: unknown }).__kineticCustomerStore = undefined;
+    (globalThis as unknown as { __kineticTxStore?: unknown }).__kineticTxStore = undefined;
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+    const { createCustomer, listCustomers, getCustomer, updateCustomer } = await import("@/server/data/customers");
+    const foreign = await createCustomer(scopeB, { name: "Beta probe buyer", email: "beta@probe-b.example" });
+    await createCustomer(scopeA, { name: "Alpha probe buyer", email: "alpha@probe-a.example" });
+
+    const page = await listCustomers(scopeA, { pageSize: 50 });
+    expect(page.total).toBe(1);
+    expect(page.rows.every((r) => r.organizationId === ORG_A)).toBe(true);
+    // Arity is the evidence in the other direction now: a scope is required
+    // ((ctx, filters = {}) → length 1: everything after ctx is optional).
+    expect(listCustomers.length).toBe(1);
+    expect(await getCustomer(scopeA, foreign.id)).toBeNull();
+    await expect(updateCustomer(scopeA, { id: foreign.id, name: "Hijacked" })).rejects.toBeInstanceOf(
+      TenantIsolationError,
+    );
+
+    record({
+      surface: "server/data/customers (list/get/update)",
+      isolated: true,
+      mechanism: "required OrganizationContext + per-tenant partition + composite key",
     });
   });
 
@@ -172,10 +239,9 @@ describe("tenant isolation matrix — in-memory data layer", () => {
 
     expect(isolated.length).toBeGreaterThan(0);
     // The assertion that matters: gaps are KNOWN and counted, never zero-by-accident.
-    // Wave 6 measured 2; Wave 7A closed the Transactions half, so the only
-    // remaining gap is payouts — and this number must move with reality, which is
-    // why `TRANSACTIONS_TENANT_ISOLATION_MATRIX.md` prints the same table.
-    expect(gaps.length).toBe(1);
-    expect(gaps.map((g) => g.surface)).toEqual(["server/data/payouts.getPayoutBatches"]);
+    // Wave 6 measured 2; Wave 7A closed Transactions; Wave 7B closed Payouts;
+    // Wave 7C closed Customers — zero measured gaps. The next slice re-opens
+    // this count the moment it adds a probe that fails.
+    expect(gaps.length).toBe(0);
   });
 });

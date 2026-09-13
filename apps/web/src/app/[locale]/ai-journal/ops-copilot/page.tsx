@@ -9,6 +9,7 @@ import { getPayoutsOverview } from "@/server/data/payouts";
 import { getRiskOverview } from "@/server/data/risk";
 import { getLedgerMetrics, listTransactions } from "@/server/data/transactions";
 import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +36,11 @@ export default async function MerchantOpsCopilotPage() {
   // assistant that can see another organization's failed payments is a leak with
   // a prompt attached, so the model only ever receives this tenant's rows.
   const { context } = await resolveTransactionOrganizationContext();
+  const { context: payoutContext } = await resolvePayoutOrganizationContext();
   const [metrics, balance, payouts, risk, webhooks, failed] = await Promise.all([
     getLedgerMetrics(context),
     getBalanceOverview(),
-    getPayoutsOverview(),
+    getPayoutsOverview(payoutContext),
     getRiskOverview(),
     Promise.resolve(getSystemWebhookSummary()),
     listTransactions(context, { status: "FAILED", pageSize: 5 }),

@@ -171,35 +171,52 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
       sourceAware(input, () => listMovements(asFilters<Parameters<typeof listMovements>[0]>({ page, pageSize, type, status })), notImplementedPg("list_movements"))
   );
 
-  // Payouts
+  // Payouts — Wave 7B Q4: tenant-bound like the transaction tools above. The
+  // request's organization is the only tenant these tools can see; without one
+  // they refuse (NO_TENANT) instead of defaulting, and a foreign id reads as
+  // not-found so ids cannot be probed across tenants.
   server.registerTool(
     "list_payout_batches",
-    { title: "List payout batches", description: "Payout batches (withdrawals).", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listBatches(asFilters<Parameters<typeof listBatches>[0]>({ page, pageSize })), notImplementedPg("list_payout_batches"))
+    { title: "List payout batches", description: "List payout batches (withdrawals) **for the organization bound to this request**.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listBatches(scoped, asFilters<Parameters<typeof listBatches>[1]>({ page, pageSize })), notImplementedPg("list_payout_batches"));
+    }
   );
   server.registerTool(
     "get_payout_batch",
-    { title: "Get payout batch", description: "Get one payout batch by id.", inputSchema: { id: z.string(), ...sourceSchema } },
-    async ({ id, ...input }) => sourceAware(input, () => getBatch(id), notImplementedPg("get_payout_batch"))
+    { title: "Get payout batch", description: "Get one payout batch by id, within the bound organization. A foreign id is indistinguishable from a missing one.", inputSchema: { id: z.string(), ...sourceSchema } },
+    async ({ id, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getBatch(scoped, id), notImplementedPg("get_payout_batch"));
+    }
   );
   server.registerTool(
     "get_payouts_overview",
-    { title: "Get payouts overview", description: "Payout summary metrics.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getPayoutsOverview(), notImplementedPg("get_payouts_overview"))
+    { title: "Get payouts overview", description: "Payout summary metrics for the bound organization.", inputSchema: sourceSchema },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getPayoutsOverview(scoped), notImplementedPg("get_payouts_overview"));
+    }
   );
 
-  // Customers
+  // Customers — tenant-bound (Wave 7C). No tenant on the request ⇒ refuse;
+  // a foreign id/email is not-found, never forbidden (no enumeration oracle).
   server.registerTool(
     "list_customers",
-    { title: "List customers", description: "List merchants' customers.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
-    async ({ page, pageSize, status, ...input }) =>
-      sourceAware(input, () => listCustomers(asFilters<Parameters<typeof listCustomers>[0]>({ page, pageSize, status })), notImplementedPg("list_customers"))
+    { title: "List customers", description: "List the customer directory **for the organization bound to this request**.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
+    async ({ page, pageSize, status, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listCustomers(scoped, asFilters<Parameters<typeof listCustomers>[1]>({ page, pageSize, status })), notImplementedPg("list_customers"));
+    }
   );
   server.registerTool(
     "get_customer",
-    { title: "Get customer", description: "Get a customer by id or email.", inputSchema: { idOrEmail: z.string(), ...sourceSchema } },
-    async ({ idOrEmail, ...input }) => sourceAware(input, () => getCustomer(idOrEmail), notImplementedPg("get_customer"))
+    { title: "Get customer", description: "Get one customer by id or email, within the bound organization. A foreign id/email is indistinguishable from a missing one.", inputSchema: { idOrEmail: z.string(), ...sourceSchema } },
+    async ({ idOrEmail, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, async () => (await getCustomer(scoped, idOrEmail)) ?? { error: "Customer not found." }, notImplementedPg("get_customer"));
+    }
   );
 
   // Invoices

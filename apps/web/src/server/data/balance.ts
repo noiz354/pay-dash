@@ -6,8 +6,10 @@ import type {
   MovementType,
 } from "@/lib/balance-status";
 import type { RecipientDraft } from "@/lib/payout-csv";
+import type { OrganizationContext } from "@/domain/tenancy/organization-context";
 import { legacyLedgerRows } from "./transactions-unscoped";
-import { approveBatch, createBatch, listBankAccounts, getPayoutBatches } from "./payouts";
+import { approveBatch, createBatch, listBankAccounts } from "./payouts";
+import { legacyPayoutBatches } from "./payouts-unscoped";
 import type { ProviderBalance, ProviderReadResult } from "@/domain/payments/provider-read";
 
 export type { MovementStatus, MovementType };
@@ -193,7 +195,7 @@ function deriveMovements(): Movement[] {
   }
 
   // 2. Payouts: every recipient is a withdrawal in this ledger.
-  for (const batch of getPayoutBatches()) {
+  for (const batch of legacyPayoutBatches("balance")) {
     batch.recipients.forEach((r, index) => {
       const base = {
         id: `mv_wd_${batch.id}_${index + 1}`,
@@ -431,11 +433,14 @@ export type WithdrawResult = {
  * That keeps an audit trail, reuses the release gate, and means the
  * movements table, the payout history and the balance all show the same row.
  */
-export async function withdrawBalance(input: {
-  amount: number;
-  accountId: string;
-}): Promise<WithdrawResult> {
-  const account = (await listBankAccounts()).find((a) => a.id === input.accountId);
+export async function withdrawBalance(
+  input: {
+    amount: number;
+    accountId: string;
+  },
+  ctx: OrganizationContext,
+): Promise<WithdrawResult> {
+  const account = (await listBankAccounts(ctx)).find((a) => a.id === input.accountId);
   if (!account) throw new Error("That destination account does not exist");
   if (!account.verified) {
     throw new Error(`${account.bank} ${account.masked} is not verified yet`);
@@ -457,13 +462,17 @@ export async function withdrawBalance(input: {
     reference: "BALANCE",
   };
 
-  const batch = await createBatch({
-    name: `Withdrawal to ${account.bank} ${account.masked}`,
-    source: "Manual",
-    note: "Withdrawn from the balance",
-    recipients: [draft],
-  });
-  const result = await approveBatch(batch.id);
+  const batch = await createBatch(
+    ctx,
+    {
+      name: `Withdrawal to ${account.bank} ${account.masked}`,
+      source: "Manual",
+      note: "Withdrawn from the balance",
+      recipients: [draft],
+    },
+    { createdBy: null },
+  );
+  const result = await approveBatch(ctx, batch.id);
   if (!result) throw new Error("The withdrawal batch disappeared before it could be released");
 
   const after = await getBalanceOverview();

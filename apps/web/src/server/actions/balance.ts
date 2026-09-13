@@ -6,6 +6,7 @@ import { parseAmount } from "@/lib/payout-status";
 import { formatMoney } from "@/lib/format";
 import { TOPUP_METHODS } from "@/lib/balance-status";
 import { topUpBalance, withdrawBalance } from "@/server/data/balance";
+import { requirePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import type { ActionState } from "./payouts";
 
 export type { ActionState };
@@ -85,7 +86,10 @@ export async function withdrawBalanceAction(
   }
 
   try {
-    const result = await withdrawBalance({ amount: parsed.data.amount, accountId: parsed.data.accountId });
+    // Wave 7B: a withdrawal mints and releases a payout batch, so it resolves
+    // the session tenant like any other money-out write.
+    const { context } = await requirePayoutOrganizationContext("payout.create");
+    const result = await withdrawBalance({ amount: parsed.data.amount, accountId: parsed.data.accountId }, context);
     revalidateBalance(result.batchId);
     if (!result.paid) {
       return {

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { PayoutScheduleForm } from "@/components/payouts/payout-schedule-form";
 import { DestinationAccountDialog } from "@/components/payouts/destination-account-dialog";
 import { getDestinationAccount, getPayoutSettings, listBankAccounts, getPayoutsOverview } from "@/server/data/payouts";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import { formatDateLong, formatMoney } from "@/lib/format";
 
 // Payout settings — every control here used to be uncontrolled decoration.
@@ -16,11 +17,12 @@ export const metadata: Metadata = {
 };
 
 export default async function PayoutSettingsPage() {
+  const { context } = await resolvePayoutOrganizationContext();
   const [settings, accounts, destination, overview] = await Promise.all([
-    getPayoutSettings(),
-    listBankAccounts(),
-    getDestinationAccount(),
-    getPayoutsOverview(),
+    getPayoutSettings(context),
+    listBankAccounts(context),
+    getDestinationAccount(context),
+    getPayoutsOverview(context),
   ]);
 
   return (

@@ -38,7 +38,7 @@ import type {
 import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 import { getLedgerRows, type Transaction } from "@/server/data/transactions";
 import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
-import { getPayoutBatches } from "@/server/data/payouts";
+import { legacyPayoutBatches } from "@/server/data/payouts-unscoped";
 import { getBalanceOverview, listMovements, OPENING_BALANCE } from "@/server/data/balance";
 
 const CURRENCY = "IDR";
@@ -118,7 +118,7 @@ function refundsFrom(rows: readonly Transaction[]): RefundRecord[] {
 
 function payoutsFrom(): PayoutRecord[] {
   const out: PayoutRecord[] = [];
-  for (const batch of getPayoutBatches()) {
+  for (const batch of legacyPayoutBatches("finance-snapshot")) {
     for (const r of batch.recipients) {
       const status: LifecycleStatus =
         r.status === "PAID" ? "SUCCEEDED" : r.status === "FAILED" ? "FAILED" : "PENDING";

@@ -86,9 +86,13 @@ describe("MCP server transport handshake", () => {
     expect(content[0]?.text ?? "").toContain("PostgreSQL store not implemented");
   });
 
-  it("tools/call list_transactions in memory mode returns ledger rows", async () => {
+  it("tools/call list_transactions without a tenant refuses fail-closed (Wave 7A)", async () => {
+    // Wave 7A: buildMcpServer(store) binds no organization, so the transaction
+    // tools must refuse instead of returning rows. Tenant-bound success is
+    // covered in domain-tools.tenant.test.ts; this transport test pins the
+    // fail-closed wire behaviour (no default tenant).
     const { result } = await rpc("tools/call", { name: "list_transactions", arguments: { dataSource: "memory", page: 1, pageSize: 5 } });
     const content = (result?.content as Array<{ type: string; text: string }>) ?? [];
-    expect(content[0]?.text ?? "").toContain("rows");
+    expect(content[0]?.text ?? "").toMatch(/organization|tenant/i);
   });
 });

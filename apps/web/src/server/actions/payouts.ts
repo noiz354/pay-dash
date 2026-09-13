@@ -5,7 +5,9 @@ import { z } from "zod";
 import { parseRecipientsCsv } from "@/lib/payout-csv";
 import { PAYOUT_CADENCES, WEEKDAYS, isValidAccountNumber, parseAmount } from "@/lib/payout-status";
 import { OrgContextError } from "@/server/services/org-context";
-import { requireStrictOrgContext } from "@/server/services/session-org-context";
+import { requirePayoutOrganizationContext } from "@/server/services/payout-organization-context";
+import { OrganizationContextError } from "@/domain/tenancy/organization-context";
+import { TenantIsolationError } from "@/domain/security/tenant";
 import {
   addBankAccount,
   approveBatch,
@@ -60,11 +62,12 @@ export async function createBatchAction(
   _prev: ActionState<{ id: string; recipients: number; amount: number }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string; recipients: number; amount: number }>> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003: enforce payout RBAC fail-closed (JRN-006) + Wave 7B tenant scope.
+  let access;
   try {
-    await requireStrictOrgContext("payout.create");
+    access = await requirePayoutOrganizationContext("payout.create");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to create payouts." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to create payouts." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
@@ -95,13 +98,17 @@ export async function createBatchAction(
   }
 
   const scheduledFor = parsed.data.scheduledFor ? new Date(parsed.data.scheduledFor).toISOString() : null;
-  const batch = await createBatch({
-    name: parsed.data.name,
-    source: parsed.data.source,
-    scheduledFor,
-    note: parsed.data.note,
-    recipients: recipients.valid,
-  });
+  const batch = await createBatch(
+    access.context,
+    {
+      name: parsed.data.name,
+      source: parsed.data.source,
+      scheduledFor,
+      note: parsed.data.note,
+      recipients: recipients.valid,
+    },
+    { createdBy: access.actorId },
+  );
 
   revalidatePayouts(batch.id);
   const skipped = recipients.invalid.length;
@@ -127,11 +134,12 @@ export async function approveBatchAction(
   _prev: ActionState<{ id: string; paid: number; failed: number }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string; paid: number; failed: number }>> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003: enforce payout RBAC fail-closed (JRN-006) + Wave 7B tenant scope.
+  let access;
   try {
-    await requireStrictOrgContext("payout.release");
+    access = await requirePayoutOrganizationContext("payout.release");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to release payouts." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to release payouts." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
@@ -140,7 +148,7 @@ export async function approveBatchAction(
     return { status: "error", message: "Confirm before releasing funds.", fieldErrors: fieldErrorsOf(parsed.error) };
   }
   try {
-    const result = await approveBatch(parsed.data.id);
+    const result = await approveBatch(access.context, parsed.data.id, { actorId: access.actorId });
     if (!result) return { status: "error", message: "That batch no longer exists." };
     revalidatePayouts(result.batch.id);
     return {
@@ -151,6 +159,8 @@ export async function approveBatchAction(
       data: { id: result.batch.id, paid: result.paid, failed: result.failed },
     };
   } catch (error) {
+    // Anti-enumeration: a cross-tenant probe answers exactly like an unknown id.
+    if (error instanceof TenantIsolationError) return { status: "error", message: "That batch no longer exists." };
     return { status: "error", message: error instanceof Error ? error.message : "Release failed." };
   }
 }
@@ -159,11 +169,12 @@ export async function cancelBatchAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003: enforce payout RBAC fail-closed (JRN-006) + Wave 7B tenant scope.
+  let access;
   try {
-    await requireStrictOrgContext("payout.cancel");
+    access = await requirePayoutOrganizationContext("payout.cancel");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to cancel payouts." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to cancel payouts." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
@@ -172,11 +183,12 @@ export async function cancelBatchAction(
     return { status: "error", message: "Confirm before cancelling.", fieldErrors: fieldErrorsOf(parsed.error) };
   }
   try {
-    const batch = await cancelBatch(parsed.data.id);
+    const batch = await cancelBatch(access.context, parsed.data.id, { actorId: access.actorId });
     if (!batch) return { status: "error", message: "That batch no longer exists." };
     revalidatePayouts(batch.id);
     return { status: "success", message: `${batch.id} cancelled — no funds were released.` };
   } catch (error) {
+    if (error instanceof TenantIsolationError) return { status: "error", message: "That batch no longer exists." };
     return { status: "error", message: error instanceof Error ? error.message : "Cancel failed." };
   }
 }
@@ -185,18 +197,19 @@ export async function retryBatchAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003: enforce payout RBAC fail-closed (JRN-006) + Wave 7B tenant scope.
+  let access;
   try {
-    await requireStrictOrgContext("payout.retry");
+    access = await requirePayoutOrganizationContext("payout.retry");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payouts." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payouts." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { status: "error", message: "Missing batch id." };
   try {
-    const result = await retryBatchFailures(id);
+    const result = await retryBatchFailures(access.context, id, { actorId: access.actorId });
     if (!result) return { status: "error", message: "That batch no longer exists." };
     revalidatePayouts(result.batch.id);
     return {
@@ -206,6 +219,7 @@ export async function retryBatchAction(
       } still failing.`,
     };
   } catch (error) {
+    if (error instanceof TenantIsolationError) return { status: "error", message: "That batch no longer exists." };
     return { status: "error", message: error instanceof Error ? error.message : "Retry failed." };
   }
 }
@@ -214,11 +228,12 @@ export async function retryRecipientAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003: enforce payout RBAC fail-closed (JRN-006) + Wave 7B tenant scope.
+  let access;
   try {
-    await requireStrictOrgContext("payout.retry");
+    access = await requirePayoutOrganizationContext("payout.retry");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payouts." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to retry payouts." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
@@ -226,7 +241,7 @@ export async function retryRecipientAction(
   const recipientId = String(formData.get("recipientId") ?? "").trim();
   if (!batchId || !recipientId) return { status: "error", message: "Missing recipient." };
   try {
-    const row = await retryRecipient(batchId, recipientId);
+    const row = await retryRecipient(access.context, batchId, recipientId, { actorId: access.actorId });
     if (!row) return { status: "error", message: "That recipient no longer exists." };
     revalidatePayouts(batchId);
     return {
@@ -237,6 +252,7 @@ export async function retryRecipientAction(
           : `${row.name} failed again — ${row.failureReason ?? "unknown reason"}.`,
     };
   } catch (error) {
+    if (error instanceof TenantIsolationError) return { status: "error", message: "That recipient no longer exists." };
     return { status: "error", message: error instanceof Error ? error.message : "Retry failed." };
   }
 }
@@ -263,11 +279,12 @@ export async function updatePayoutScheduleAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003: enforce payout RBAC fail-closed (JRN-006) + Wave 7B tenant scope.
+  let access;
   try {
-    await requireStrictOrgContext("payout.create");
+    access = await requirePayoutOrganizationContext("payout.create");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to update payout schedule." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to update payout schedule." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
@@ -292,7 +309,7 @@ export async function updatePayoutScheduleAction(
   }
 
   try {
-    await updatePayoutSettings(parsed.data);
+    await updatePayoutSettings(access.context, parsed.data);
     revalidatePayouts();
     return { status: "success", message: "Payout schedule saved." };
   } catch (error) {
@@ -306,18 +323,19 @@ export async function setDestinationAccountAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003 + Wave 7B tenant scope.
+  let destAccess;
   try {
-    await requireStrictOrgContext("payout.create");
+    destAccess = await requirePayoutOrganizationContext("payout.create");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to update payout settings." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to update payout settings." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
   const id = String(formData.get("accountId") ?? "").trim();
   if (!id) return { status: "error", message: "Choose an account." };
   try {
-    await updatePayoutSettings({ destinationAccountId: id });
+    await updatePayoutSettings(destAccess.context, { destinationAccountId: id });
     revalidatePayouts();
     return { status: "success", message: "Destination account updated." };
   } catch (error) {
@@ -334,19 +352,20 @@ export async function toggleAutoWithdrawalAction(
   _prev: ActionState<{ automated: boolean }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ automated: boolean }>> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003 + Wave 7B tenant scope.
+  let toggleAccess;
   try {
-    await requireStrictOrgContext("payout.create");
+    toggleAccess = await requirePayoutOrganizationContext("payout.create");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to toggle auto-withdrawal." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to toggle auto-withdrawal." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
   const enabled = formData.get("automated") === "on";
   try {
-    const current = await getPayoutSettings();
+    const current = await getPayoutSettings(toggleAccess.context);
     const cadence = enabled && current.cadence === "manual" ? "daily" : current.cadence;
-    await updatePayoutSettings({ automated: enabled, cadence });
+    await updatePayoutSettings(toggleAccess.context, { automated: enabled, cadence });
     revalidatePayouts();
     return {
       status: "success",
@@ -370,11 +389,12 @@ export async function addBankAccountAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
-  // BE-003: enforce payout RBAC fail-closed (JRN-006)
+  // BE-003 + Wave 7B tenant scope.
+  let acctAccess;
   try {
-    await requireStrictOrgContext("payout.create");
+    acctAccess = await requirePayoutOrganizationContext("payout.create");
   } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to add bank accounts." };
+    if (e instanceof OrgContextError || e instanceof OrganizationContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : "You don't have permission to add bank accounts." };
     return { status: "error", message: e instanceof Error ? e.message : "Unauthorized" };
   }
 
@@ -387,7 +407,7 @@ export async function addBankAccountAction(
     return { status: "error", message: "Please fix the highlighted fields.", fieldErrors: fieldErrorsOf(parsed.error) };
   }
   try {
-    const account = await addBankAccount(parsed.data);
+    const account = await addBankAccount(acctAccess.context, parsed.data);
     revalidatePayouts();
     return {
       status: "success",
