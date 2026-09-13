@@ -5,6 +5,16 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 ## [Unreleased]
 
 ### Added
+- **Wave 7C — Customers tenant isolation** (ADR-0043). Tenant-partitioned customer DAL
+  (`server/data/customers.ts`: `organizationId` on rows + manual records, ctx-first
+  list/search/detail/transactions/metrics/create/update, composite key `(org, id)` so the
+  same email in two tenants resolves per-tenant rows), fail-closed quarantine for the 2
+  remaining derived readers (`server/data/customers-unscoped.ts`: reports, subscriptions),
+  session→tenant seam (`server/services/customer-organization-context.ts`), scoped CSV
+  export route (`private, no-store` + `Vary: Cookie`) and tenant-bound MCP customer tools.
+  29 new tests (isolation, structural, route, MCP; probe GAP→PASS) + 8 mutation checks;
+  probe gaps reach 0 (transactions, payouts, customers all PASS). No pre-existing auth gap
+  found on this slice.
 - **Wave 7B — Payouts + Refunds tenant isolation** (ADR-0042). Tenant-partitioned payout DAL
   (`server/data/payouts.ts`: `organizationId` + `createdBy`, ctx-first reads/writes/mutations,
   per-org settings/bank, dual-control after the tenant check), fail-closed quarantine for the 6
