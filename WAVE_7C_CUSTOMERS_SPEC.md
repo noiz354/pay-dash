@@ -1,7 +1,7 @@
 # Wave 7C — Customers Tenant Isolation (Spec)
 
-Date: 2026-09-13 · Branch: `main@d337a13` (Wave 7B committed) · Predecessors: Wave 7A (Transactions, PASS), Wave 7B (Payouts, PASS)
-Status: **Proposed** · Follows ADR-0041/0042 · Reuses `domain/tenancy/organization-context.ts` unchanged
+Date: 2026-09-13 · Branch: `arena/01a0997a-pay-dash` (Wave 7B committed) · Predecessors: Wave 7A (Transactions, PASS), Wave 7B (Payouts, PASS)
+Status: **Implemented** · Follows ADR-0041/0042/0043 · Reuses `domain/tenancy/organization-context.ts` unchanged · Report `WAVE_7C_IMPLEMENTATION_REPORT.md` · Matrix `CUSTOMERS_TENANT_ISOLATION_MATRIX.md`
 
 ---
 

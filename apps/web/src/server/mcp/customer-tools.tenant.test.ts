@@ -23,6 +23,13 @@ vi.mock("@/server/services/session-org-context", () => ({
   requireStrictOrgContext: session,
 }));
 
+// Mirror payout-tools.tenant.test.ts (7B Q1 harness): keep the Prisma-backed
+// Postgres reader out of the module graph so the suite runs without
+// `prisma generate` (the sandbox can't reach binaries.prisma.sh).
+vi.mock("./pg-stores", () => ({
+  getBalanceOverviewPostgres: vi.fn(async () => ({ error: "unreachable from these tests" })),
+}));
+
 type ToolHandler = (input: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }> }>;
 
 function capture(): { tools: Map<string, ToolHandler>; server: { registerTool: (n: string, s: unknown, h: ToolHandler) => void } } {

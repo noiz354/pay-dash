@@ -61,3 +61,5 @@ One file per decision: **Context / Decision / Alternatives / Trade-offs / Conseq
 | ADR | Decision | Wave |
 |---|---|---|
 | [0041](./0041-canonical-tenant-scoping.md) | Canonical tenant scoping — required `OrganizationContext` at the data boundary, remainder quarantined fail-closed | W7A |
+| [0042](./0042-payout-tenant-isolation.md) | Payout tenant isolation on the Wave 7A contract (money-out slice) | W7B |
+| [0043](./0043-customer-tenant-isolation.md) | Customer tenant isolation on the Wave 7A contract (derived-directory slice) | W7C |
