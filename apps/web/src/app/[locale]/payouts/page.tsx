@@ -8,6 +8,7 @@ import { PayoutsSummaryCards } from "@/components/payouts/payouts-summary-cards"
 import { CanonicalPayoutsTable } from "@/components/payouts/canonical-payouts-table";
 import { CreateBatchDialog } from "@/components/payouts/create-batch-dialog";
 import { getPayoutsOverview, listBatches } from "@/server/data/payouts";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import type { PayoutStatus } from "@/lib/payout-status";
 
 // Payouts index — canonical DataTable with URL state, search, filters, sorting, pagination, selection, bulk actions, CSV import
@@ -27,13 +28,15 @@ function one(v: string | string[] | undefined) {
 }
 
 async function SummaryRow() {
-  const overview = await getPayoutsOverview();
+  const { context } = await resolvePayoutOrganizationContext();
+  const overview = await getPayoutsOverview(context);
   return <PayoutsSummaryCards overview={overview} />;
 }
 
 async function BatchHistory({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
-  const data = await listBatches({
+  const { context } = await resolvePayoutOrganizationContext();
+  const data = await listBatches(context, {
     q: one(sp.q) ?? "",
     status: (one(sp.status) as PayoutStatus | "ALL") ?? "ALL",
     range: (one(sp.range) as "30d" | "90d" | "12m" | "all") ?? "all",

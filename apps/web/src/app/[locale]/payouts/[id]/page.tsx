@@ -8,6 +8,7 @@ import { BatchTimeline } from "@/components/payouts/batch-timeline";
 import { ReleaseBatchDialog } from "@/components/payouts/release-batch-dialog";
 import { RetryFailuresButton } from "@/components/payouts/retry-failures-button";
 import { getBatch, summarise } from "@/server/data/payouts";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import { isApprovable, isCancellable, isRetryable } from "@/lib/payout-status";
 import { formatDateLong, formatDateTime, formatMoney, formatNumber } from "@/lib/format";
 
@@ -19,13 +20,15 @@ type Params = Promise<{ id: string; locale: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;
-  const batch = await getBatch(id);
+  const { context } = await resolvePayoutOrganizationContext();
+  const batch = await getBatch(context, id);
   return { title: batch ? `${batch.name} — Payouts` : "Batch not found — Payouts" };
 }
 
 export default async function BatchDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const batch = await getBatch(id);
+  const { context } = await resolvePayoutOrganizationContext();
+  const batch = await getBatch(context, id);
   if (!batch) notFound();
 
   const summary = summarise(batch);

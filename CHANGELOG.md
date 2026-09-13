@@ -5,6 +5,22 @@ All notable changes. Format: [Keep a Changelog](https://keepachangelog.com/en/1.
 ## [Unreleased]
 
 ### Added
+- **Wave 7B — Payouts + Refunds tenant isolation** (ADR-0042). Tenant-partitioned payout DAL
+  (`server/data/payouts.ts`: `organizationId` + `createdBy`, ctx-first reads/writes/mutations,
+  per-org settings/bank, dual-control after the tenant check), fail-closed quarantine for the 6
+  remaining derived readers (`server/data/payouts-unscoped.ts`, allowlist shrunk 8 → 6),
+  session→tenant seam (`server/services/payout-organization-context.ts`), scoped CSV export routes
+  (`private, no-store` + `Vary: Cookie`) and tenant-bound MCP payout tools. 56 new tests
+  (isolation, structural, route, MCP, actions, probe) + 8 mutation checks; probe payouts PASS,
+  GAP moves to `customers.listCustomers` (Wave 7C).
+- `WAVE_7B_IMPLEMENTATION_REPORT.md`, `PAYOUTS_TENANT_ISOLATION_MATRIX.md`; debt **D-28**
+  (remaining unscoped payout readers).
+
+### Fixed
+- **Unauthenticated money movement closed** (found during the Wave 7B retrofit):
+  `withdrawBalanceAction` previously required no session. It now requires authentication and a
+  tenant-scoped account (cross-tenant ⇒ same not-found as an unknown account), locked by
+  action-level regression tests. Reported as a security finding, not cleanup.
 - **Wave 7A — Transactions tenant isolation** (`arena/01a095f2-pay-dash`, ADR-0041). `domain/tenancy/organization-context.ts`
   (`OrganizationContext`: required, no default organization) + tenant-scoped transaction DAL
   (`server/data/transactions.ts`, store partitioned by `(organizationId, id)`), fail-closed quarantine for

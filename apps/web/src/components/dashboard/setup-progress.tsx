@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { getCompletedSteps, toggleSetupStepAction } from "@/server/actions/setup";
 import { nextSetupStep, resolveSetupSteps, SETUP_STEPS } from "@/lib/setup-steps";
 import { getDestinationAccount } from "@/server/data/payouts";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import { SetupStepToggle } from "./setup-step-toggle";
 
 // Setup Progress checklist — each row is actionable: the checkbox posts a
@@ -12,7 +13,8 @@ import { SetupStepToggle } from "./setup-step-toggle";
 // destination payout account marks it done and locks the tick, so the ring
 // can no longer be inflated by a self-attested check.
 export async function SetupProgress() {
-  const [done, destination] = await Promise.all([getCompletedSteps(), getDestinationAccount()]);
+  const { context } = await resolvePayoutOrganizationContext();
+  const [done, destination] = await Promise.all([getCompletedSteps(), getDestinationAccount(context)]);
   const bankLinked = destination?.verified ?? false;
   const states = resolveSetupSteps(done, bankLinked);
   const completed = states.filter((s) => s.done).length;

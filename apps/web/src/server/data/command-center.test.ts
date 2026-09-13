@@ -12,7 +12,7 @@ import {
 } from "@/lib/command-center";
 import { __resetHandoffStore, openHandoff, rolesWithPermission, type OpenHandoffInput } from "./handoff-store";
 import { getCommandCenter, toDto, worstBand, type CommandCenterSnapshot } from "./command-center";
-import { getPayoutBatches } from "./payouts";
+import { legacyPayoutBatches } from "./payouts-unscoped";
 import { listTransactions, requestRefund } from "./transactions";
 import { DEMO_CONTEXT } from "@/test/organization-context";
 
@@ -133,7 +133,7 @@ describe("lane structure", () => {
 describe("permission awareness (§2)", () => {
   it("marks a permissioned lane item actionable only for a role that holds it", async () => {
     // The seed carries a FAILED recipient, so the retry card is populated.
-    const hasFailedRecipient = getPayoutBatches().some((b) =>
+    const hasFailedRecipient = legacyPayoutBatches("command-center").some((b) =>
       b.recipients.some((r) => r.status === "FAILED" || r.status === "RETURNED"),
     );
     if (!hasFailedRecipient) return;

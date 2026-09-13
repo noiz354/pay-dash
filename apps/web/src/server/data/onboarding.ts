@@ -4,6 +4,7 @@ import { formatDateLong } from "@/lib/format";
 import { KYC_DOC_TYPES } from "@/lib/kyc-options";
 import { getKycSubmission, profileKycCompleteness } from "./kyc";
 import { getDestinationAccount, listBankAccounts } from "./payouts";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 import { legacyLedgerRows } from "./transactions-unscoped";
 import { getMerchantProfile, listApiKeys } from "./settings";
 import { listWebhooks } from "./webhooks";
@@ -98,11 +99,14 @@ const profileChecks = (profile: {
 ];
 
 export async function getOnboardingStatus(): Promise<OnboardingStatus> {
+  // Wave 7B: bank-account reads are per-tenant; resolve the session tenant here
+  // (this status is computed per request, never cached across tenants).
+  const { context: payoutCtx } = await resolvePayoutOrganizationContext();
   const [profile, accounts, destination, keys, webhooks, completeness, submission] =
     await Promise.all([
       getMerchantProfile(),
-      listBankAccounts(),
-      getDestinationAccount(),
+      listBankAccounts(payoutCtx),
+      getDestinationAccount(payoutCtx),
       listApiKeys(),
       listWebhooks({ pageSize: 1 }),
       profileKycCompleteness(),

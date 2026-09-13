@@ -2,7 +2,7 @@ import "server-only";
 
 import { hasPermission, type OrganizationRole, type Permission } from "@/domain/organization/roles";
 import { compareSla, evaluateSla, isOverdueBand, type SlaBand, type SlaEntityType } from "@/lib/sla";
-import { getPayoutBatches } from "./payouts";
+import { legacyPayoutBatches } from "./payouts-unscoped";
 import { legacyLedgerRows, legacyRefundQueue } from "./transactions-unscoped";
 import { getRiskOverview } from "./risk";
 import { getKycSubmission } from "./kyc";
@@ -139,7 +139,7 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   const sources: DeriveSource[] = [];
 
   // 1. Payout batches waiting for release (JRN-021: Dinda creates -> Hendri approves).
-  const batches = getPayoutBatches();
+  const batches = legacyPayoutBatches("handoff");
   for (const batch of batches) {
     if (batch.status === "DRAFT" || batch.status === "SCHEDULED") {
       sources.push({

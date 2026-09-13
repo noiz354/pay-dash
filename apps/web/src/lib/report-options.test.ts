@@ -35,7 +35,7 @@ describe("report row mappers (ADR-0020)", () => {
   });
 
   it("maps payout batches with the recipient total as the amount", () => {
-    const batches = getPayoutBatches();
+    const batches = getPayoutBatches(DEMO_CONTEXT);
     const rows = payoutsToReportRows(batches);
     expect(rows).toHaveLength(batches.length);
     for (const [i, row] of rows.entries()) {

@@ -5,6 +5,7 @@ import { PayoutsSummaryCards } from "@/components/payouts/payouts-summary-cards"
 import { BatchUploadDropzone } from "@/components/payouts/batch-upload-dropzone";
 import { BatchesTable } from "@/components/payouts/batches-table";
 import { getPayoutsOverview, listBatches } from "@/server/data/payouts";
+import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
 
 // Bulk payouts workspace. The prototype's numbers were broken literals and its
 // dropzone was a decorative div; both now come from (and write to) real data.
@@ -17,9 +18,10 @@ export const metadata: Metadata = {
 };
 
 export default async function BulkPayoutsPage() {
+  const { context } = await resolvePayoutOrganizationContext();
   const [overview, recent] = await Promise.all([
-    getPayoutsOverview(),
-    listBatches({ sort: "recent", pageSize: 5 }),
+    getPayoutsOverview(context),
+    listBatches(context, { sort: "recent", pageSize: 5 }),
   ]);
 
   return (

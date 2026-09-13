@@ -12,7 +12,7 @@ import {
   type CommandCenterLane,
   type CommandCenterTotals,
 } from "@/lib/command-center";
-import { getPayoutBatches } from "./payouts";
+import { legacyPayoutBatches } from "./payouts-unscoped";
 import { legacyLedgerRows } from "./transactions-unscoped";
 import { listWebhooks } from "./webhooks";
 import { canActOnHandoff } from "./handoff-store";
@@ -138,7 +138,7 @@ function canAct(permission: Permission | null, roles: OrganizationRole[]): boole
 export async function getCommandCenter(roles: OrganizationRole[] = [], now: Date = new Date()): Promise<CommandCenterSnapshot> {
   const handoffs = await deriveHandoffs(now);
   const pending = handoffs.filter((h) => h.status === "OPEN" || h.status === "NOTIFIED" || h.status === "CLAIMED");
-  const batches = getPayoutBatches();
+  const batches = legacyPayoutBatches("command-center");
   const ledger = legacyLedgerRows("command-center");
 
   const raw: Record<CommandCenterLane, RawItem[]> = {
