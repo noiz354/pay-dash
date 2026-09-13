@@ -20,7 +20,7 @@ Scope: **docs-only**. No production code is chartered here.
 | 7A | Transactions tenant isolation | `WAVE_7A_TENANT_ISOLATION_SPEC.md` | `WAVE_7A_IMPLEMENTATION_REPORT.md` | [0041](docs/adr/0041-canonical-tenant-scoping.md) | ✅ PASS (on `main`) |
 | 7B | Payouts + Refunds | `WAVE_7B_PAYOUTS_REFUNDS_SPEC.md` | `WAVE_7B_IMPLEMENTATION_REPORT.md` | [0042](docs/adr/0042-payout-tenant-isolation.md) | ✅ PASS (on `main`) |
 | 7C | Customers | `WAVE_7C_CUSTOMERS_SPEC.md` | `WAVE_7C_IMPLEMENTATION_REPORT.md` (+ `WAVE_7C_HANDOFF_Q6_Q7.md`) | [0043](docs/adr/0043-customer-tenant-isolation.md) | ✅ PASS (on `main`) |
-| 7D | Billing — subscriptions + invoices (incl. `payInvoice` money mutation) | `WAVE_7D_BILLING_SPEC.md` | — | 0044 (reserved) | 📋 Proposed |
+| 7D | Billing — subscriptions + invoices (incl. `payInvoice` money mutation) | `WAVE_7D_BILLING_SPEC.md` | `WAVE_7D_IMPLEMENTATION_REPORT.md` (+ `BILLING_TENANT_ISOLATION_MATRIX.md`) | [0044](docs/adr/0044-billing-tenant-isolation.md) | ✅ PASS (on `arena/01a09b03-pay-dash`) |
 | 7E | Derived surfaces + deletion of the three legacy quarantines | `WAVE_7E_DERIVED_SPEC.md` | — | 0045 (reserved) | 📋 Proposed |
 | 7F | Identity & access — team, settings, KYC, onboarding | `WAVE_7F_IDENTITY_SPEC.md` | — | 0046 (reserved) | 📋 Proposed |
 | 7G | Ingest & integrity — webhooks, idempotency, links, blocklist (+ risk/timeline verify-only) | `WAVE_7G_INGEST_SPEC.md` | — | 0047 (reserved) | 📋 Proposed |
@@ -154,9 +154,9 @@ and the survivor is recorded below with an owner.
 
 | Module | Allowlist | Entries | Cleared by | Deleted by |
 |---|---|---|---|---|
-| `server/data/transactions-unscoped.ts` | `LEGACY_LEDGER_SURFACES` | 12 (`audit` `balance` `command-center` `customers` `handoff` `invoices` `links` `onboarding` `reports` `risk` `finance-snapshot` `webhooks`) | 7E ×6 · 7D ×1 · 7F ×1 · 7G ×3 · stale ×1 (`customers`) | **7E** (ES-6) — only after 7D/7F/7G |
+| `server/data/transactions-unscoped.ts` | `LEGACY_LEDGER_SURFACES` | **11** (`audit` `balance` `command-center` `customers` `handoff` `links` `onboarding` `reports` `risk` `finance-snapshot` `webhooks`) — `invoices` **removed by 7D Q2** (derivation now pages the scoped 7A read) | 7E ×6 · 7F ×1 · 7G ×3 · stale ×1 (`customers`) | **7E** (ES-6) — only after 7F/7G |
 | `server/data/payouts-unscoped.ts` | `LEGACY_PAYOUT_SURFACES` | 6 (`audit` `balance` `command-center` `finance-snapshot` `handoff` `reports`) | 7E ×6 (= D-28) | **7E** (ES-6) — earnable at 7E |
-| `server/data/customers-unscoped.ts` | `LEGACY_CUSTOMER_SURFACES` | 2 (`reports` `subscriptions`) | 7E ×1 · 7D ×1 | **7E** (ES-6) — only after 7D |
+| `server/data/customers-unscoped.ts` | `LEGACY_CUSTOMER_SURFACES` | **1** (`reports`) — `subscriptions` **removed by 7D Q2** (page reads scoped `listCustomers(ctx, …)`) | 7E ×1 | **7E** (ES-6) |
 
 Free shrink available immediately: the `customers` entry in `LEGACY_LEDGER_SURFACES` has **no
 consumer** in the tree (production or test) — 7E may drop it at Q1 with zero code change, which
@@ -166,8 +166,8 @@ the monotone-decreasing pin explicitly permits.
 
 | Module | Planned by | Allowlist | Conditional? | Deleted by |
 |---|---|---|---|---|
-| `server/data/subscriptions-unscoped.ts` | 7D | `LEGACY_SUBSCRIPTION_SURFACES` | no | 7D Q7 if empty, else next wave that empties it |
-| `server/data/invoices-unscoped.ts` | 7D | `LEGACY_INVOICE_SURFACES` | no | as above |
+| ~~`server/data/subscriptions-unscoped.ts`~~ | ~~7D~~ | — | — | **NEVER CREATED** — 7D Q2 verified every billing caller wireable in-wave, so no quarantine was needed; `billing-structural.test.ts` R-4 now *forbids* a billing `*-unscoped.ts` file (recorded in `WAVE_7D_IMPLEMENTATION_REPORT.md` §7.1) |
+| ~~`server/data/invoices-unscoped.ts`~~ | ~~7D~~ | — | — | **NEVER CREATED** — as above |
 | `server/data/team-unscoped.ts` | 7F | `LEGACY_TEAM_SURFACES` | no | as above |
 | `server/data/settings-unscoped.ts` | 7F | `LEGACY_SETTINGS_SURFACES` | no | as above |
 | `server/data/kyc-unscoped.ts` | 7F | — | **yes** — only if a KYC caller cannot be wired in-wave (default = wire all four modules) | as above; creation itself must be recorded here |
@@ -189,7 +189,8 @@ finished Q7.
 
 ## 5. ADR allocation
 
-Reserved up front in `docs/adr/README.md` §"Reserved ADR numbers" — 0044 (7D), 0045 (7E),
+**0044 is written** (`docs/adr/0044-billing-tenant-isolation.md`, Wave 7D Q7) and has moved into the
+README's hardening index. Remaining reserved: 0045 (7E),
 0046 (7F), 0047 (7G), 0048 (7H), 0049 (8), 0050 (10), 0051 (11); Wave 9 plans none. Each spec's
 Q7 line now cites its own number, so out-of-order or parallel execution cannot collide. When a
 wave lands, its row moves from the reserved table into the index table and the file is written at

@@ -12,6 +12,7 @@ import { InvoiceFilters } from "@/components/billing/invoice-filters";
 import { InvoicesTable } from "@/components/billing/invoices-table";
 import { SavePaymentMethodDialog } from "@/components/billing/save-payment-method-dialog";
 import { getBillingSummary, listInvoices } from "@/server/data/invoices";
+import { resolveBillingOrganizationContext } from "@/server/services/billing-organization-context";
 import type { InvoiceStatus } from "@/lib/invoice-status";
 
 // Billing & Invoices — screens/desktop/billing_invoices.
@@ -31,8 +32,11 @@ function one(v: string | string[] | undefined) {
 }
 
 async function SummaryRow() {
-  const summary = await getBillingSummary();
-  const { rows } = await listInvoices({ status: "ALL", sort: "due", pageSize: 100 });
+  // Wave 7D: the accrual card and the outstanding totals are aggregates, so the
+  // tenant predicate has to run before the aggregation — not after it.
+  const { context } = await resolveBillingOrganizationContext();
+  const summary = await getBillingSummary(context);
+  const { rows } = await listInvoices(context, { status: "ALL", sort: "due", pageSize: 100 });
   const payable = rows.filter((i) => i.status === "OVERDUE" || i.status === "PENDING");
   const overdue = rows.find((i) => i.status === "OVERDUE") ?? null;
 
@@ -46,7 +50,8 @@ async function SummaryRow() {
 
 async function InvoiceHistory({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
-  const result = await listInvoices({
+  const { context } = await resolveBillingOrganizationContext();
+  const result = await listInvoices(context, {
     q: one(sp.q) ?? "",
     status: (one(sp.status) as InvoiceStatus | "ALL") ?? "ALL",
     range: (one(sp.range) as "3m" | "6m" | "12m" | "all") ?? "all",

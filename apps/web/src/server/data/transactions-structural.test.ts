@@ -187,7 +187,6 @@ describe("S-2 the unscoped readers are a closed set", () => {
     "server/data/command-center.ts",
     "server/data/customers.ts",
     "server/data/handoff.ts",
-    "server/data/invoices.ts",
     "server/data/links.ts",
     "server/data/onboarding.ts",
     "server/data/risk.ts",
@@ -386,14 +385,22 @@ describe("S-6 the Postgres ledger cannot be read unscoped for transactions", () 
 });
 
 describe("S-1c the tenancy gate is only reachable from fail-closed infrastructure", () => {
-  it("soleLedgerOrganizationId is imported by exactly two consumers", () => {
+  it("soleLedgerOrganizationId is imported by exactly three consumers", () => {
     const consumers = allFiles
       .filter((f) => !isTestFile(f))
       .filter((f) => readFileSync(f, "utf8").includes("soleLedgerOrganizationId"))
       .map((f) => relative(SRC, f).replace(/\\/g, "/"))
       .filter((f) => f !== "server/data/transactions.ts")
       .sort();
-    expect(consumers).toEqual(["server/data/customers.ts", "server/data/transactions-unscoped.ts"]);
+    // Wave 7D adds the billing DAL: invoices are ledger-derived, so attributing
+    // a foreign invoice id and counting invoice-holding tenants needs the same
+    // two probes 7C composes its gate from. Still fail-closed infrastructure
+    // only — no page, action, route or MCP tool.
+    expect(consumers).toEqual([
+      "server/data/customers.ts",
+      "server/data/invoices.ts",
+      "server/data/transactions-unscoped.ts",
+    ]);
   });
 });
 

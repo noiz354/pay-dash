@@ -38,11 +38,16 @@ export async function createSubscriptionAction(
   }
 
   // Org-context authz: the acting org + role come from the session membership.
+  // Wave 7D: the seam yields the canonical `OrganizationContext`, which is what
+  // the DAL now requires — resolving an org id and then dropping it (the pre-7D
+  // shape) left the plan ownerless in a process-wide store.
   let orgId: string | undefined;
+  let billingContext;
   try {
-    const { requireOrgContext } = await import("@/server/services/session-org-context");
-    const ctx = await requireOrgContext("recurring.create");
-    orgId = ctx.organizationId;
+    const { requireBillingOrganizationContext } = await import("@/server/services/billing-organization-context");
+    const access = await requireBillingOrganizationContext("recurring.create");
+    orgId = access.context.organizationId;
+    billingContext = access.context;
   } catch (error) {
     return { status: "error", message: error instanceof Error ? error.message : "Not authorized to create a subscription." };
   }
@@ -69,7 +74,7 @@ export async function createSubscriptionAction(
     return { status: "error", message: error instanceof Error ? error.message : "Could not create the recurring plan at the provider." };
   }
 
-  const sub = await createSubscription({ customerName, customerEmail, planName, interval, amount });
+  const sub = await createSubscription(billingContext, { customerName, customerEmail, planName, interval, amount });
   revalidateSubscriptions();
   return {
     status: "success",

@@ -119,10 +119,9 @@ describe("Q-2 quarantine discipline and store privacy", () => {
       .filter((f) => stripComments(readFileSync(f, "utf8")).match(/from\s+["']@\/server\/data\/customers-unscoped["']|require\(["']@\/server\/data\/customers-unscoped["']\)/))
       .map((f) => f.slice(SRC.length + 1));
     // Seeded allowlist (spec §4 caller table). May only shrink.
-    const allowed = [
-      "app/[locale]/subscriptions/page.tsx",
-      "app/[locale]/reports/builder/page.tsx",
-    ];
+    // Wave 7D shrinks this list: the subscriptions page now reads the scoped 7C
+    // DAL with its own context, so only the reports builder remains (7E's slice).
+    const allowed = ["app/[locale]/reports/builder/page.tsx"];
     for (const importer of importers) {
       expect(allowed, `${importer} reads the unscoped quarantine`).toContain(importer);
     }

@@ -57,7 +57,6 @@ export const LEGACY_LEDGER_SURFACES = [
   "command-center",
   "customers",
   "handoff",
-  "invoices",
   "links",
   "onboarding",
   "reports",

@@ -2,7 +2,7 @@
 
 Date: 2026-09-13 · Branch: `wave-7d-derived-scoping` (main@a4b595a, Waves 7A/7B/7C PASS)
 Predecessors: 7A Transactions, 7B Payouts+Refunds, 7C Customers (probe gaps = 0)
-Status: **Proposed** · Follows ADR-0041/0042/0043 · Reuses `domain/tenancy/organization-context.ts` unchanged
+Status: **Implemented** (Wave 7D Q7, 2026-09-13 — see `WAVE_7D_IMPLEMENTATION_REPORT.md`, `BILLING_TENANT_ISOLATION_MATRIX.md`, `docs/adr/0044-billing-tenant-isolation.md`) · Follows ADR-0041/0042/0043 · Reuses `domain/tenancy/organization-context.ts` unchanged
 
 ---
 
@@ -61,6 +61,14 @@ fail-closed quarantine with surface-naming for the not-yet-scoped.
   ⇒ same `sub_` id shape. Resolution: composite key `(organizationId, id)`, mirrors 7C.
 
 ## 4. Quarantine design (one per DAL, established pattern)
+
+> **Superseded at Q2 (approved deviation).** No billing quarantine module was created: verification
+> found every caller in the table below wireable inside this wave, and a quarantine that exists is a
+> quarantine Wave 7E must later delete. `billing-structural.test.ts` R-4 now *forbids* a billing
+> `*-unscoped.ts` file and any quarantine import from a production billing path. The two legacy
+> allowlists shrank instead (`LEGACY_LEDGER_SURFACES` 12 → 11 dropping `invoices`;
+> `LEGACY_CUSTOMER_SURFACES` 2 → 1 dropping `subscriptions`). See
+> `WAVE_7D_IMPLEMENTATION_REPORT.md` §7.1 and `WAVE_ROADMAP_7D_TO_11.md` §4.2.
 
 `server/data/subscriptions-unscoped.ts` + `server/data/invoices-unscoped.ts`:
 `LEGACY_SUBSCRIPTION_SURFACES` / `LEGACY_INVOICE_SURFACES` (seed at Q2 from the caller

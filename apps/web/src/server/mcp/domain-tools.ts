@@ -219,25 +219,36 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
     }
   );
 
-  // Invoices
+  // Invoices — tenant-bound (Wave 7D). Invoices are ledger-derived, so an
+  // unbound tool answered with a *computed* view of every tenant's fees. No
+  // tenant on the request ⇒ refuse; a foreign period is not-found, never
+  // forbidden (no enumeration oracle).
   server.registerTool(
     "list_invoices",
-    { title: "List invoices", description: "List hosted payment invoices.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
-    async ({ page, pageSize, status, ...input }) =>
-      sourceAware(input, () => listInvoices(asFilters<Parameters<typeof listInvoices>[0]>({ page, pageSize, status })), notImplementedPg("list_invoices"))
+    { title: "List invoices", description: "List hosted payment invoices **for the organization bound to this request**.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
+    async ({ page, pageSize, status, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listInvoices(scoped, asFilters<Parameters<typeof listInvoices>[1]>({ page, pageSize, status })), notImplementedPg("list_invoices"));
+    }
   );
   server.registerTool(
     "get_invoice",
-    { title: "Get invoice", description: "Get one invoice by id.", inputSchema: { id: z.string(), ...sourceSchema } },
-    async ({ id, ...input }) => sourceAware(input, () => getInvoice(id), notImplementedPg("get_invoice"))
+    { title: "Get invoice", description: "Get one invoice by id or number, within the bound organization. A foreign id is indistinguishable from a missing one.", inputSchema: { id: z.string(), ...sourceSchema } },
+    async ({ id, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, async () => (await getInvoice(scoped, id)) ?? { error: "Invoice not found." }, notImplementedPg("get_invoice"));
+    }
   );
 
   // Subscriptions / links / kyc / risk / webhooks / blocklist / settings / team / audit / onboarding
+  // (subscriptions tenant-bound in Wave 7D; the rest are Wave 7F/7G slices.)
   server.registerTool(
     "list_subscriptions",
-    { title: "List subscriptions", description: "List recurring subscriptions.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listSubscriptions(asFilters<Parameters<typeof listSubscriptions>[0]>({ page, pageSize })), notImplementedPg("list_subscriptions"))
+    { title: "List subscriptions", description: "List recurring subscriptions **for the organization bound to this request**.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listSubscriptions(scoped, asFilters<Parameters<typeof listSubscriptions>[1]>({ page, pageSize })), notImplementedPg("list_subscriptions"));
+    }
   );
   server.registerTool(
     "list_links",

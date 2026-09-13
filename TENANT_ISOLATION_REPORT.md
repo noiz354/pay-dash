@@ -38,13 +38,26 @@ TENANT ISOLATION MATRIX
 | Reconciliation engine | **PASS** | Drops foreign-tenant records before comparison (INV-T2) |
 | **Transactions DAL** (`server/data/transactions.ts`) | **PASS** (Wave 7A) | `OrganizationContext` required on every read **and** write; store partitioned `(organizationId, id)`; provider read is org-bound; enforced by `transactions-structural.test.ts` |
 | Transaction CSV export | **PASS** (Wave 7A) | `guardExport()`'s returned org id *is* now the query predicate; `no-store, private` + `Vary: Cookie`; header vocabulary frozen without a tenancy column |
-| 9 other CSV export routes | **GAP** | Same `guardExport()` pattern, not yet rewired — each lands with its module's slice |
-| **19 remaining `server/data/*` modules** | **QUARANTINED** | They read the ledger through `server/data/transactions-unscoped.ts`, which **throws** once a second tenant has rows. Safe-by-refusal, not isolated |
+| **Subscriptions DAL** (`server/data/subscriptions.ts`) | **PASS** (Wave 7D) | `OrganizationContext` required on all 3 repository functions; store `Map<org, { plans }>`; composite key `(organizationId, id)` over the pure `subscriptionIdFrom` hash; enforced by `billing-structural.test.ts` R-1 |
+| **Invoices DAL** (`server/data/invoices.ts`) | **PASS** (Wave 7D) | `OrganizationContext` required on all 8 readers/writes; **derivation scoped before it aggregates** (`scopedLedgerRows(ctx)` pages the 7A read); payments composite `(org, invoiceId)`; `payInvoice` order pinned — tenant check before any write, refusal audited |
+| Billing CSV exports (subscriptions, invoice list, single statement) | **PASS** (Wave 7D) | `guardExport()`'s org id *is* the predicate; unresolved org ⇒ 401 no body; `private, no-store` + `Vary: Cookie`; header vocabulary frozen without a tenancy column |
+| Billing MCP tools (`list_invoices`, `get_invoice`, `list_subscriptions`) | **PASS** (Wave 7D) | Bound to the `registerDomainTools` organization param; absent ⇒ `NO_TENANT` refusal with zero payload; foreign id ⇒ not-found |
+| Billing server actions (`payInvoiceAction`, bulk `payInvoicesAction`, `createInvoiceAction`, `createSubscriptionAction`) | **PASS** (Wave 7D) | `requireBillingOrganizationContext(permission)` before any store access; `TenantIsolationError` ⇒ the same string as a missing invoice; bulk settle scopes per row and reports `{paid, failed}` |
+| 6 other CSV export routes | **GAP** | Same `guardExport()` pattern, not yet rewired — each lands with its module's slice |
+| **15 remaining `server/data/*` modules** | **QUARANTINED** | They read the ledger through `server/data/transactions-unscoped.ts` (11 surfaces after Wave 7D dropped `invoices`), payouts through `payouts-unscoped.ts` (6) or the directory through `customers-unscoped.ts` (1 after 7D dropped `subscriptions`), all of which **throw** once a second tenant has rows. Safe-by-refusal, not isolated |
 | Webhook UI log | **GAP** | `recordWebhookDelivery()` stores `organizationId: "unresolved"` |
 
 Before Wave 7A: **0 of 20** files in `src/server/data/` contained the string `organizationId`.
-Now: **1 of 20** does — `transactions.ts`, plus the contract in `domain/tenancy/organization-context.ts`
-that the other 19 inherit when their slice lands.
+Now: **5 of 20** do — `transactions.ts` (7A), `payouts.ts` (7B), `customers.ts` (7C),
+`subscriptions.ts` and `invoices.ts` (7D) — plus the contract in
+`domain/tenancy/organization-context.ts` that the other 15 inherit when their slice lands.
+
+Billing-specific note (Wave 7D, ADR-0044): the slice added **no** quarantine module. Its derived
+readers used to ride `legacyListTransactions("invoices", …)`, which both leaked an aggregate and
+capped the ledger at 100 rows; the derivation is now paged through the scoped 7A read, so the
+`invoices` entry left `LEGACY_LEDGER_SURFACES` (12 → 11) and `subscriptions` left
+`LEGACY_CUSTOMER_SURFACES` (2 → 1) in the same commit. `billing-structural.test.ts` R-4 fails if a
+billing `*-unscoped.ts` file ever appears.
 
 ---
 

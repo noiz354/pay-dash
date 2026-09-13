@@ -10,7 +10,8 @@ import { SubscriptionFilters } from "@/components/subscriptions/subscription-fil
 import { SubscriptionRowActions } from "@/components/subscriptions/subscription-row-actions";
 import { CreateSubscriptionDialog } from "@/components/subscriptions/create-subscription-dialog";
 import { listSubscriptions, subscriptionSummary, type Subscription } from "@/server/data/subscriptions";
-import { legacyListCustomers } from "@/server/data/customers-unscoped";
+import { listCustomers } from "@/server/data/customers";
+import { resolveBillingOrganizationContext } from "@/server/services/billing-organization-context";
 import {
   SUBSCRIPTION_STATUS_LABELS,
   SUBSCRIPTION_STATUS_TONES,
@@ -87,9 +88,13 @@ async function SubscriptionsDirectory({ searchParams }: { searchParams: Promise<
   const status = (one(sp.status) as SubscriptionStatus | "ALL") ?? "ALL";
   const page = Number(one(sp.page) ?? 1) || 1;
 
+  // Wave 7D: the tenant comes from the session, and it is the predicate — the
+  // stat cards below are computed from this tenant's plans only, so MRR is a
+  // per-merchant figure rather than a process-wide one.
+  const { context } = await resolveBillingOrganizationContext();
   const [result, all] = await Promise.all([
-    listSubscriptions({ q, status, page, pageSize: 10 }),
-    listSubscriptions({ pageSize: 100 }),
+    listSubscriptions(context, { q, status, page, pageSize: 10 }),
+    listSubscriptions(context, { pageSize: 100 }),
   ]);
   const summary = subscriptionSummary(all.rows);
 
@@ -231,8 +236,11 @@ export default async function SubscriptionsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   // The create dialog offers real directory customers (ADR-0021), so
-  // "View customer" from a created plan always resolves.
-  const customers = await legacyListCustomers("subscriptions", { pageSize: 100 });
+  // "View customer" from a created plan always resolves. Wave 7D: read through
+  // the scoped 7C DAL with this tenant's context — which also retires the
+  // `subscriptions` entry in the customer quarantine (spec P-9).
+  const { context } = await resolveBillingOrganizationContext();
+  const customers = await listCustomers(context, { pageSize: 100 });
   const directoryCustomers = customers.rows.map((c) => ({ name: c.name, email: c.email }));
 
   return (

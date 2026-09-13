@@ -63,6 +63,7 @@ One file per decision: **Context / Decision / Alternatives / Trade-offs / Conseq
 | [0041](./0041-canonical-tenant-scoping.md) | Canonical tenant scoping — required `OrganizationContext` at the data boundary, remainder quarantined fail-closed | W7A |
 | [0042](./0042-payout-tenant-isolation.md) | Payout tenant isolation on the Wave 7A contract | W7B |
 | [0043](./0043-customer-tenant-isolation.md) | Customer tenant isolation on the Wave 7A contract | W7C |
+| [0044](./0044-billing-tenant-isolation.md) | Billing tenant isolation on the Wave 7A contract — derived aggregates, composite month keys, tenant-before-write on `payInvoice` | W7D |
 
 ## Reserved ADR numbers (Wave 7D–11 — allocated, files not yet written)
 
@@ -77,7 +78,7 @@ One file per decision: **Context / Decision / Alternatives / Trade-offs / Conseq
 
 | ADR (reserved) | Decision (working title) | Wave | Spec | Status |
 |---|---|---|---|---|
-| 0044 | Billing tenant isolation (subscriptions + invoices; `payInvoice` money mutation, tenant-before-ledger-write) | W7D | `WAVE_7D_BILLING_SPEC.md` | Reserved — Proposed |
+| 0044 | Billing tenant isolation (subscriptions + invoices; `payInvoice` money mutation, tenant-before-ledger-write) | W7D | `WAVE_7D_BILLING_SPEC.md` | **Written** — [0044-billing-tenant-isolation.md](./0044-billing-tenant-isolation.md), moved into the index above |
 | 0045 | Derived-surface tenant isolation + quarantine deletion criterion (delete is earned, not scheduled) | W7E | `WAVE_7E_DERIVED_SPEC.md` | Reserved — Proposed |
 | 0046 | Identity & access tenant isolation (team, settings, KYC, onboarding; tenant-before-role-check) | W7F | `WAVE_7F_IDENTITY_SPEC.md` | Reserved — Proposed |
 | 0047 | Ingest & integrity tenant isolation (webhooks, idempotency keys, links, blocklist; attribution over silent pass) | W7G | `WAVE_7G_INGEST_SPEC.md` | Reserved — Proposed |

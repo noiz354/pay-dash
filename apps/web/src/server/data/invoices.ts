@@ -1,8 +1,11 @@
 import "server-only";
 
-import { type Transaction } from "./transactions";
-import { legacyListTransactions } from "./transactions-unscoped";
+import { countLedgerTenants, listTransactions, soleLedgerOrganizationId, type Transaction } from "./transactions";
 import { getMerchantProfile } from "./settings";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
+import { parseOrganizationContext, type OrganizationContext } from "@/domain/tenancy/organization-context";
+import { TenantIsolationError } from "@/domain/security/tenant";
+import { recordTenantDenial } from "@/server/services/tenant-denial";
 import { INVOICE_STATUSES, isPayable, type InvoiceStatus } from "@/lib/invoice-status";
 
 export { INVOICE_STATUSES };
@@ -41,6 +44,12 @@ export type InvoicePaymentEvent = {
 
 export type Invoice = {
   id: string;
+  /**
+   * Owner tenant (Wave 7D). An invoice id is a month key (`INV-2026-01-LEDGER`),
+   * so two tenants can hold the same id at once — the partition, not the id, is
+   * what makes them different bills (spec P-10). Never emitted in a CSV.
+   */
+  organizationId: string;
   number: string;
   periodStart: string;
   periodEnd: string;
@@ -92,12 +101,82 @@ type SeedInvoice = {
 };
 
 type PaymentRecord = { paidAt: string; method: string; reference: string };
-type Store = { payments: Record<string, PaymentRecord> };
+type TenantInvoiceState = { payments: Record<string, PaymentRecord> };
+type Store = { tenants: Map<string, TenantInvoiceState> };
 
 const globalStore = globalThis as unknown as { __kineticInvoiceStore?: Store };
 function store(): Store {
-  if (!globalStore.__kineticInvoiceStore) globalStore.__kineticInvoiceStore = { payments: {} };
+  if (!globalStore.__kineticInvoiceStore) globalStore.__kineticInvoiceStore = { tenants: new Map() };
   return globalStore.__kineticInvoiceStore;
+}
+
+// --- Wave 7D: tenancy seam ---------------------------------------------------
+//
+// Mirrors `transactions.ts` (7A), `payouts.ts` (7B) and `customers.ts` (7C):
+// the tenant predicate lives at the data boundary. Invoices are *derived*, so
+// the predicate has to run before the aggregation, not after it — a monthly fee
+// total computed over everybody's ledger rows is a cross-tenant leak even if the
+// rows themselves are filtered out of the response.
+//
+// Two consequences worth stating plainly:
+//   • the prototype statements are demo-owned records, so they appear for the
+//     demo tenant only (7C's rule: an empty tenant gets `[]`, not somebody
+//     else's history);
+//   • the ledger read is the scoped 7A read, paged to the end. This replaces
+//     `legacyListTransactions("invoices", …)`, which both failed closed in a
+//     multi-tenant process *and* silently stopped at the first 100 rows.
+
+function scopeOf(ctx: OrganizationContext): OrganizationContext {
+  return parseOrganizationContext(ctx);
+}
+
+/** Read-only view of one tenant's payment overrides; never persists. */
+function readPayments(organizationId: string): Record<string, PaymentRecord> {
+  return store().tenants.get(organizationId)?.payments ?? {};
+}
+
+/** Writable view of one tenant's payment overrides; persists the partition. */
+function writePartition(organizationId: string): TenantInvoiceState {
+  const s = store();
+  let partition = s.tenants.get(organizationId);
+  if (!partition) {
+    partition = { payments: {} };
+    s.tenants.set(organizationId, partition);
+  }
+  return partition;
+}
+
+/**
+ * How many tenants hold invoices. Tenancy *probe*: answers a question about the
+ * stores, never returns an invoice — the billing seam's demo-fallback refusal is
+ * its only consumer. The prototype statements make the demo tenant an invoice
+ * holder by construction; the ledger side is folded in through the 7A probes,
+ * because a tenant whose fees exist only as ledger rows still owns a statement.
+ */
+export function countInvoiceTenants(): number {
+  if (countLedgerTenants() > 1) return 2;
+  const ids = new Set<string>([DEFAULT_DEMO_ORG]);
+  for (const [id, t] of store().tenants.entries()) {
+    if (Object.keys(t.payments).length > 0) ids.add(id);
+  }
+  const sole = soleLedgerOrganizationId();
+  if (sole) ids.add(sole);
+  return ids.size;
+}
+
+/**
+ * The identity of the only invoice-holding tenant, or `null` when there is not
+ * exactly one. Same probe contract as `countInvoiceTenants`: ids, no rows.
+ */
+export function soleInvoiceOrganizationId(): string | null {
+  if (countLedgerTenants() > 1) return null;
+  const ids = new Set<string>([DEFAULT_DEMO_ORG]);
+  for (const [id, t] of store().tenants.entries()) {
+    if (Object.keys(t.payments).length > 0) ids.add(id);
+  }
+  const sole = soleLedgerOrganizationId();
+  if (sole) ids.add(sole);
+  return ids.size === 1 ? ([...ids][0] ?? null) : null;
 }
 
 // --- prototype seeds --------------------------------------------------------
@@ -191,8 +270,16 @@ function billableRows(rows: Transaction[]) {
   return rows.filter((t) => t.status === "SUCCEEDED" || t.status === "REFUNDED");
 }
 
-async function allLedgerRows(): Promise<Transaction[]> {
-  const { rows } = await legacyListTransactions("invoices", { page: 1, pageSize: 100 });
+/** Every billable ledger row of one tenant, paged through the scoped 7A read. */
+async function scopedLedgerRows(ctx: OrganizationContext): Promise<Transaction[]> {
+  const rows: Transaction[] = [];
+  let page = 1;
+  for (;;) {
+    const batch = await listTransactions(ctx, { page, pageSize: 100 });
+    rows.push(...batch.rows);
+    if (batch.rows.length < 100) break;
+    page += 1;
+  }
   return rows;
 }
 
@@ -204,8 +291,10 @@ function statusForDerived(periodEnd: string, dueAt: string, paid: boolean): Invo
   return "PENDING";
 }
 
-function applyPayment(invoice: Invoice): Invoice {
-  const payment = store().payments[invoice.id];
+function applyPayment(invoice: Invoice, organizationId: string): Invoice {
+  // Payment overrides are read from the owner's partition only: a payment
+  // recorded by another tenant can never mark this invoice PAID.
+  const payment = readPayments(organizationId)[invoice.id];
   if (!payment) return invoice;
   return {
     ...invoice,
@@ -217,8 +306,9 @@ function applyPayment(invoice: Invoice): Invoice {
 
 // --- derivation -------------------------------------------------------------
 
-async function buildInvoices(): Promise<Invoice[]> {
-  const rows = await allLedgerRows();
+async function buildInvoices(ctx: OrganizationContext): Promise<Invoice[]> {
+  const { organizationId } = scopeOf(ctx);
+  const rows = await scopedLedgerRows(ctx);
   const byMonth = new Map<string, Transaction[]>();
   for (const t of billableRows(rows)) {
     const key = monthKey(t.createdAt);
@@ -234,6 +324,7 @@ async function buildInvoices(): Promise<Invoice[]> {
     const amount = Math.round(txns.reduce((a, t) => a + t.fee, 0));
     const invoice: Invoice = {
       id: `INV-${key}-LEDGER`,
+      organizationId,
       number: `INV-${key}-LEDGER`,
       periodStart: start,
       periodEnd: end,
@@ -249,31 +340,46 @@ async function buildInvoices(): Promise<Invoice[]> {
       paymentMethod: null,
       source: "ledger",
     };
-    return applyPayment(invoice);
+    return applyPayment(invoice, organizationId);
   });
 
-  const seeded: Invoice[] = SEED_INVOICES.map((s) =>
-    applyPayment({
-      ...s,
-      periodLabel: periodLabelFor(s.periodStart, s.periodEnd),
-      paidAt: s.status === "PAID" ? s.issuedAt : null,
-      paymentMethod: s.status === "PAID" ? "Auto-debit — BCA •••• 8891" : null,
-      source: "seed",
-    })
-  );
+  // The three prototype statements are the demo tenant's records (7C's seed
+  // rule). Another tenant's history is its own ledger, never somebody else's.
+  const seeded: Invoice[] =
+    organizationId === DEFAULT_DEMO_ORG
+      ? SEED_INVOICES.map((s) =>
+          applyPayment(
+            {
+              ...s,
+              organizationId,
+              periodLabel: periodLabelFor(s.periodStart, s.periodEnd),
+              paidAt: s.status === "PAID" ? s.issuedAt : null,
+              paymentMethod: s.status === "PAID" ? "Auto-debit — BCA •••• 8891" : null,
+              source: "seed",
+            },
+            organizationId,
+          ),
+        )
+      : [];
 
   return [...derived, ...seeded];
 }
 
 // --- reads ------------------------------------------------------------------
 
-export async function listInvoices(filters: InvoiceFilters = {}): Promise<PaginatedInvoices> {
+export async function listInvoices(
+  ctx: OrganizationContext,
+  filters: InvoiceFilters = {},
+): Promise<PaginatedInvoices> {
+  scopeOf(ctx);
   const { q = "", status = "ALL", range = "all", sort = "recent" } = filters;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
 
-  const all = await buildInvoices();
+  // The predicate ran inside buildInvoices (scoped ledger + owner partition);
+  // the range/status/needle filters below only ever see the caller's invoices.
+  const all = await buildInvoices(ctx);
   const cutoff =
     range === "all" ? 0 : Date.now() - { "3m": 90, "6m": 180, "12m": 365 }[range] * 86_400_000;
 
@@ -305,16 +411,19 @@ export async function listInvoices(filters: InvoiceFilters = {}): Promise<Pagina
   };
 }
 
-export async function getInvoice(id: string): Promise<Invoice | null> {
-  const all = await buildInvoices();
+export async function getInvoice(ctx: OrganizationContext, id: string): Promise<Invoice | null> {
+  scopeOf(ctx);
+  const all = await buildInvoices(ctx);
+  // A foreign id and a missing id answer identically: `null` (spec §2 C-5).
   return all.find((i) => i.id === id || i.number === id) ?? null;
 }
 
 /** Transactions whose fees make up an invoice — the "show your work" link. */
-export async function getInvoiceTransactions(id: string): Promise<Transaction[]> {
-  const invoice = await getInvoice(id);
+export async function getInvoiceTransactions(ctx: OrganizationContext, id: string): Promise<Transaction[]> {
+  scopeOf(ctx);
+  const invoice = await getInvoice(ctx, id);
   if (!invoice) return [];
-  const rows = await allLedgerRows();
+  const rows = await scopedLedgerRows(ctx);
   const from = new Date(invoice.periodStart).getTime();
   const to = new Date(invoice.periodEnd).getTime();
   return billableRows(rows).filter((t) => {
@@ -323,11 +432,12 @@ export async function getInvoiceTransactions(id: string): Promise<Transaction[]>
   });
 }
 
-export async function getInvoiceLineItems(id: string): Promise<InvoiceLineItem[]> {
-  const invoice = await getInvoice(id);
+export async function getInvoiceLineItems(ctx: OrganizationContext, id: string): Promise<InvoiceLineItem[]> {
+  scopeOf(ctx);
+  const invoice = await getInvoice(ctx, id);
   if (!invoice) return [];
 
-  const txns = await getInvoiceTransactions(id);
+  const txns = await getInvoiceTransactions(ctx, id);
   if (txns.length === 0) {
     // Seeded (pre-ledger) invoices still deserve a breakdown rather than a
     // blank panel: reconstruct a plausible two-line summary from the totals.
@@ -374,8 +484,9 @@ export async function getInvoiceLineItems(id: string): Promise<InvoiceLineItem[]
     .sort((a, b) => b.amount - a.amount);
 }
 
-export async function getInvoiceTimeline(id: string): Promise<InvoicePaymentEvent[]> {
-  const invoice = await getInvoice(id);
+export async function getInvoiceTimeline(ctx: OrganizationContext, id: string): Promise<InvoicePaymentEvent[]> {
+  scopeOf(ctx);
+  const invoice = await getInvoice(ctx, id);
   if (!invoice) return [];
 
   const events: InvoicePaymentEvent[] = [
@@ -444,8 +555,13 @@ export type BillingSummary = {
   lastPaidAt: string | null;
 };
 
-export async function getBillingSummary(): Promise<BillingSummary> {
-  const rows = billableRows(await allLedgerRows());
+export async function getBillingSummary(ctx: OrganizationContext): Promise<BillingSummary> {
+  scopeOf(ctx);
+  const rows = billableRows(await scopedLedgerRows(ctx));
+  // Cross-slice dependency, recorded not fixed here: the merchant profile is the
+  // settings slice's record and is not tenant-scoped until Wave 7F. It supplies
+  // one boolean (`autoDebit`) — no invoice, fee or counterparty data — so the
+  // billing aggregate below stays single-tenant either way.
   const profile = await getMerchantProfile();
   const now = new Date();
   const thisKey = monthKey(now.toISOString());
@@ -458,7 +574,7 @@ export async function getBillingSummary(): Promise<BillingSummary> {
   const previous = sumFees(prevKey);
   const accruedDelta = previous ? ((accruedThisMonth - previous) / previous) * 100 : 0;
 
-  const invoices = await buildInvoices();
+  const invoices = await buildInvoices(ctx);
   const outstanding = invoices.filter((i) => isPayable(i.status));
   const paid = invoices
     .filter((i) => i.status === "PAID")
@@ -484,17 +600,90 @@ export async function getBillingSummary(): Promise<BillingSummary> {
 
 export type PayInvoiceResult = { invoice: Invoice; reference: string };
 
-export async function payInvoice(id: string, method: string): Promise<PayInvoiceResult | null> {
-  const invoice = await getInvoice(id);
-  if (!invoice) return null;
+/**
+ * Which other tenant (if any) owns an invoice with this id.
+ *
+ * Attribution is deliberately bounded to owners this module can *name* without
+ * an unscoped read: the demo tenant (the prototype statements are seeded there,
+ * and the dev bootstrap ledger is demo-owned), any tenant that already holds a
+ * payment record, and the sole ledger tenant when there is exactly one. Wave 7A
+ * pins its tenancy probes to `number | string | null` returns (S-1 in
+ * `transactions-structural.test.ts`), so no enumerator of ledger tenants exists
+ * — and this wave does not loosen a 7A ratchet to obtain one.
+ *
+ * An id that cannot be attributed answers `null` upstream (uniform not-found).
+ * Either way the isolation property is unconditional: the write path below is
+ * partition-bound, so a refused or unattributed pay writes nothing anywhere.
+ * Returns an org id only — never an amount, period or counterparty.
+ */
+async function invoiceOwnedByAnotherTenant(organizationId: string, id: string): Promise<string | null> {
+  const candidates = new Set<string>([DEFAULT_DEMO_ORG]);
+  for (const [tenantId, state] of store().tenants.entries()) {
+    if (Object.keys(state.payments).length > 0) candidates.add(tenantId);
+  }
+  if (countLedgerTenants() <= 1) {
+    const sole = soleLedgerOrganizationId();
+    if (sole) candidates.add(sole);
+  }
+  candidates.delete(organizationId);
+
+  for (const candidate of candidates) {
+    const candidateCtx = parseOrganizationContext({ organizationId: candidate });
+    const invoices = await buildInvoices(candidateCtx);
+    if (invoices.some((i) => i.id === id || i.number === id)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Settle one invoice. Money mutation, so the order is the contract (spec B-13,
+ * 7B M8 lesson): resolve the tenant → read inside it → refuse a foreign id
+ * loudly (audited) → only then write, and only into the caller's partition.
+ *
+ * own id     → paid, reference returned
+ * unknown id → `null` (the caller's existing NOT_FOUND path)
+ * foreign id → throws `TenantIsolationError` after recording the denial, so the
+ *   wire can answer not-found without the log going silent
+ */
+export async function payInvoice(
+  ctx: OrganizationContext,
+  id: string,
+  method: string,
+): Promise<PayInvoiceResult | null> {
+  const { organizationId } = scopeOf(ctx);
+  const invoice = await getInvoice(ctx, id);
+  if (!invoice) {
+    const foreignOwner = await invoiceOwnedByAnotherTenant(organizationId, id);
+    if (foreignOwner) {
+      recordTenantDenial({
+        surface: "server/data/invoices.payInvoice",
+        actorOrganizationId: organizationId,
+        requestedOrganizationId: foreignOwner,
+        actorId: null,
+        resourceId: typeof id === "string" ? id : null,
+      });
+      throw new TenantIsolationError(
+        "CROSS_TENANT_WRITE",
+        { surface: "server/data/invoices.payInvoice", actorOrg: organizationId, requestedOrg: foreignOwner },
+        "Refusing a cross-tenant write on server/data/invoices.payInvoice: the invoice belongs to another organization.",
+      );
+    }
+    return null;
+  }
   if (!isPayable(invoice.status)) {
     throw new Error(`Invoice ${invoice.number} is already ${invoice.status.toLowerCase()}`);
   }
 
   const reference = `PAY-${Date.now().toString(36).toUpperCase()}`;
-  store().payments[invoice.id] = { paidAt: new Date().toISOString(), method, reference };
+  // The payment lands in the owner's partition and nowhere else: another
+  // tenant's invoice with the same month id is a different bill.
+  writePartition(organizationId).payments[invoice.id] = {
+    paidAt: new Date().toISOString(),
+    method,
+    reference,
+  };
 
-  const updated = await getInvoice(id);
+  const updated = await getInvoice(ctx, id);
   if (!updated) return null;
   return { invoice: updated, reference };
 }
@@ -535,10 +724,11 @@ export function invoicesToCsv(rows: Invoice[]) {
 }
 
 /** Single-invoice statement used by the per-row download action. */
-export async function invoiceStatementCsv(id: string): Promise<string | null> {
-  const invoice = await getInvoice(id);
+export async function invoiceStatementCsv(ctx: OrganizationContext, id: string): Promise<string | null> {
+  scopeOf(ctx);
+  const invoice = await getInvoice(ctx, id);
   if (!invoice) return null;
-  const items = await getInvoiceLineItems(id);
+  const items = await getInvoiceLineItems(ctx, id);
   const escape = (v: string | number | null) => `"${String(v ?? "").replace(/"/g, '""')}"`;
 
   const head = [
