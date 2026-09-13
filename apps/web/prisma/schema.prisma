@@ -78,6 +78,11 @@ model LedgerEntry {
   updatedAt       DateTime @updatedAt
   userId          String?
   user            User?    @relation(fields: [userId], references: [id])
+  // Wave 7D (D-26): tenant anchor. Null = unattributed → invisible under RLS
+  // (fail-closed); a follow-up migration tightens to NOT NULL once backfill
+  // coverage is measured.
+  organizationId  String?
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   amount          Decimal   @db.Decimal(15, 2)
   currency        String   @default("IDR")
   status          String   @default("PENDING")
@@ -85,6 +90,9 @@ model LedgerEntry {
   xenditPaymentId String?
   description     String?
   metadata        String   @default("{}")
+
+  @@unique([id, organizationId])
+  @@index([organizationId, createdAt])
 }
 
 // Minimal tenant anchor. Memberships and authorization are owned by the
@@ -108,6 +116,7 @@ model Organization {
   secretRecords       SecretRecord[]
   durableOperations   DurableOperation[]
   auditEvents         AuditEvent[]
+  ledgerEntries       LedgerEntry[]
 }
 
 // Organization membership (organization-access). Links a signed-in user to an
