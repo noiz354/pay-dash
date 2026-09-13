@@ -67,7 +67,10 @@ function functionBody(source: string, name: string): string {
  * Tenancy *probes*: they may be parameter-free because they answer a question
  * about the store ("how many tenants?", "is there exactly one?") and return a
  * number or an id — never a row. They are the quarantine's gate, and S-1c pins
- * that only the quarantine can import them.
+ * the consumer set: the transaction quarantine, plus the customer DAL (Wave
+ * 7C), which composes its own fail-closed gate on these probes — scoped
+ * ledger in, scoped directory out — without ever returning a ledger row from
+ * them. No page, action, route, or MCP tool may import them.
  */
 const GATE_EXPORTS = ["countLedgerTenants", "soleLedgerOrganizationId"];
 
@@ -382,15 +385,15 @@ describe("S-6 the Postgres ledger cannot be read unscoped for transactions", () 
   });
 });
 
-describe("S-1c the tenancy gate is only reachable from the quarantine", () => {
-  it("soleLedgerOrganizationId is imported by exactly one consumer", () => {
+describe("S-1c the tenancy gate is only reachable from fail-closed infrastructure", () => {
+  it("soleLedgerOrganizationId is imported by exactly two consumers", () => {
     const consumers = allFiles
       .filter((f) => !isTestFile(f))
       .filter((f) => readFileSync(f, "utf8").includes("soleLedgerOrganizationId"))
       .map((f) => relative(SRC, f).replace(/\\/g, "/"))
       .filter((f) => f !== "server/data/transactions.ts")
       .sort();
-    expect(consumers).toEqual(["server/data/transactions-unscoped.ts"]);
+    expect(consumers).toEqual(["server/data/customers.ts", "server/data/transactions-unscoped.ts"]);
   });
 });
 

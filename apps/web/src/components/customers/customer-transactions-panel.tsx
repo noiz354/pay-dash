@@ -2,11 +2,15 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { getCustomerTransactions } from "@/server/data/customers";
+import { resolveCustomerOrganizationContext } from "@/server/services/customer-organization-context";
 
 // A customer's payment history, reusing the ledger table so a row here behaves
 // exactly like a row on /transactions (click → /transactions/[id]).
+// Wave 7C: resolves its own session tenant so the detail page stays a
+// two-line call site; the payment list inherits the caller's tenant.
 export async function CustomerTransactionsPanel({ email, limit = 5 }: { email: string; limit?: number }) {
-  const rows = await getCustomerTransactions(email);
+  const { context } = await resolveCustomerOrganizationContext();
+  const rows = await getCustomerTransactions(context, email);
   const visible = rows.slice(0, limit);
 
   return (

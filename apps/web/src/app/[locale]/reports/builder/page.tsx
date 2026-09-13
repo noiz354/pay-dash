@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ReportBuilder } from "@/components/reports/report-builder";
 import { legacyLedgerRows } from "@/server/data/transactions-unscoped";
 import { legacyPayoutBatches } from "@/server/data/payouts-unscoped";
-import { listCustomers } from "@/server/data/customers";
+import { legacyListCustomers } from "@/server/data/customers-unscoped";
 
 // Custom Reports Builder (ADR-0020). The prototype was a pure mockup: five
 // hard-coded rows (ids, emails, dates and USD amounts that exist nowhere in
@@ -21,7 +21,7 @@ export default async function ReportsBuilderPage() {
   const [transactions, batches, customersPage] = await Promise.all([
     legacyLedgerRows("reports"),
     legacyPayoutBatches("reports"),
-    listCustomers({ pageSize: 500 }),
+    legacyListCustomers("reports", { pageSize: 500 }),
   ]);
 
   return (

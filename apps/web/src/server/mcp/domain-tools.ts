@@ -200,17 +200,23 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
     }
   );
 
-  // Customers
+  // Customers — tenant-bound (Wave 7C). No tenant on the request ⇒ refuse;
+  // a foreign id/email is not-found, never forbidden (no enumeration oracle).
   server.registerTool(
     "list_customers",
-    { title: "List customers", description: "List merchants' customers.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
-    async ({ page, pageSize, status, ...input }) =>
-      sourceAware(input, () => listCustomers(asFilters<Parameters<typeof listCustomers>[0]>({ page, pageSize, status })), notImplementedPg("list_customers"))
+    { title: "List customers", description: "List the customer directory **for the organization bound to this request**.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
+    async ({ page, pageSize, status, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listCustomers(scoped, asFilters<Parameters<typeof listCustomers>[1]>({ page, pageSize, status })), notImplementedPg("list_customers"));
+    }
   );
   server.registerTool(
     "get_customer",
-    { title: "Get customer", description: "Get a customer by id or email.", inputSchema: { idOrEmail: z.string(), ...sourceSchema } },
-    async ({ idOrEmail, ...input }) => sourceAware(input, () => getCustomer(idOrEmail), notImplementedPg("get_customer"))
+    { title: "Get customer", description: "Get one customer by id or email, within the bound organization. A foreign id/email is indistinguishable from a missing one.", inputSchema: { idOrEmail: z.string(), ...sourceSchema } },
+    async ({ idOrEmail, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, async () => (await getCustomer(scoped, idOrEmail)) ?? { error: "Customer not found." }, notImplementedPg("get_customer"));
+    }
   );
 
   // Invoices

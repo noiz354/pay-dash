@@ -7,6 +7,7 @@ import { formatCompactMoney, formatDateTime, formatMoney, formatNumber } from "@
 import { listCustomers } from "@/server/data/customers";
 import { getLedgerMetrics, listTransactions } from "@/server/data/transactions";
 import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
+import { resolveCustomerOrganizationContext } from "@/server/services/customer-organization-context";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +27,11 @@ export default async function FailedPaymentRecoveryPage() {
   // Wave 7A — scoped, for the same reason as the ops copilot: this page's
   // context block feeds a model, and a customer's failure detail is theirs alone.
   const { context } = await resolveTransactionOrganizationContext();
+  const { context: customerContext } = await resolveCustomerOrganizationContext();
   const [metrics, failed, customers] = await Promise.all([
     getLedgerMetrics(context),
     listTransactions(context, { status: "FAILED", pageSize: 8 }),
-    listCustomers({ pageSize: 100 }),
+    listCustomers(customerContext, { pageSize: 100 }),
   ]);
 
   const failedAmount = failed.rows.reduce((sum, tx) => sum + tx.amount, 0);

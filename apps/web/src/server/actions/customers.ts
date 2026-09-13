@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createCustomer, updateCustomer } from "@/server/data/customers";
 import { CUSTOMER_STATUSES } from "@/lib/customer-status";
+import {
+  CUSTOMER_NOT_FOUND_MESSAGE,
+  requireCustomerOrganizationContext,
+} from "@/server/services/customer-organization-context";
+import { TenantIsolationError } from "@/domain/security/tenant";
 
 // Server Actions for the customer journey. Same contract as the transaction
 // actions so every client component can drive pending / success / error UI.
@@ -53,8 +58,10 @@ export async function createCustomerAction(
   try {
     // Org-context authz: the acting org + role come from the session membership,
     // never from the browser. Dev/demo falls back to the OWNER demo org.
-    const { requireOrgContext } = await import("@/server/services/session-org-context");
-    const ctx = await requireOrgContext("customer.read");
+    // Wave 7C: the seam also refuses demo fallback once the customer store is
+    // multi-tenant, and yields the canonical OrganizationContext.
+    const access = await requireCustomerOrganizationContext("customer.read");
+    const ctx = access.context;
 
     // Route the customer through the provider when a TEST connection resolves
     // (rekomendasi: customer vault). The in-memory directory is also updated so
@@ -75,7 +82,7 @@ export async function createCustomerAction(
       return { status: "error", message: error instanceof Error ? error.message : "Could not create the customer at the provider." };
     }
 
-    const customer = await createCustomer(parsed.data);
+    const customer = await createCustomer(access.context, parsed.data);
     revalidateCustomers(customer.id);
     return {
       status: "success",
@@ -83,6 +90,9 @@ export async function createCustomerAction(
       data: { id: customer.id, name: customer.name },
     };
   } catch (error) {
+    if (error instanceof TenantIsolationError) {
+      return { status: "error", message: CUSTOMER_NOT_FOUND_MESSAGE };
+    }
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Could not create the customer. Try again.",
@@ -117,11 +127,16 @@ export async function updateCustomerAction(
   }
 
   try {
-    const updated = await updateCustomer(parsed.data);
+    const access = await requireCustomerOrganizationContext("customer.read");
+    const updated = await updateCustomer(access.context, parsed.data);
     if (!updated) return { status: "error", message: "That customer no longer exists." };
     revalidateCustomers(updated.id);
     return { status: "success", message: `${updated.name} updated`, data: { id: updated.id } };
   } catch (error) {
+    // A foreign id is indistinguishable from a missing one on the wire.
+    if (error instanceof TenantIsolationError) {
+      return { status: "error", message: "That customer no longer exists." };
+    }
     return {
       status: "error",
       message: error instanceof Error ? error.message : "Could not update the customer. Try again.",
@@ -139,12 +154,23 @@ export async function archiveCustomerAction(
   const restore = String(formData.get("restore") ?? "") === "1";
   if (!id) return { status: "error", message: "Customer id is required." };
 
-  const updated = await updateCustomer({ id, status: restore ? "ACTIVE" : "BLOCKED" });
-  if (!updated) return { status: "error", message: "That customer no longer exists." };
-  revalidateCustomers(updated.id);
-  return {
-    status: "success",
-    message: restore ? `${updated.name} restored to active` : `${updated.name} archived`,
-    data: { id: updated.id },
-  };
+  try {
+    const access = await requireCustomerOrganizationContext("customer.read");
+    const updated = await updateCustomer(access.context, { id, status: restore ? "ACTIVE" : "BLOCKED" });
+    if (!updated) return { status: "error", message: "That customer no longer exists." };
+    revalidateCustomers(updated.id);
+    return {
+      status: "success",
+      message: restore ? `${updated.name} restored to active` : `${updated.name} archived`,
+      data: { id: updated.id },
+    };
+  } catch (error) {
+    if (error instanceof TenantIsolationError) {
+      return { status: "error", message: "That customer no longer exists." };
+    }
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Could not update the customer. Try again.",
+    };
+  }
 }

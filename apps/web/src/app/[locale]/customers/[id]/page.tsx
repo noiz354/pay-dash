@@ -18,6 +18,7 @@ import { EditCustomerDialog } from "@/components/customers/edit-customer-dialog"
 import { CustomerLifetimeStats, CustomerPaymentMethods } from "@/components/customers/customer-lifetime-stats";
 import { CustomerTransactionsPanel } from "@/components/customers/customer-transactions-panel";
 import { getCustomer } from "@/server/data/customers";
+import { resolveCustomerOrganizationContext } from "@/server/services/customer-organization-context";
 
 // Customer profile — the destination for every directory row, every row action
 // and the "View customer" link on a transaction detail page.
@@ -27,13 +28,15 @@ type Params = Promise<{ locale: string; id: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;
-  const customer = await getCustomer(id);
+  const { context } = await resolveCustomerOrganizationContext();
+  const customer = await getCustomer(context, id);
   return { title: `${customer?.name ?? id} — Customer — Kinetic Ledger` };
 }
 
 export default async function CustomerDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const customer = await getCustomer(id);
+  const { context } = await resolveCustomerOrganizationContext();
+  const customer = await getCustomer(context, id);
   if (!customer) notFound();
 
   return (

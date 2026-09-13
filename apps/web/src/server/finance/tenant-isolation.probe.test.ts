@@ -199,13 +199,30 @@ describe("tenant isolation matrix — in-memory data layer", () => {
     });
   });
 
-  it("CURRENT GAP — server/data/customers.listCustomers is process-wide (Wave 7C)", async () => {
-    const { listCustomers } = await import("@/server/data/customers");
-    expect(listCustomers.length).toBe(0);
+  it("Wave 7C — server/data/customers requires a tenant scope on every read/write", async () => {
+    (globalThis as unknown as { __kineticCustomerStore?: unknown }).__kineticCustomerStore = undefined;
+    (globalThis as unknown as { __kineticTxStore?: unknown }).__kineticTxStore = undefined;
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+    const { createCustomer, listCustomers, getCustomer, updateCustomer } = await import("@/server/data/customers");
+    const foreign = await createCustomer(scopeB, { name: "Beta probe buyer", email: "beta@probe-b.example" });
+    await createCustomer(scopeA, { name: "Alpha probe buyer", email: "alpha@probe-a.example" });
+
+    const page = await listCustomers(scopeA, { pageSize: 50 });
+    expect(page.total).toBe(1);
+    expect(page.rows.every((r) => r.organizationId === ORG_A)).toBe(true);
+    // Arity is the evidence in the other direction now: a scope is required
+    // ((ctx, filters = {}) → length 1: everything after ctx is optional).
+    expect(listCustomers.length).toBe(1);
+    expect(await getCustomer(scopeA, foreign.id)).toBeNull();
+    await expect(updateCustomer(scopeA, { id: foreign.id, name: "Hijacked" })).rejects.toBeInstanceOf(
+      TenantIsolationError,
+    );
+
     record({
-      surface: "server/data/customers.listCustomers",
-      isolated: false,
-      mechanism: "NONE — single-tenant demo store (Wave 7C)",
+      surface: "server/data/customers (list/get/update)",
+      isolated: true,
+      mechanism: "required OrganizationContext + per-tenant partition + composite key",
     });
   });
 
@@ -222,10 +239,9 @@ describe("tenant isolation matrix — in-memory data layer", () => {
 
     expect(isolated.length).toBeGreaterThan(0);
     // The assertion that matters: gaps are KNOWN and counted, never zero-by-accident.
-    // Wave 6 measured 2; Wave 7A closed Transactions; Wave 7B closed Payouts —
-    // so the only remaining measured gap is customers (Wave 7C) — and this
-    // number must move with reality, which is why the matrix doc prints it.
-    expect(gaps.length).toBe(1);
-    expect(gaps.map((g) => g.surface)).toEqual(["server/data/customers.listCustomers"]);
+    // Wave 6 measured 2; Wave 7A closed Transactions; Wave 7B closed Payouts;
+    // Wave 7C closed Customers — zero measured gaps. The next slice re-opens
+    // this count the moment it adds a probe that fails.
+    expect(gaps.length).toBe(0);
   });
 });

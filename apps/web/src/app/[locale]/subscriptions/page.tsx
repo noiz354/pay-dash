@@ -10,7 +10,7 @@ import { SubscriptionFilters } from "@/components/subscriptions/subscription-fil
 import { SubscriptionRowActions } from "@/components/subscriptions/subscription-row-actions";
 import { CreateSubscriptionDialog } from "@/components/subscriptions/create-subscription-dialog";
 import { listSubscriptions, subscriptionSummary, type Subscription } from "@/server/data/subscriptions";
-import { listCustomers } from "@/server/data/customers";
+import { legacyListCustomers } from "@/server/data/customers-unscoped";
 import {
   SUBSCRIPTION_STATUS_LABELS,
   SUBSCRIPTION_STATUS_TONES,
@@ -232,7 +232,7 @@ export default async function SubscriptionsPage({
 }) {
   // The create dialog offers real directory customers (ADR-0021), so
   // "View customer" from a created plan always resolves.
-  const customers = await listCustomers({ pageSize: 100 });
+  const customers = await legacyListCustomers("subscriptions", { pageSize: 100 });
   const directoryCustomers = customers.rows.map((c) => ({ name: c.name, email: c.email }));
 
   return (
