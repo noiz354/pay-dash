@@ -8,9 +8,47 @@ import {
   getRiskOverview,
   patchDraft,
 } from "@/server/data/risk";
+import { OrgContextError } from "@/server/services/org-context";
+import { requireStrictOrgContext } from "@/server/services/session-org-context";
 import type { ActionState } from "./payouts";
 
 export type { ActionState };
+
+/**
+ * Audit finding S-02 — the five risk actions had no authorization at all.
+ *
+ * `setVolumeEnabledAction` switches volume screening off, `toggleRuleAction`
+ * disables an individual fraud rule, and `deployRiskAction` pushes a draft
+ * ruleset live. Reachable meant an attacker could turn off fraud screening
+ * before running a stolen-card batch through `money_in.create`, and the draft
+ * actions let them stage the change first so the deploy looked ordinary.
+ *
+ * These now require the new `risk.manage` permission, held by OWNER and
+ * RISK_ANALYST, through `requireStrictOrgContext` — the same fail-closed seam the
+ * money-out, team and settings mutations use, so the demo fallback cannot satisfy
+ * it in production either.
+ *
+ * STILL OPEN (roadmap Phase 3): `data/risk.ts` is one process-global ruleset with
+ * no `organizationId`, so this narrows *who* may edit fraud rules from "anyone who
+ * can reach the endpoint" to "an OWNER or a RISK_ANALYST" — it does not yet scope
+ * *whose* rules. One tenant's analyst still deploys to every tenant.
+ */
+async function requireRiskManage(): Promise<ActionState<never> | null> {
+  try {
+    await requireStrictOrgContext("risk.manage");
+    return null;
+  } catch (e) {
+    if (e instanceof OrgContextError) {
+      return {
+        status: "error",
+        message: e.message.includes("Authentication")
+          ? "Sign in to manage risk rules."
+          : "You don't have permission to manage risk rules.",
+      };
+    }
+    return { status: "error", message: e instanceof Error ? e.message : "Sign in to manage risk rules." };
+  }
+}
 
 function revalidateRisk() {
   revalidatePath("/[locale]/risk", "page");
@@ -23,6 +61,9 @@ export async function saveVolumeDraftAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireRiskManage();
+  if (denied) return denied;
+
   const daily = parseAmount(String(formData.get("dailyVolumeLimit") ?? ""));
   const monthly = parseAmount(String(formData.get("monthlyVolumeLimit") ?? ""));
 
@@ -47,6 +88,9 @@ export async function setVolumeEnabledAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireRiskManage();
+  if (denied) return denied;
+
   const enabled = String(formData.get("enabled") ?? "") === "true";
   const overview = await getRiskOverview();
   if (overview.effective.volumeLimitsEnabled === enabled) {
@@ -65,6 +109,9 @@ export async function toggleRuleAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireRiskManage();
+  if (denied) return denied;
+
   const ruleId = String(formData.get("id") ?? "").trim();
   const enabled = String(formData.get("enabled") ?? "") === "true";
   const rule = (await getRiskOverview()).effective.rules.find((r) => r.id === ruleId);
@@ -83,6 +130,9 @@ export async function deployRiskAction(
   _prev: ActionState | undefined,
   _formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireRiskManage();
+  if (denied) return denied;
+
   const overview = await getRiskOverview();
   if (!overview.draft) return { status: "error", message: "No draft to deploy." };
   const { ruleCount } = deployRiskSettings();
@@ -94,6 +144,9 @@ export async function discardDraftAction(
   _prev: ActionState | undefined,
   _formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireRiskManage();
+  if (denied) return denied;
+
   const removed = discardDraft();
   if (!removed) return { status: "error", message: "No draft to discard." };
   revalidateRisk();
