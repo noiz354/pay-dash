@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { OrgContextError } from "@/server/services/org-context";
+import { requireStrictOrgContext } from "@/server/services/session-org-context";
 import { z } from "zod";
 import {
   DIGEST_OPTIONS,
@@ -32,6 +34,50 @@ export type ActionState<T = undefined> = {
   fieldErrors?: Record<string, string[]>;
   data?: T;
 };
+
+/**
+ * Audit finding S-02 — these nine actions contained no authorization at all.
+ *
+ * Nothing in this file read the session: no `getSession`, no `requireOrgContext`,
+ * no permission check. The most consequential was `createApiKeyAction`, which
+ * mints a live API credential and returns its secret in the response body for
+ * one-time display — so any reachable caller could mint a key and read it.
+ * `rollApiKeyAction` and `revokeApiKeyAction` are the outage half: rotating or
+ * revoking a credential a production integration is using. `addIpAllowAction` /
+ * `removeIpAllowAction` edit the API allowlist, which can either lock the
+ * merchant's own servers out or open the API to any origin. And
+ * `updateNotificationChannelAction` rewrites alerting destinations, which can
+ * blind the on-call team to every subsequent incident.
+ *
+ * All nine now require `settings.manage`, which is OWNER-only in the role
+ * catalogue, through `requireStrictOrgContext` — the same fail-closed seam the
+ * money-out and runtime mutations use, so the demo fallback cannot satisfy it in
+ * production either.
+ *
+ * STILL OPEN (roadmap Phase 3): these write to the same process-global settings
+ * store as `runtime.ts`, so this narrows *who* may change merchant configuration
+ * from "anyone who can reach the endpoint" to "an OWNER" — it does not yet scope
+ * *whose* configuration. Tenant-scoping the store is Phase 3.
+ */
+async function requireSettingsManage(): Promise<ActionState<never> | null> {
+  try {
+    await requireStrictOrgContext("settings.manage");
+    return null;
+  } catch (e) {
+    if (e instanceof OrgContextError) {
+      return {
+        status: "error",
+        message: e.message.includes("Authentication")
+          ? "Sign in to manage these settings."
+          : "You don't have permission to manage these settings.",
+      };
+    }
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Sign in to manage these settings.",
+    };
+  }
+}
 
 function revalidateSettings(child?: string) {
   revalidatePath("/[locale]/settings", "page");
@@ -71,6 +117,9 @@ export async function updateMerchantProfileAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const parsed = MerchantSchema.safeParse({
     legalName: formData.get("legalName"),
     dba: formData.get("dba") ?? "",
@@ -110,6 +159,9 @@ export async function updateNotificationChannelAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const parsed = ChannelSchema.safeParse({
     channel: formData.get("channel"),
     enabled: formData.get("enabled") === "on",
@@ -141,6 +193,9 @@ export async function updateNotificationPreferenceAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const parsed = TopicSchema.safeParse({
     topicId: formData.get("topicId"),
     digest: formData.get("digest") ?? undefined,
@@ -175,6 +230,9 @@ export async function createApiKeyAction(
   _prev: ActionState<{ id: string; secret: string; name: string }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string; secret: string; name: string }>> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const parsed = CreateKeySchema.safeParse({
     name: formData.get("name"),
     environment: formData.get("environment"),
@@ -212,6 +270,9 @@ export async function revokeApiKeyAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const parsed = KeyIdSchema.safeParse({ id: formData.get("id"), confirm: formData.get("confirm") });
   if (!parsed.success) {
     return { status: "error", message: "Confirm before revoking.", fieldErrors: fieldErrorsOf(parsed.error) };
@@ -230,6 +291,9 @@ export async function rollApiKeyAction(
   _prev: ActionState<{ id: string; secret: string; name: string }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string; secret: string; name: string }>> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const parsed = KeyIdSchema.safeParse({ id: formData.get("id"), confirm: formData.get("confirm") });
   if (!parsed.success) {
     return { status: "error", message: "Confirm before rolling.", fieldErrors: fieldErrorsOf(parsed.error) };
@@ -259,6 +323,9 @@ export async function addIpAllowAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const parsed = IpSchema.safeParse({ value: formData.get("value"), label: formData.get("label") ?? "" });
   if (!parsed.success) {
     return { status: "error", message: "Please fix the highlighted fields.", fieldErrors: fieldErrorsOf(parsed.error) };
@@ -276,6 +343,9 @@ export async function removeIpAllowAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { status: "error", message: "Missing allowlist entry." };
   const removed = await removeIpAllowEntry(id);
@@ -293,6 +363,9 @@ export async function updateDeveloperToggleAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireSettingsManage();
+  if (denied) return denied;
+
   const parsed = DevToggleSchema.safeParse({
     field: formData.get("field"),
     enabled: formData.get("enabled") === "on",
