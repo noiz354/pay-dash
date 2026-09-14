@@ -2,6 +2,7 @@ import "server-only";
 
 import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 import { hasPermission, type OrganizationRole, type Permission } from "@/domain/organization/roles";
+import { UNAUTHENTICATED_ORG, demoOrgFallbackPermitted } from "@/lib/demo-org-policy";
 
 /**
  * Organization-context plumbing (multi-tenant authz).
@@ -63,22 +64,68 @@ export function canOrgContext(ctx: OrgContext, permission: Permission): boolean 
 
 /**
  * The single-tenant dev/demo fallback. Used when no authenticated session or
- * membership resolves. NEVER the source of truth in a multi-tenant deployment.
+ * membership resolves AND `demoOrgFallbackPermitted()` says this deployment may
+ * serve it. NEVER the source of truth in a multi-tenant deployment.
+ *
+ * Callers outside a test should go through `unverifiedOrgContext()`, which makes
+ * the permission decision; calling this directly grants OWNER.
  */
 export function demoOrgContext(userId: string | null = null): OrgContext {
   return { organizationId: DEFAULT_DEMO_ORG, roles: ["OWNER"], userId, isDemoFallback: true };
 }
 
-/** Build an org context from a resolved membership set (multi-tenant). */
-export function buildOrgContext(memberships: OrgMembership[], userId: string | null, organizationId?: string): OrgContext {
+/**
+ * The context for a request that could not be authenticated when the demo
+ * fallback is not permitted (audit finding S-01).
+ *
+ * Two properties matter, and both are load-bearing:
+ *   - `roles: []` → `authorizeOrgContext` throws for every permission, so no
+ *     write is authorized.
+ *   - `organizationId: UNAUTHENTICATED_ORG` → a sentinel matching no tenant, so
+ *     scoped *reads* return nothing. An empty role list alone is not sufficient:
+ *     the seeded ledger is tagged `org_demo`, so a context carrying that id
+ *     would still satisfy the tenant predicate and return the whole dataset.
+ *
+ * `isDemoFallback` stays true so the existing fail-closed checks
+ * (`requireStrictOrgContext`, `guardExport`) keep treating it as unauthenticated.
+ */
+export function deniedOrgContext(userId: string | null = null): OrgContext {
+  return { organizationId: UNAUTHENTICATED_ORG, roles: [], userId, isDemoFallback: true };
+}
+
+/**
+ * The single decision point for "no session resolved". Returns the OWNER demo
+ * context where this deployment is allowed to serve it, and a denied context
+ * everywhere else.
+ */
+export function unverifiedOrgContext(userId: string | null = null, input?: { previewBypass?: boolean }): OrgContext {
+  return demoOrgFallbackPermitted(input) ? demoOrgContext(userId) : deniedOrgContext(userId);
+}
+
+/**
+ * Build an org context from a resolved membership set (multi-tenant).
+ *
+ * A signed-in user with no memberships is NOT an owner of the demo organization.
+ * That used to be the answer (`memberships.length === 0` → `demoOrgContext`),
+ * which meant the sign-up flow — creating a `User` and no `OrganizationMember` —
+ * handed every new registrant OWNER over `org_demo` and the seeded ledger that
+ * belongs to nobody. It is now the same decision as an unauthenticated request:
+ * the demo org where this deployment permits it, a denied context otherwise.
+ */
+export function buildOrgContext(
+  memberships: OrgMembership[],
+  userId: string | null,
+  organizationId?: string,
+  input?: { previewBypass?: boolean },
+): OrgContext {
   if (memberships.length === 0) {
-    return demoOrgContext(userId);
+    return unverifiedOrgContext(userId, input);
   }
   const scoped = organizationId ? memberships.find((m) => m.organizationId === organizationId) : memberships[0];
   if (!scoped) {
     // The user is authenticated but not a member of the requested org → deny
-    // (never cross-org). Fall back to demo only when no org was requested.
-    if (!organizationId) return demoOrgContext(userId);
+    // (never cross-org). Fall back only when no org was requested.
+    if (!organizationId) return unverifiedOrgContext(userId, input);
     throw new OrgContextError("FORBIDDEN", `User is not a member of organization ${organizationId}`);
   }
   return { organizationId: scoped.organizationId, roles: scoped.roles, userId, isDemoFallback: false };
@@ -131,6 +178,9 @@ function mapMembership(row: Record<string, unknown>): OrgMembership {
   return {
     userId: String(row.userId),
     organizationId: String(row.organizationId),
-    roles: roles.length ? roles : ["OWNER"],
+    // Fail closed. An unrecognized or empty role column used to be read as
+    // OWNER, so a corrupt or partially-migrated membership row silently granted
+    // the highest role in the catalogue. An empty list authorizes nothing.
+    roles,
   };
 }

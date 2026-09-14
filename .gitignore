@@ -16,6 +16,10 @@ apps/web/tsconfig.tsbuildinfo
 .env.*
 !.env.example
 !.env.gcp.example
+# compose.yaml mounts apps/web/.env.prod; the template is safe to commit (it
+# contains only empty placeholders) and without it `docker compose up` fails
+# immediately for anyone following the documented path (audit finding R-12).
+!.env.prod.example
 *.pem
 *.key
 
