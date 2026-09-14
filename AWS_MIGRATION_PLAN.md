@@ -1,6 +1,7 @@
 # PayDash — AWS Migration & Architecture Plan
 
 > **Status:** Audit selesai (read-only) · Dokumen desain + rencana migrasi · Belum ada resource AWS yang dibuat
+> **DECISION UPDATE (2026-09-14):** Database produksi kini diarahkan ke **Lightsail Managed PostgreSQL** (bukan RDS) untuk fase awal — runbook: `infra/aws/DATABASE_MIGRATION.md`. RDS tetap jalur Stage 3 bila workload menuntut fitur di luar Lightsail (replica, parameter grup lanjutan, PITR > 7 hari).
 > **Sumber bukti:** `docs/DEPLOY_GCP.md`, `docs/DEPLOY_GCP_PRACTICES.md`, `docs/DEPLOYMENT_SUMMARY.md`, `docs/DEPLOY_GCP_FIREBASE_PLAN.md`, `docs/AI_JOURNAL_CLOUD_RUN.md`, `docs/STACK.md`, `docs/QUEUES.md`, `docs/adr/0029-cloud-run-gemini-journal.md`, `SLO_SLI_ERROR_BUDGET.md`, `DR_RESTORE_REPORT.md`, `Dockerfile`, `Dockerfile.migrate`, `compose.yaml`, `cloudbuild.migrate.yaml`, `.github/workflows/ci.yml`, `apps/web/*`
 > **Prinsip:** evidence-based — setiap komponen AWS dipilih berdasarkan kebutuhan workload yang terbukti, bukan translasi 1:1 nama service.
 
@@ -507,7 +508,7 @@ Aturan:
 | **1 — AWS foundation** | Account prod + non-prod (Organizations opsional), Terraform bootstrap, network module | `infra/bootstrap/*`, `infra/modules/network/*` | OIDC GitHub, state bucket, VPC+subnet+IGW+NAT+endpoints | `tf plan` bersih; reachability test | `tf destroy` | LOW |
 | **2 — Container registry** | ECR + IAM deploy | `infra/modules/ecs/*` (registry), `infra/modules/iam/*` | ECR immutable + scan; workflow build/push image (tanpa deploy) | Image push + scan result | Hapus repo | LOW |
 | **3 — Application deployment (AWS)** | ECS + ALB + RDS jalan paralel GCP, URL internal `*.internal.example.com` | `infra/modules/{ecs,alb,rds}/*`, `infra/environments/staging/*` | Terraform apply; migrasi DB test-restore (§8.1); RunTask migrate; service deploy; smoke test | §16 checklist penuh di staging | Hapus env staging | MEDIUM |
-| **4 — Database/cache/storage** | Data cutover DB | — | `pg_dump`/`pg_restore` GCP→RDS + `prisma migrate deploy` + checksum verifikasi; ElastiCache/S3 **tidak dibuat** (LATER) | Checksum `DurableOperation/WebhookDelivery/AuditEvent` identik | Restore ulang dari dump baru | MEDIUM |
+| **4 — Database/cache/storage** | Data cutover DB | `infra/aws/DATABASE_MIGRATION.md` | **Keputusan 2026-09-14: target = Lightsail Managed PostgreSQL** (bukan RDS). `pg_dump`/`pg_restore` Cloud SQL → Lightsail PG + `prisma migrate deploy` + checksum verifikasi; ElastiCache/S3 **tidak dibuat** (LATER) | Checksum `DurableOperation/WebhookDelivery/AuditEvent` identik | Restore ulang dari dump baru | MEDIUM |
 | **5 — DNS/traffic** | Custom domain | `infra/modules/route53/*` | Beli domain, ACM cert, record `pay.example.com` → ALB staging dulu, lalu prod AWS | HTTPS + `/api/health` via domain; webhook test Xendit/Stripe ke domain baru | Kembali ke `*.run.app` GCP (DNS TTL 300) | MEDIUM |
 | **6 — Observability** | CloudWatch penuh | `infra/modules/monitoring/*` | Alarms §11, canary, dashboard; Sentry env baru; metrik SLO custom (SHOULD) | Alarm uji (inject 5xx di staging) | Hapus alarm | LOW |
 | **7 — Staging validation** | Paritas perilaku vs GCP | — | Load test ringan, e2e Playwright ke domain staging AWS, webhook replay, rollback drill | Semua hijau ≥ beberapa hari | — | MEDIUM |

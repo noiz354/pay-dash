@@ -60,6 +60,21 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  # One-off Prisma migration runner (idempotent: `prisma migrate deploy`).
+  # Target DB = AWS Lightsail Managed PostgreSQL (see DATABASE_MIGRATION.md).
+  # Run: docker compose -f infra/aws/compose.aws.yaml --profile migrate run --rm migrate
+  migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.migrate
+    image: ghcr.io/noiz354/pay-dash/migrate:${IMAGE_TAG:-latest}
+    profiles: ["migrate"]
+    restart: "no"
+    env_file: /opt/paydash/.env   # DATABASE_URL → Lightsail endpoint
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
 volumes:
   caddy_data:
   caddy_config:

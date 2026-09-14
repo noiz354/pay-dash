@@ -1,7 +1,7 @@
 # IMPLEMENTATION REPORT — Merchant Operations Agent (Strands Retrofit)
 
-> Scope: WAVE 0 (baseline) + WAVE 1 (Strands spike) + WAVE 2 (investigation toolset, Bedrock-only, AWS runtime artifacts) + **WAVE 3 (tenant security hardening) + WAVE 4 (observability & timeline UI)**.
-> Keputusan project: **semua tech agent memakai AWS (Strands + Bedrock); komponen GCP dibiarkan apa adanya** (Gemini journal, Cloud SQL, Firebase tidak disentuh).
+> Scope: WAVE 0 (baseline) + WAVE 1 (Strands spike) + WAVE 2 (investigation toolset, Bedrock-only, AWS runtime artifacts) + WAVE 3 (tenant security hardening) + WAVE 4 (observability & timeline UI) + **Database: GCP Cloud SQL → Lightsail Managed PostgreSQL (keputusan user, runbook siap)**.
+> Keputusan project: **semua tech agent + database memakai AWS** (Strands + Bedrock + Lightsail Managed PG); yang tersisa di GCP hanya SaaS journal/auth (Firebase, Secret Manager Gemini key) + Cloud Run standby rollback — dibiarkan apa adanya.
 > Semua fakta SDK diverifikasi terhadap paket terpasang `@strands-agents/sdk@1.17.0`, bukan dari tebakan docs.
 
 ## Current State (sebelum retrofit)
@@ -87,9 +87,9 @@
 
 ## AWS Deployment
 
-- **WAVE 2 artifact runtime AWS** (`infra/aws/`): IAM policy Bedrock (InvokeModel Claude saja), `compose.aws.yaml` (web + Caddy, non-root, health check, log rotation, memory limit), Caddyfile, dan runbook lengkap (Bedrock model access → kredensial tanpa static key → deploy → smoke test agent → cost guardrails).
-- Belum ada resource AWS live (WAVE 8 = provisioning; eksekusi butuh akun AWS + model access).
-- Bedrock invoke nyata belum dieksekusi di sandbox: **UNKNOWN / NEEDS RUNTIME VERIFICATION** (perlu akun AWS + kredensial). Loop sudah dibuktikan via MockModel.
+- **WAVE 2 artifact runtime AWS** (`infra/aws/`): IAM policy Bedrock (InvokeModel Claude saja), `compose.aws.yaml` (web + Caddy + profile `migrate`, non-root, health check, log rotation, memory limit), Caddyfile, dan runbook (Bedrock model access → kredensial tanpa static key → deploy → smoke test agent → cost guardrails).
+- **Database (keputusan 2026-09-14): Lightsail Managed PostgreSQL** — `infra/aws/DATABASE_MIGRATION.md` lengkap: provision Micro $15 (private, AZ sama), app user `paydash_app` least-privilege, ekstraksi Cloud SQL via Path Y (public IP sementara scoped 1 IP) atau Path X (Cloud Run job → GCS, nol eksposur), restore + verifikasi checksum tabel kritis (`DurableOperation/WebhookDelivery/AuditEvent`), staging smoke, cutover maintenance window, rollback window 2 minggu, decommission. Backup: automatic + PITR 7 hari + manual snapshot.
+- Belum ada resource AWS live (eksekusi butuh akun AWS + akses GCP): **UNKNOWN / NEEDS EXECUTION**.
 
 ## Known Limitations
 
@@ -128,7 +128,7 @@ DEMO VERDICT:
 PARTIAL (fixture deterministik & 5x runs = WAVE 7)
 
 AWS DEPLOYMENT:
-PARTIAL (semua tech agent = AWS: Bedrock-only + artifact runtime `infra/aws/` siap; provisioning live = WAVE 8)
+PARTIAL (agent tech + database = AWS: Bedrock-only, artifact `infra/aws/` + migration runbook Lightsail Managed PG siap; provisioning live = WAVE 8 / butuh akun AWS)
 
 SUBMISSION ELIGIBILITY:
 BLOCKED (Malaysia/Indonesia dikecualikan; butuh klarifikasi sponsor/Devpost)

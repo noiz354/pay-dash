@@ -1,19 +1,33 @@
 # AWS Runtime Runbook — Merchant Ops Agent (Strands + Bedrock)
 
-Semua teknologi agent memakai **AWS** (Strands Agents SDK + Amazon Bedrock).
-Komponen GCP (Gemini journal, Cloud SQL, Firebase, Secret Manager) **tidak
-disentuh** dan tetap berjalan seperti sekarang.
+Semua teknologi agent **dan database** memakai AWS (Strands Agents SDK +
+Amazon Bedrock + Lightsail Managed PostgreSQL). Yang tersisa di GCP hanya
+SaaS journal/auth (Firebase, Secret Manager untuk Gemini key) dan Cloud Run
+standby rollback — tidak disentuh.
 
-Arsitektur target (dokumen lengkap: `AWS_LOW_COST_DEPLOYMENT.md`):
+Arsitektur target (dokumen lengkap: `AWS_LOW_COST_DEPLOYMENT.md`,
+migrasi DB: `DATABASE_MIGRATION.md`):
 
 ```
 Cloudflare (DNS/TLS/CDN/rate-limit)
    → AWS Lightsail $12 (ap-southeast-1, 2vCPU/2GB/60GB)
         ├─ Caddy :443 (origin cert Cloudflare)
         └─ web container (Next.js + Strands agent in-process)
-             → Amazon Bedrock (Claude Sonnet 4.6)   ← SEMUA tech agent di AWS
-             → GCP (dibiarkan apa adanya): Cloud SQL · Firebase · Gemini journal
+             → Amazon Bedrock (Claude Sonnet 4.6)     ← SEMUA tech agent di AWS
+             → Lightsail Managed PostgreSQL $15       ← database di AWS
+   GCP tersisa (dibiarkan): Firebase · Secret Manager (Gemini key) · Cloud Run standby
 ```
+
+## Database — Lightsail Managed PostgreSQL
+
+- Micro plan (1 GB/40 GB, $15/bln), **private only** (`--no-publicly-accessible`),
+  AZ `ap-southeast-1a` (sama dengan instance).
+- Automatic backup + **point-in-time restore 7 hari**; manual snapshot sebelum
+  langkah berisiko.
+- Migrasi: `docker compose -f infra/aws/compose.aws.yaml --profile migrate run --rm migrate`
+  (idempotent `prisma migrate deploy`).
+- Runbook lengkap migrasi dari GCP Cloud SQL (provision → dump/restore →
+  verifikasi checksum → cutover → rollback window): **`DATABASE_MIGRATION.md`**.
 
 ## Phase 1 — Bedrock model access (konsol AWS, sekali)
 

@@ -1,6 +1,8 @@
 # PayDash — AWS Low-Cost Deployment Plan (≤ US$30/bulan)
 
-> **Status:** Audit read-only selesai · Desain hemat (Lightsail + Cloudflare + DB existing GCP) · Belum ada resource dibuat
+> **DECISION UPDATE (2026-09-14):** Database produksi **pindah ke Lightsail Managed PostgreSQL** (Micro $15/bln) — Opsi B dieksekusi atas keputusan user. Jalur data kini sepenuhnya AWS; yang tersisa di GCP hanya SaaS journal/auth (Firebase, Secret Manager Gemini key) + Cloud Run standby rollback. Runbook eksekusi: `infra/aws/DATABASE_MIGRATION.md`. Estimasi AWS baru ≈ **$28/bln** (masih dalam cap $30, lihat guardrail §17).
+
+> **Status:** Audit read-only selesai · Desain hemat (Lightsail + Cloudflare + Lightsail Managed PG) · Belum ada resource dibuat
 > **Target biaya:** ideal **US$15–25/bulan** (AWS saja) · maksimum **US$30/bulan** tanpa justifikasi kuat
 > **Sumber bukti:** `docs/DEPLOY_GCP.md`, `docs/DEPLOY_GCP_PRACTICES.md`, `docs/DEPLOYMENT_SUMMARY.md`, `docs/QUEUES.md`, `docs/STACK.md`, `docs/AI_JOURNAL_CLOUD_RUN.md`, `apps/web/src/server/ai-journal/secrets.ts`, `apps/web/src/server/firebase/admin.ts`, `apps/web/src/app/api/health/route.ts`, `Dockerfile`, `Dockerfile.migrate`, `compose.yaml`, `.github/workflows/ci.yml`
 > **Dokumen terkait:** `AWS_MIGRATION_PLAN.md` = jalur upgrade Stage 3–4 (ECS Fargate + RDS + ALB) bila metrik membuktikan kebutuhan.
@@ -25,8 +27,8 @@
 
 ### COST DRIVERS (apa yang sebenarnya menghabiskan uang)
 
-1. **GCP Cloud SQL** ±$10–13/bln (compute `db-f1-micro` ≈$8 + storage/backup ≈$2–4) — biaya existing, **di luar budget AWS**.
-2. **Compute aplikasi** — di AWS akan diganti satu **Lightsail $12** (fixed price, predictable).
+1. **Database** — kini **Lightsail Managed PostgreSQL $15/bln** (keputusan: pindah dari GCP; lihat `infra/aws/DATABASE_MIGRATION.md`). Cloud SQL GCP (−$10–13) dihapus setelah rollback window 2 minggu.
+2. **Compute aplikasi** — satu **Lightsail $12** (fixed price, predictable).
 3. **Flat-cost traps yang DIHINDARI**: ALB (~$18) + NAT Gateway (~$47) + ECR/CloudWatch/Secrets Manager minimum charges — semua ini hilang dengan desain Lightsail.
 4. **Add-on yang bisa bocor**: static IP terlepas ($3.6), snapshot 60GB ($3/bln), egress >2TB (tidak realistis di trafik awal).
 
@@ -51,9 +53,9 @@ AWS Lightsail ap-southeast-1 (Singapore) — $12/bln, 2 vCPU/2GB/60GB/2TB
         ├── Caddy (reverse proxy, origin cert Cloudflare, health check)
         ├── App container (Next.js standalone, non-root, mem_limit 1g)
         └── (tanpa Redis, tanpa worker — webhook inline)
-        │  DATABASE_URL → Cloud SQL public IP + SSL (authorized network = IP Lightsail)
+        │  DATABASE_URL → Lightsail Managed PG endpoint (private, same AZ, sslmode=require)
         ▼
-GCP Cloud SQL (tetap) · GCP Secret Manager (Gemini) · Firebase/Gemini/Sentry (tetap)
+Lightsail Managed PostgreSQL (AWS) · GCP tersisa (dibiarkan): Secret Manager (Gemini) · Firebase/Gemini/Sentry
 ```
 
 ### EXPECTED MONTHLY COST (AWS saja)
@@ -61,20 +63,20 @@ GCP Cloud SQL (tetap) · GCP Secret Manager (Gemini) · Firebase/Gemini/Sentry (
 | Komponen | Bln |
 |---|---|
 | Lightsail 2vCPU/2GB/60GB (Singapore) | $12 |
+| Lightsail Managed PostgreSQL (Micro 1GB/40GB) | $15 |
 | Static IP (attached) | $0 |
 | Cloudflare Free | $0 |
 | Domain (amortisasi) | ~$1 |
 | GHCR (image) | $0* |
 | Monitoring (UptimeRobot/healthchecks.io free) | $0 |
-| Backup (GCP-side, existing) | $0–3 |
-| **TOTAL AWS** | **≈$13–16** |
+| **TOTAL AWS** | **≈$28** |
 
 *Syarat: image ≤ 500MB (quota private GHCR free) — verifikasi ukuran; fallback ECR (500MB/bln gratis) tanpa biaya tarik intra-region.
 
-**Total lintas-cloud** (realistis yang Anda bayar): Lightsail $12–16 + Cloud SQL existing ±$10–13 ≈ **$23–29/bln**. Ini justru argumen terkuat mempertahankan DB di GCP: memindahkan DB ke AWS (Lightsail Managed PG $15) menaikkan total menjadi ~$28–31/bln di ujung atas target.
+**Total lintas-cloud:** Lightsail $12 + Managed PG $15 + domain ≈ **$28/bln**, dengan Cloud SQL GCP (−$10–13) dihapus setelah rollback window. Angka ini menempel di cap $30 — maka §17 guardrail menjadi wajib: tidak ada komponen berbayar tambahan (ECR/Secrets Manager/HA plan) tanpa mengganti komponen lain.
 
 ### RISKS (ringkas; detail §23)
-Cross-cloud latency/egress (wajib diukur) · DB private IP harus dibuka public (authorized-network + SSL, trade-off security) · single point of failure satu box (diminimalkan dengan rebuild runbook + registry + DB managed) · Lightsail tidak punya IAM role (hindari AWS API dari box) · PITR GCP OFF.
+Migrasi DB butuh akses sementara ke Cloud SQL (Path Y: public IP scoped 1 IP) atau jalur GCS tanpa eksposur (Path X) · DB Lightsail single-AZ (PITR 7d + snapshot; HA = $30 saat RTO menuntut) · single point of failure satu box (minimalkan dengan rebuild runbook + registry + DB managed).
 
 ### IMPLEMENTATION PLAN (ringkas; detail §29 Phase 0–10)
 Phase 0 Audit (✅) → 1 Lightsail → 2 Security → 3 Docker → 4 App → 5 DB connectivity + **ukuran latency** → 6 Cloudflare → 7 CI/CD → 8 Observability → 9 Backup → 10 Validation. Production cutover hanya setelah staging hijau dan latensi DB terbukti.
@@ -119,7 +121,7 @@ Sama seperti §1 CURRENT STATE. Poin yang menentukan desain:
 | Region? | **ap-southeast-1 (Singapore)** | ⚠️ Lightsail **tidak punya region Jakarta** (ap-southeast-3); Singapore = terdekat ke DB GCP Jakarta → latensi lebih kecil daripada region lain |
 | Reverse proxy? | **Caddy** (config 10 baris, auto-reload, health check) | Nginx (lebih verbose); Traefik (berlebihan) |
 | CDN/WAF/DNS? | **Cloudflare Free** — jangan CloudFront + AWS WAF Day-1 (biaya + kompleksitas) | CloudFront (~$0–2 + konfigurasi lebih rumit) ditolak selama Cloudflare memenuhi |
-| DB? | **TETAP GCP Cloud SQL** (Opsi A) — syarat: latensi terukur | Opsi B: Lightsail Managed PostgreSQL $15/bln (lihat §10) — hanya bila latensi/egress terbukti buruk atau public-IP ditolak kebijakan |
+| DB? | **Lightsail Managed PostgreSQL $15 (Micro)** — DIPUTUSKAN | Sebelumnya Opsi A (pertahankan GCP) digantikan keputusan user: data path satu cloud, tanpa latensi cross-cloud, private by default, PITR 7 hari bawaan |
 | Redis? | **TIDAK ADA** (app tidak butuh) | Container Redis lokal hanya jika app nanti butuh cache kecil (§11) |
 | Registry? | **GHCR** (sudah di ekosistem GitHub, tanpa biaya egress) | ECR = fallback bila quota/size image bermasalah |
 | Secrets di server? | `.env` chmod 600 (cheapest) | SSM Parameter Store = butuh IAM static key di box (risiko) — ditolak Day-1; Secrets Manager ($0.40/secret) ditolak Day-1 |
@@ -150,12 +152,14 @@ flowchart TB
         LOGS["json-file logs (10m × 5)"]
     end
 
-    subgraph GCP["GCP (tetap, tidak dimigrasikan)"]
-        SQL[("Cloud SQL PostgreSQL 16<br/>public IP + SSL + authorized network")]
+    subgraph GCP["GCP tersisa (journal/auth — dibiarkan)"]
         SM["Secret Manager (Gemini key)"]
-        JOB["Cloud Run job migrate"]
         FBA["Firebase Auth + Firestore"]
         GEM["Gemini API"]
+    end
+
+    subgraph DB["AWS — Lightsail Managed PostgreSQL (dipindahkan)"]
+        SQL[("Lightsail Managed PostgreSQL 16<br/>Micro $15 · private · PITR 7d")]
     end
 
     subgraph EXT["External"]
@@ -173,11 +177,10 @@ flowchart TB
     W --> DNS --> WAF --> CADDY
     CADDY --> APP
     APP --> ENV
-    APP -->|psql + sslmode=verify-full| SQL
+    APP -->|psql + sslmode=require (private, same AZ)| SQL
     APP -->|SA JSON scoped| SM
     APP -->|HTTPS| FBA & GEM & SN & XS
     APP --> LOGS
-    JOB --> SQL
     GHA --> GHCR -->|docker pull| APP
     UP -->|/health 5 min| CADDY
     CADDY -->|80/443 dari IP CF saja| FW
@@ -195,19 +198,20 @@ flowchart TB
 | Domain | ≈$1.00 | Amortisasi $10–12/thn (registrar bebas; DNS di Cloudflare) |
 | GHCR | $0.00 | Private quota 500 MB (GitHub Free) — **cek ukuran image**; bila >500 MB: slim image atau ECR (500 MB/bln gratis) |
 | UptimeRobot / healthchecks.io | $0.00 | Free tier cukup (monitor 5-min, alert email/telegram) |
+| Lightsail Managed PostgreSQL (Micro) | **$15.00** | 1 GB/40 GB, private only, automatic backup + PITR 7 hari, AZ sama dengan instance |
 | Backup config (GCS bucket existing) | $0.00 | Encrypted tar kecil (<1 MB) ke GCS project existing |
 | AWS Budgets | $0.00 | 2 budget (forecast + actual) gratis |
-| **TOTAL AWS** | **≈$13–16/bln** | Di bawah target ideal $15–25 |
+| **TOTAL AWS** | **≈$28/bln** | Di cap $30 — guardrail §17 wajib |
 
-**Di luar budget AWS (existing, tidak berubah):** Cloud SQL ±$10–13/bln.
-**Total lintas-cloud ≈ $23–29/bln.**
+**GCP:** Cloud SQL (±$10–13) dihapus setelah rollback window 2 minggu.
+**Total lintas-cloud ≈ $28/bln.**
 
 ### Jika desain melebihi $30/bln → STOP (sesuai aturan)
 Skenario yang bisa menembus dan mitigasinya:
 
 | Pemicu over-budget | Mengapa diperlukan | Alternatif lebih murah | Trade-off |
 |---|---|---|---|
-| Pindah DB ke Lightsail Managed PG (+$15) | Hanya bila latensi cross-cloud gagal tes | Opsi A (pertahankan GCP) selama mungkin; atau `activation-policy=NEVER` di GCP saat idle (storage-only ≈$3–4) | DB mati saat idle = app tidak usable — tidak disarankan untuk payment |
+| Upsize DB (Small $30) atau HA plan ($30) | Hanya bila 40 koneksi/40 GB Micro tak cukup atau RTO bisnis menuntut failover | Tetap Micro + pooling (`connection_limit=10`) + arsipkan baris lama; PITR 7d sebagai recovery | Kapasitas/HA lebih rendah |
 | Snapshot Lightsail 60GB (+$3/bln) | DR instance | Ambil snapshot hanya sebelum perubahan besar, hapus setelahnya; DR utama = rebuild dari registry + dump DB (runbook) | RTO rebuild lebih lambat |
 | Egress > 2 TB | Trafik sangat tinggi | Saat itu terjadi, Stage 3 (ECS) sudah relevan dan budget direvisi | — |
 | Upstash Redis (+$5–10) | Rate-limit terdistribusi | Cloudflare rate-limit rules (free) untuk path publik | Kurang granular per-user |
@@ -332,6 +336,12 @@ Catatan:
 
 ## 10. Database Strategy
 
+> **UPDATE (2026-09-14, keputusan user): Opsi B dipilih — database pindah ke
+> Lightsail Managed PostgreSQL.** Seluruh prosedur eksekusi (provision → dump/
+> restore → verifikasi checksum → cutover → rollback window → decommission)
+> ada di `infra/aws/DATABASE_MIGRATION.md`. Gate latensi/egress Opsi A tidak
+> lagi diperlukan. Bagian di bawah dipertahankan sebagai catatan alternatif.
+
 ### Opsi A — PERTAHANKAN GCP Cloud SQL (default, sesuai constraint user)
 
 **Fakta kunci yang harus diatasi:** Cloud SQL saat ini **private-IP only** — dari AWS tidak routable. Dua sub-opsi:
@@ -357,7 +367,7 @@ Catatan:
 | RDS db.t4g.micro single-AZ | ≈$15–20 + egress + ALB tidak perlu | Lebih mahal & kompleks dari Lightsail Managed; hanya untuk Stage 3 |
 | PostgreSQL lokal container | $0 | **DITOLAK untuk data payment/ledger** (risiko disk failure = kehilangan ledger; melanggar prinsip "managed untuk SaaS/payment") |
 
-**Verdict:** jalankan Opsi A selama memenuhi gate latensi/biaya — sesuai constraint user: jangan migrasikan PostgreSQL hanya agar terlihat "full AWS". Opsi B adalah jalur yang sudah diukur dan siap diambil.
+**Verdict (diperbarui):** Opsi B **dipilih** (keputusan user 2026-09-14) — data path satu cloud, private by default, PITR 7 hari bawaan, tanpa pengukuran cross-cloud yang tidak pasti. Opsi A hanya tersisa sebagai target rollback selama window 2 minggu (Cloud SQL `activation-policy=NEVER`, storage-only).
 
 ---
 
@@ -432,8 +442,8 @@ push main / tag
 
 | Data | Strategi | Lokasi |
 |---|---|---|
-| Database | **Cloud SQL automated backup (02:00, existing)** + **aktifkan PITR** (SHOULD — ledger finansial; tambahan biaya storage saja ±$1–3) | GCP |
-| Restore drill | Adaptasi `scripts/dr-restore-drill.mjs` → jalankan via Cloud Run job bulanan (pattern sudah terbukti di repo) | GCP |
+| Database | **Lightsail Managed PG: automatic backup + PITR 7 hari (bawaan)**; manual snapshot sebelum setiap langkah berisiko | AWS |
+| Restore drill | Adaptasi `scripts/dr-restore-drill.mjs` → drill bulanan ke target restore Lightsail (pattern sudah terbukti di repo) | AWS |
 | Config + .env | `tar` → enkripsi `age` → upload ke bucket GCS private (project existing) setiap perubahan; retention 30 hari | GCS |
 | Image aplikasi | Tidak perlu backup — immutable di GHCR | GHCR |
 | Instance DR | Snapshot Lightsail hanya sebelum perubahan besar (hapus setelahnya; $0.05/GB/bln) | AWS |
@@ -547,8 +557,8 @@ Prinsip: backup **tidak** disimpan hanya di server yang sama.
 
 | # | Risiko | Mitigasi |
 |---|---|---|
-| 1 | **Latensi cross-cloud DB** (SG↔Jakarta) lebih tinggi dari estimasi | WAJIB ukur sebelum cutover; gate keputusan §10; fallback Opsi B siap |
-| 2 | **Cloud SQL public IP** (Opsi A1) = permukaan serangan baru | Authorized network 1 IP + SSL enforced + user non-superuser + audit koneksi |
+| 1 | **DB single-AZ (Lightsail managed)** — AZ failure = DB down | PITR 7 hari + manual snapshot; restore ke instance baru; upgrade ke HA plan (2× = $30) bila RTO bisnis menuntut |
+| 2 | **Cloud SQL public IP sementara saat migrasi (Path Y)** | Authorized network = hanya static IP Lightsail + SSL enforced + **dimatikan segera setelah dump** (`DATABASE_MIGRATION.md` M3); Path X (via GCS) bila eksposur tidak diterima |
 | 3 | **Single point of failure** (1 box, 1 region) | Rebuild runbook + image di registry + DB managed; RTO 5–30 min diterima eksplisit untuk early-stage; Stage 3 bila bisnis menuntut |
 | 4 | **Lightsail tanpa IAM role** → kredensial static bila pakai AWS API dari box | Desain menghindari AWS API dari box (R2/GCS untuk storage, GHCR untuk image) |
 | 5 | **Disk 60GB penuh** (image + logs) | Rotasi log, prune terjadwal, alert disk, upgrade disk |
@@ -582,8 +592,8 @@ Prinsip: backup **tidak** disimpan hanya di server yang sama.
 | **1 Lightsail foundation** | Instance + static IP | `aws lightsail create-instances … medium_2_0` (ap-southeast-1) | Buat instance Ubuntu 24.04, attach static IP, tag `paydash-prod` | SSH masuk, `free -h` 2GB, disk 60GB | Delete instance | LOW | **+$12/bln** |
 | **2 Security** | SSH/firewall | `/etc/ssh/sshd_config.d/*`, Lightsail firewall rules | Key-only, no root, unattended-upgrades, 80/443 CF-only, 22 restricted | Tes login password ditolak; akses IP langsung ditolak | Revert rules | LOW | $0 |
 | **3 Docker runtime** | Docker + Compose + Caddy | `docker-ce`, `compose.prod.yaml`, `Caddyfile`, origin cert CF | Install Docker, daemon log rotation, `caddy:2` dengan cert origin, healthcheck `/health` | `docker ps` sehat; `curl -k https://localhost` → halaman app placeholder/404 terkontrol | `docker compose down` | LOW | $0 |
-| **4 Application deployment** | App jalan di AWS | image GHCR, `.env` (0600), `IMAGE_TAG=sha` | `docker compose up -d --wait`; pasang SA JSON GCP scoped (Secret Manager + Firebase) | `/health` 200, `/ready` 200 (`db: ok` via staging tunnel), e2e smoke | Tag lama | MEDIUM | $0 |
-| **5 Database connectivity** | **Ukur cross-cloud** | `psql` + loop 100 query; Cloud Billing GCP | Opsi A1: public IP + authorized network + SSL + `server-ca.pem`; **jalankan pengukuran ≥ 3 hari** dari staging | p50/p95 < gate §10; egress cost terukur | Hapus public IP (balik private) | **HIGH (keputusan)** | $0–3 (PITR) |
+| **4 Application deployment** | App jalan di AWS | image GHCR, `.env` (0600), `IMAGE_TAG=sha` | `docker compose up -d --wait`; pasang SA JSON GCP scoped (Secret Manager + Firebase) | `/health` 200, `/ready` 200 (`db: ok` via staging), e2e smoke | Tag lama | MEDIUM | $0 |
+| **5 Database connectivity** | **Lightsail Managed PG (dipindahkan)** | `infra/aws/DATABASE_MIGRATION.md` | Provision Micro $15 private (AZ sama dgn instance) → dump/restore dari Cloud SQL → `prisma migrate deploy` + checksum | Checksum 3 tabel kritis identik; `/api/health` `db: ok`; rollback window 2 minggu (Cloud SQL standby) | Balik `DATABASE_URL` ke Cloud SQL | **HIGH (keputusan)** | **+$15/bln** |
 | **6 Cloudflare** | DNS + proxy + SSL | Zona CF, record `staging.pay.example.com`, Full (strict), bot fight, rate-limit rules | CNAME origin, origin cert dipasang di Caddy, WAF rules 3 pcs | `curl` via CF 200; SSL Labs ≥ B; log Caddy hanya berisi IP CF | DNS OFF (grey cloud) | LOW | $0 |
 | **7 CI/CD** | Deploy otomatis | `.github/workflows/deploy-lightsail.yml`, GH Secrets (`SSH_KEY`, token) | Build+scan+push GHCR → SSH → compose pull/up → smoke `/ready` | Push commit → deploy hijau otomatis; rollback tag teruji | Disable workflow | MEDIUM | $0 |
 | **8 Observability** | Health + uptime + logs + Sentry | UptimeRobot `/health` 5-min; cron disk/heartbeat → healthchecks.io; Sentry env `production-aws` | Pasang monitor, alert email; uji alert disk di staging | Alert terkirim saat uji | Hapus monitor | LOW | $0 |
