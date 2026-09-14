@@ -32,14 +32,28 @@ services:
       NEXT_PUBLIC_APP_URL: http://localhost:${WEB_PORT:-37421}
       BETTER_AUTH_URL: http://localhost:${WEB_PORT:-37421}
       PORT: 3000
+      # This compose file is the production deployment (`.env.prod`, host-local
+      # port bind). Declaring APP_ENV makes `lib/env.ts` enforce the production
+      # secret requirements at boot instead of letting the app start without
+      # webhook signatures, a real session secret, or error reporting (S-07,
+      # S-11, O-01). Copy `apps/web/.env.prod.example` to `apps/web/.env.prod`.
+      APP_ENV: ${APP_ENV:-production}
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health | grep -q ok || exit 1"]
+      # Readiness, not liveness, and not a substring grep.
+      #
+      # This used to be `curl -f /api/health | grep -q ok`, which matched the
+      # literal `ok` inside `{"status":"ok","db":"error"}` — so a container with
+      # no database was declared healthy and kept receiving traffic (O-02).
+      # `/api/ready` returns 503 when a required dependency is down and `curl -f`
+      # turns any 4xx/5xx into a non-zero exit, so the status code is the signal.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/ready || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
 volumes:
   pgdata:
