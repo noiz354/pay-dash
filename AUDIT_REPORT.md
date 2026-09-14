@@ -27,6 +27,43 @@ Every finding carries an evidence class. Nothing here is assumed from UI presenc
 
 ---
 
+## 0.1 Remediation log (this branch)
+
+The audit itself changed no code. Remediation began after it was filed and is
+tracked here so the report and the branch cannot drift apart. Every entry is a
+commit on `arena/01a09da9-pay-dash`; the findings it closes are still described
+in full below, in the tense they were found in.
+
+| Commit | Closes | What changed |
+|---|---|---|
+| `4cf8797` | O-01, O-02, R-12, S-11 (part) | Sentry actually initialises; `/api/health` split from `/api/ready` and returns 503 when the DB is down; compose healthcheck parses JSON; `SENTRY_DSN`, `BETTER_AUTH_SECRET` and both webhook secrets required with no defaults when `APP_ENV=production` |
+| `a9ee33d` | **S-01** | The edge gate validates the *session*, not cookie existence; `isPublic()` uses exact + prefix matching instead of `includes()`; `/ai-journal`'s double classification resolved |
+| `11039c5` | **S-03**, F-02 | `refundTransactionAction` and `refund-dialog.tsx` deleted — the self-approvable refund path no longer exists |
+| `dd18b71` | **S-04** | The six global `runtime.ts` switches gated behind a new `platform.admin` permission (OWNER only) |
+| `791ce29` | F-01 | Four success strings now state what actually happened instead of claiming money moved |
+| `038816f` | R-07, F-03 | Seeded webhook rows are labelled and both operational pages carry a DEMO DATA banner |
+| `5c3e846` | S-02 (6 of 32) | `team.ts` — invites, role changes, deactivation gated behind a new `team.manage` |
+| `26659d7` | S-02 (15 of 32) | `settings.ts` — merchant profile, notification channels, API keys, IP allowlist gated behind a new `settings.manage` |
+| `21e523f` | S-02 (20 of 32) | `risk.ts` — all five fraud-rule actions gated behind a new `risk.manage` (OWNER + RISK_ANALYST) |
+| `36a2047` | **S-02 (closed)** | `invoices.ts`, `links.ts`, `blocklist.ts`, `kyc.ts`, `webhooks.ts`, `balance.ts` gated; static coverage scanner added so a new ungated action fails CI |
+
+**S-02 is closed as of `36a2047`** — see the note at the head of that finding for
+the two deviations from §12's plan 1.1/1.2 (one module reclassified as not an
+authorization defect; the permission catalogue extended by three permissions
+rather than eight).
+
+Phase 0 items **0.8** (CI ordering) and **0.10** (upstream rate limiting on
+`/api/auth/*`) are **not** done. 0.8 is blocked mechanically — the GitHub App
+token on this branch lacks the `workflows` permission — and is preserved as
+`docs/audit/patches/ci-ordering.patch`. 0.10 is infrastructure, outside the
+repository.
+
+Everything else in §12 — Phases 1.3 through 5 — is untouched. The verdict in §1
+and the failure analysis in §13 stand unchanged: gating *who* may call an action
+does not make the data behind it durable or tenant-scoped.
+
+---
+
 ## 1. Executive verdict
 
 > ### **DO NOT LAUNCH. This is a high-fidelity interactive prototype wearing the clothes of a production payments platform.**
@@ -455,7 +492,35 @@ Two further weaknesses in the same file:
 
 **Fix:** delete the cookie-existence check. Call `auth.api.getSession({ headers })` in the middleware (Better Auth supports this on the edge with the JWT cookie cache) and redirect on `null`. Replace `includes()` with exact/prefix matching. Resolve `/ai-journal`'s classification once.
 
-### S-02 — CRIT · 32 of 65 Server Actions have no authorization whatsoever **[V-CODE, one instance V-RUNTIME]**
+### S-02 — CRIT · 32 of 65 Server Actions have no authorization whatsoever **[V-CODE, one instance V-RUNTIME]** · **RESOLVED `36a2047`**
+
+> **Resolution note.** All 32 are now closed, with two deliberate deviations from
+> §12's plan:
+>
+> 1. **`setup.ts` (2 actions) is reclassified, not gated.** `getCompletedSteps`
+>    and `toggleSetupStepAction` read and write the *caller's own* cookie
+>    (`kl.setup`). There is no shared state and no other principal's data, so
+>    there is nothing to authorize — a caller can only falsify their own progress
+>    indicator. Gating it would add a failure mode without removing one. The real
+>    defect stands and is unchanged: onboarding completion lives in a client
+>    cookie rather than a `merchant.setup` column (B-03). These two are recorded
+>    in a size-capped allowlist in `authorization-coverage.test.ts`, and a test
+>    fails if that list grows.
+> 2. **Three permissions were added, not eight.** Plan 1.2 proposed
+>    `settings.apikeys.write`, `team.invite`, `team.role.change`,
+>    `risk.rules.deploy`, `fraud.blocklist.write`, `webhooks.replay`,
+>    `balance.topup` and `invoice.mark_paid`. Shipped instead: `team.manage`,
+>    `settings.manage`, `risk.manage` — plus reuse of the existing
+>    `money_in.create`, `kyc.submit` and `provider.connect.test`. One permission
+>    per resource, matching what the already-gated actions in each file demanded,
+>    so issuing and settling an invoice (or creating, paying and expiring a link)
+>    cannot be split across different privileges. The finer split remains a
+>    reasonable later decision; it was not required to close the hole and would
+>    have made the catalogue harder to reason about.
+>
+> `balance.ts:topUpBalanceAction` — the first row of the table — was still
+> ungated after the other six modules were fixed, and was caught by the coverage
+> scanner on its first run. That is the argument for plan 1.5 existing at all.
 
 Detection method: each `export async function` block in `src/server/actions/*.ts` (tests excluded) was scanned for any of 21 authorization constructs — `requireOrgContext`, `requireStrictOrgContext`, `resolveSessionOrgContext`, `require{Transaction,Customer,Payout}OrganizationContext`, `auth.api`, `getSession`, `requireSession`, `OrgContextError`, `access.context`, `ctx.organizationId`, `organizationId`, `hasPermission`, `TenantScope`. 33 actions matched; **32 did not**.
 
@@ -1215,15 +1280,15 @@ Cheap, high-leverage, and unblocks honest testing.
 
 | # | Action | Fixes |
 |---|---|---|
-| 1.1 | Add the strict seam to the 32 unguarded actions. Group by module: `settings.ts` (9), `team.ts` (6), `risk.ts` (5), `links.ts` (2 of 3), `blocklist.ts` (2), `webhooks.ts` (2), `invoices.ts` (2), `balance.ts` (1), `kyc.ts` (1), `setup.ts` (2) | S-02 |
-| 1.2 | Extend the RBAC catalogue with the permissions those modules need (`settings.apikeys.write`, `team.invite`, `team.role.change`, `risk.rules.deploy`, `fraud.blocklist.write`, `webhooks.replay`, `balance.topup`, `invoice.mark_paid`) — the 26-permission catalogue does not currently cover them | S-02 |
+| 1.1 | ✅ **DONE `36a2047`.** Add the strict seam to the 32 unguarded actions. Group by module: `settings.ts` (9), `team.ts` (6), `risk.ts` (5), `links.ts` (2 of 3), `blocklist.ts` (2), `webhooks.ts` (2), `invoices.ts` (2), `balance.ts` (1), `kyc.ts` (1), ~~`setup.ts` (2)~~ reclassified — not an authorization defect, see the S-02 resolution note | S-02 |
+| 1.2 | ✅ **DONE, differently.** Shipped `team.manage`, `settings.manage`, `risk.manage` and reused `money_in.create` / `kyc.submit` / `provider.connect.test` instead of the eight proposed. One permission per resource rather than per verb. Revisit only if a role needs to split issue-vs-settle | S-02 |
 | 1.3 | Make `organizationId` and `actor` **required** parameters on `resolveProviderWrite`, `tryProviderRefund`, `tryProviderPayout`, `tryProviderTransfer`; let the compiler find every omission | S-05 |
 | 1.4 | Make the export tenant predicate structural: `guardExport` returns a `TenantScope` that list functions must accept, so omitting it is a type error. Apply to the 7 unbound routes (`audit`, `balance`, `blocklist`, `invoices`, `invoices/[id]`, `subscriptions`, `team`). Delete the `report.export` OR-branch and grant the specific permission per role. Make non-enforcing mode return `ok: false` for tenant-data routes. Copy `route.tenant.test.ts` to all 7 | S-09 |
-| 1.5 | Add a lint rule / CI grep that fails the build when an `export async function` in `src/server/actions/**` contains none of the seam identifiers. This is the only durable defence against regression | S-02 |
+| 1.5 | ✅ **DONE `36a2047`**, as a test rather than a lint rule: `src/server/actions/authorization-coverage.test.ts` scans every exported function under `src/server/actions/`, fails on any that performs no authorization and is not in a two-entry allowlist, and asserts the allowlist does not grow. It found `topUpBalanceAction` on its first run | S-02 |
 | 1.6 | Replace the `x-preview-bypass` **query parameter** with the header only, and require a signed preview secret | S-10 |
 | 1.7 | Add a Playwright project that runs the full suite with `AUTH_ENFORCED=strict` | R-11, S-10 |
 
-**Exit criterion:** a static-analysis gate in CI proves 65/65 actions carry an authorization construct. A non-OWNER persona attempting each of the 32 formerly-open actions receives FORBIDDEN. All 11 sensitive export routes are tenant-scoped, each with a `route.tenant.test.ts`, and a two-tenant test proves no cross-read with `AUTH_ENFORCED` set to `off`, `preview` and `strict`.
+**Exit criterion:** a static-analysis gate in CI proves 65/65 actions carry an authorization construct ✅ *(met — the scanner asserts **62 gated + 2 excused = 64**. The population fell from 65 to 64 because `refundTransactionAction` was deleted in `11039c5` to close S-03; every action that still exists is accounted for.)* A non-OWNER persona attempting each of the 32 formerly-open actions receives FORBIDDEN ✅ *(met for the mocked seam in 114 assertions across ten `*.auth.test.ts` suites; **not** yet met as an end-to-end persona test — that needs 1.7 and a browser)*. All 11 sensitive export routes are tenant-scoped, each with a `route.tenant.test.ts` ❌ *(1.4 untouched)*, and a two-tenant test proves no cross-read with `AUTH_ENFORCED` set to `off`, `preview` and `strict` ❌ *(blocked on Phase 3 — there is no second tenant to test with until 3.1 exists)*.
 
 ### Phase 2 — Durability (weeks 3–9) · *the load-bearing phase*
 

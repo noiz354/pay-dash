@@ -100,11 +100,17 @@ add them to ALLOWLIST in this file with a reason a reviewer can argue with:
     expect(excused.sort()).toEqual(["setup.ts:getCompletedSteps", "setup.ts:toggleSetupStepAction"]);
   });
 
-  it("covers the actions the audit counted", () => {
-    // 65 exported actions in total per the audit; the scan must be seeing the
-    // same population, or the lock above is narrower than it looks.
-    expect(gated.length + excused.length + findings.length).toBeGreaterThanOrEqual(60);
-    expect(gated.length).toBeGreaterThanOrEqual(50);
+  it("sees exactly the population the audit counted", () => {
+    // The audit counted 65 exported actions. It is 64 now because
+    // `refundTransactionAction` was deleted to close S-03 — the population is
+    // supposed to shrink by deletion, never by the scan seeing less of it.
+    //
+    // Exact numbers rather than floors: a gate that asserts "at least 50 gated"
+    // passes silently if half the directory stops being scanned. If these two
+    // numbers change, someone added or removed an action, and the diff should be
+    // a deliberate part of that change.
+    expect(gated.length + excused.length + findings.length).toBe(64);
+    expect(gated.length).toBe(62);
   });
 
   it("gates the specific actions the audit named", () => {

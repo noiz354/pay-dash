@@ -8,9 +8,10 @@ import { topUpBalanceAction } from "./balance";
 
 /**
  * Audit finding S-02 — `topUpBalanceAction` fabricated balance with no
- * authorization. This action was named in the audit's summary line but is not in
- * the S-02 table; it was found by the coverage scanner in
- * `authorization-coverage.test.ts`, which is exactly what that scanner is for.
+ * authorization. It is the first row of the audit's S-02 table, and it was also
+ * the one action still ungated after the other six modules were fixed: the
+ * coverage scanner in `authorization-coverage.test.ts` caught it on its first
+ * run, which is the argument for the scanner existing at all.
  *
  * Neither the action nor `topUpBalance` reads the session, so any caller who
  * could reach the endpoint added arbitrary funds to the balance — bounded only
