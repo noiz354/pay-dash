@@ -57,6 +57,7 @@ const APP_ROUTE_PREFIXES = [
   "/onboarding",
   "/support",
   "/risk",
+  "/agent",
   "/ai-journal",
 ];
 

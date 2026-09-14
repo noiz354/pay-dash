@@ -65,6 +65,7 @@ export const NAV_SECTIONS: NavSection[] = [
     id: "operations",
     label: "Operations",
     items: [
+      { href: "/agent", label: "Ops Agent", icon: "smart_toy", requiresPermission: "transaction.read" },
       { href: "/fraud", label: "Fraud", icon: "shield", requiresPermission: "audit.read" },
       { href: "/fraud/blocklist", label: "Blocklist", icon: "block", requiresPermission: "audit.read" },
       { href: "/risk", label: "Risk", icon: "warning", requiresPermission: "audit.read" },

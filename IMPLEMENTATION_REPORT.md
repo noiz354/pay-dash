@@ -1,6 +1,6 @@
 # IMPLEMENTATION REPORT — Merchant Operations Agent (Strands Retrofit)
 
-> Scope: WAVE 0 (baseline) + WAVE 1 (Strands spike) + **WAVE 2 (read-only investigation toolset, Bedrock-only, AWS runtime artifacts)**.
+> Scope: WAVE 0 (baseline) + WAVE 1 (Strands spike) + WAVE 2 (investigation toolset, Bedrock-only, AWS runtime artifacts) + **WAVE 3 (tenant security hardening) + WAVE 4 (observability & timeline UI)**.
 > Keputusan project: **semua tech agent memakai AWS (Strands + Bedrock); komponen GCP dibiarkan apa adanya** (Gemini journal, Cloud SQL, Firebase tidak disentuh).
 > Semua fakta SDK diverifikasi terhadap paket terpasang `@strands-agents/sdk@1.17.0`, bukan dari tebakan docs.
 
@@ -38,6 +38,14 @@
 | `apps/web/src/app/api/agent/run/route.ts` | `POST /api/agent/run` — boundary session terpercaya, read-only |
 | `apps/web/src/server/agent/*.test.ts` | 12 test (tenant lintas-org, filter status, agregat webhook, loop, failure) |
 | `apps/web/.env.example` | Env AWS: `BEDROCK_MODEL_ID`, `AWS_REGION`, `AGENT_MAX_TOOL_TURNS`, `AGENT_RUNTIME_TIMEOUT_MS` |
+| `apps/web/src/server/agent/rate-limit.ts` | **WAVE 3**: per-actor sliding-window limiter (10 run/10 min) — melindungi spend Bedrock |
+| `apps/web/src/app/api/agent/run/route.ts` | **WAVE 3 hardened**: `requireStrictOrgContext("transaction.read")` (strict fail-closed + permission gate), rate limit → 429 + `retry-after`, 403 untuk semua kelas error tenant |
+| `apps/web/src/server/agent/policies.test.ts` | **WAVE 3**: policy invariants (read-only, no fabrication, DATA≠INSTRUCTION, tenant lock, approval) |
+| `apps/web/src/server/agent/rate-limit.test.ts` | **WAVE 3**: window, exhaustion + retry-after, isolasi antar aktor |
+| `apps/web/src/components/agent/merchant-ops-console.tsx` | **WAVE 4**: console agent — timeline tool (nama/status/summary), tanpa chain-of-thought, READ-ONLY badge, suggested prompts, error/429 state |
+| `apps/web/src/app/[locale]/agent/page.tsx` | **WAVE 4**: halaman `/agent` (Strands + Bedrock badges, tenant-scoped) |
+| `next.config.ts`, `src/proxy.ts`, `navigation/nav-config.ts` | **WAVE 4**: registrasi rute `/agent` (rewrites + proxy prefix + nav item gated `transaction.read`) |
+| `apps/web/src/server/agent/tools/ledger.test.ts` | **WAVE 3 +3 test**: forged tenant field di tool input diabaikan; instruction-like data diperlakukan sebagai data; malformed input ditolak |
 | `infra/aws/` | **WAVE 2**: `iam-agent-bedrock-policy.json` (InvokeModel Claude saja), `compose.aws.yaml` (web+Caddy, health, limit), `Caddyfile`, `README.md` (runbook Bedrock + deploy + smoke + cost guardrails) |
 | `apps/web/package.json` + `pnpm-lock.yaml` | `@strands-agents/sdk@1.17.0`, `@google/genai@^2.6.0` (peer wajib SDK — SDK mengimpor modul Google saat load; agent tidak memakai Google model) |
 | `BASELINE.md` | WAVE 0 deliverable |
@@ -70,8 +78,12 @@
 |---|---|
 | `pnpm --filter web typecheck` | ✅ 0 error |
 | `pnpm --filter web lint` | ✅ 0 error (40 warning pre-existing) |
-| `pnpm --filter web exec vitest run src/server/agent` | ✅ **12/12 passed** |
-| `pnpm --filter web test` (full) | ✅ **1494 passed** · ⚠️ 2 suite (`mcp/customer-tools.tenant`, `mcp/server.integration`) gagal import `@prisma/client` karena sandbox tidak bisa mengunduh engine Prisma dari `binaries.prisma.sh` (prisma generate gagal TLS) — **lingkungan, bukan regresi** (tidak ada file MCP yang diubah; kedua suite butuh client ter-generate) |
+| `pnpm --filter web exec vitest run src/server/agent` | ✅ **22/22 passed** (7 file: context, policies, rate-limit, agent loop, ledger/tx/webhook tools) |
+| `pnpm --filter web exec vitest run src/components/navigation/permission-adapter.test.ts` | ✅ passed — ekspektasi test diperbarui secara sadar: `/agent` gated `transaction.read` (SUPPORT memegangnya) |
+| `pnpm --filter web typecheck` | ✅ 0 error |
+| `pnpm --filter web lint` | ✅ 0 error (40 warning pre-existing) |
+| `pnpm --filter web test` (full) | ✅ **1503 passed** · ⚠️ 2 suite MCP gagal environmental (Prisma engine tak bisa diunduh — tidak berubah) |
+| `pnpm --filter web build` | ⚠️ **BELUM terverifikasi di sandbox** — OOM (2-core/4GB) + egress ke `fonts.googleapis.com` diblokir. Typecheck mengkompilasi seluruh halaman/route; build hijau di GitHub Actions (ci.yml) dengan runner lebih besar |
 
 ## AWS Deployment
 
@@ -85,9 +97,10 @@
 2. Invoke Bedrock nyata belum dieksekusi (tanpa akun/kredensial AWS di sandbox). Loop sudah dibuktikan via MockModel.
 3. Tool webhook hanya agregat (store webhook existing system-level/unscoped); event-level butuh scoping tenant di data layer (WAVE 3/5).
 4. Belum ada approval flow (WAVE 5), satu write workflow refund (WAVE 6), demo fixture (WAVE 7), UI timeline (WAVE 4).
-5. Rate-limit khusus route agent belum dipasang (mirror `assertWithinAiJournalRateLimit` = WAVE 3/4).
+5. ✅ Rate-limit route agent terpasang (WAVE 3).
 6. `collectToolActivity` membaca field objek SDK secara defensif (bentuk live vs serialized); dikunci oleh test.
-7. WAVE 2 belum menyentuh: refund/retry tools, golden path stuck-transaction penuh (butuh webhook event-level), approval.
+7. Belum ada: refund/retry tools + approval flow (WAVE 5-6), golden path stuck-transaction penuh (butuh webhook event-level), demo fixture (WAVE 7), provisioning live (WAVE 8).
+8. Build Next.js belum bisa diverifikasi di sandbox (OOM + blokir egress font) — divalidasi typecheck + CI GitHub Actions.
 
 ## Remaining Submission Blockers (tidak berubah)
 
@@ -103,13 +116,13 @@
 
 ```text
 PRODUCT VERDICT:
-READY WITH RISKS (WAVE 1-2 jalan & teruji — 5 tools read-only, Bedrock-only; golden paths penuh + approval masih WAVE 3-7)
+READY WITH RISKS (WAVE 1-4 jalan & teruji — 5 tools read-only, Bedrock-only, tenant strict + rate limit, timeline UI; approval + refund idempoten = WAVE 5-6)
 
 STRANDS VERDICT:
 PASS (orchestration SDK nyata, loop tool-calling tervalidasi offline)
 
 SECURITY VERDICT:
-PASS (tenant fail-closed, read-only default, cross-tenant test, tanpa static credentials)
+PASS (tenant fail-closed + permission gate transaction.read + rate limit + cross-tenant/forged-input/injection tests + tanpa static credentials)
 
 DEMO VERDICT:
 PARTIAL (fixture deterministik & 5x runs = WAVE 7)

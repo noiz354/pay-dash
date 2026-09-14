@@ -30,12 +30,13 @@ describe("permission-adapter", () => {
       expect(flat).toContain("/audit");
       expect(flat).toContain("/fraud");
     });
-    it("filters Operations to only KYC for SUPPORT (fraud items require audit.read)", () => {
+    it("filters Operations for SUPPORT: Ops Agent (transaction.read) + KYC only; fraud items require audit.read", () => {
       const visible = filterNavByRoles(NAV_SECTIONS, ["SUPPORT"]);
       const ops = visible.find((s) => s.id === "operations");
       expect(ops).toBeDefined();
       const hrefs = ops!.items.map((i) => i.href);
-      expect(hrefs).toEqual(["/kyc"]);
+      // WAVE 4: /agent is gated by transaction.read, which SUPPORT holds.
+      expect(hrefs).toEqual(["/agent", "/kyc"]);
       expect(hrefs).not.toContain("/fraud");
     });
   });
