@@ -28,6 +28,15 @@ export function shareUrlOf(id: string) {
   return `https://pay.kinetic.test/${id}`;
 }
 
+/**
+ * F-01: `shareUrlOf` returns a `.test` host with nothing behind it, and the UI
+ * renders it next to a "Copy URL" button — which reads as "send this to your
+ * customer". Render this alongside the URL wherever it is offered for copying, so
+ * the placeholder is not mistaken for a working payer site.
+ */
+export const SHARE_URL_NOTICE =
+  "Placeholder URL — this deployment has no hosted payer site, so it will not resolve for a customer.";
+
 export const LINK_KIND_LABELS: Record<LinkKind, string> = {
   single: "Single item",
   multiple: "Multiple items",

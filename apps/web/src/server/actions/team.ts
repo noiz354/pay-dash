@@ -50,7 +50,14 @@ export async function inviteMemberAction(
 
   const member = await inviteMember({ name, email, role });
   revalidateTeam();
-  return { status: "success", message: `Invite sent to ${member.email} (${member.role.toLowerCase()}).` };
+  // F-01: `inviteMember` writes an INVITED row to the app's own store. Nothing
+  // sends mail — there is no mailer, no template and no provider in this
+  // repository. "Invite sent" told the inviter to wait for a colleague to accept
+  // an email that never existed, so the invitation silently never completed.
+  return {
+    status: "success",
+    message: `Invitation recorded for ${member.email} (${member.role.toLowerCase()}) — no email was sent; share the sign-up link with them.`,
+  };
 }
 
 // Change the role of one or more selected members (bulk bar).

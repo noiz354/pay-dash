@@ -22,7 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { CopyButton } from "@/components/common/copy-button";
 import { createPaymentLinkAction, type ActionState } from "@/server/actions/links";
 import { formatMoney } from "@/lib/format";
-import { LINK_KIND_LABELS, shareUrlOf } from "@/lib/link-status";
+import { LINK_KIND_LABELS, SHARE_URL_NOTICE, shareUrlOf } from "@/lib/link-status";
 import { cn } from "@/lib/utils";
 
 const initialState: ActionState<{ id: string }> = { status: "idle", message: "" };
@@ -163,6 +163,9 @@ export function CreateLinkDialog({
                   <div className="data-mono text-xs text-[var(--on-surface)] truncate">{shareUrlOf(createdId)}</div>
                   <CopyButton value={shareUrlOf(createdId)} label="Copy URL" />
                 </div>
+                {/* F-01: the URL is offered next to a copy button, which reads as
+                    "send this to your customer". It resolves to nothing. */}
+                <p className="body-sm text-[var(--on-surface-variant)] mt-1">{SHARE_URL_NOTICE}</p>
               </div>
             </div>
 

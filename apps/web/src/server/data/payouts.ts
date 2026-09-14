@@ -827,6 +827,18 @@ export async function createBatch(
 }
 
 /**
+ * Which path settled a batch, so callers can describe the outcome truthfully.
+ *
+ * `"provider"` means each recipient was released through the payment-flow
+ * orchestration and a real disbursement was attempted. `"ledger"` means no
+ * provider connection resolved and the deterministic in-memory rule ran instead
+ * (account numbers ending "0000" fail, everything else is marked PAID) — rows
+ * change state but no money moves. Audit finding F-01: the success copy used to
+ * claim "recipients paid" for both.
+ */
+export type BatchSettlement = "provider" | "ledger";
+
+/**
  * Approve = release the money. Deterministic settlement so tests and demos are
  * reproducible: rows whose account number ends in "0000" are rejected by the
  * partner, everything else settles.
@@ -835,7 +847,7 @@ export async function approveBatch(
   ctx: OrganizationContext,
   id: string,
   opts: { actorId?: string | null } = {},
-): Promise<{ batch: PayoutBatch; paid: number; failed: number } | null> {
+): Promise<{ batch: PayoutBatch; paid: number; failed: number; settledBy: BatchSettlement } | null> {
   const batch = writableBatch(ctx, id, "payouts.approve", opts.actorId);
   if (!batch) return null;
   // Money-out dual control, checked AFTER the tenant check so a cross-tenant
@@ -907,7 +919,7 @@ export async function approveBatch(
       detail: `${paid} paid, ${failed} failed`,
       kind: failed ? "warning" : "success",
     });
-    return { batch, paid, failed };
+    return { batch, paid, failed, settledBy: "provider" };
   }
 
   let paid = 0;
@@ -937,7 +949,7 @@ export async function approveBatch(
     kind: failed ? "warning" : "success",
   });
 
-  return { batch, paid, failed };
+  return { batch, paid, failed, settledBy: "ledger" };
 }
 
 export async function cancelBatch(

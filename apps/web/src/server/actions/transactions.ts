@@ -280,7 +280,15 @@ export async function approveRefundAction(
   if (!result.ok) return { status: "error", message: result.message };
 
   revalidateRefundSurfaces();
-  return { status: "success", message: "Refund approved and issued." };
+  // F-01: `approveRefund` moves ledger state (refundedAmount, status REFUNDED,
+  // audit event) and closes the handoff. It makes no provider call, so nothing
+  // is refunded at Xendit or Stripe. Claiming "issued" told the approver the
+  // customer had been paid when they had not — roadmap item 4.4 adds the call;
+  // until then the copy states what actually happened.
+  return {
+    status: "success",
+    message: "Refund approved and recorded in the ledger — no provider refund was issued.",
+  };
 }
 
 /** Role B rejects the pending refund. No money moves. */
