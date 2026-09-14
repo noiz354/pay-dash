@@ -8,21 +8,57 @@ import {
   type DataSource,
   type RuntimeSettings,
 } from "@/server/settings/runtime-settings";
+import type { Permission } from "@/domain/organization/roles";
+import { OrgContextError } from "@/server/services/org-context";
+import { requireStrictOrgContext } from "@/server/services/session-org-context";
 import type { ActionState } from "./settings";
 
-async function requireSession(): Promise<boolean> {
+/**
+ * Audit finding S-04 — these actions gate the *whole deployment*, not one tenant.
+ *
+ * `getRuntimeSettingsStore()` is process-global and deliberately not org-scoped:
+ * `dataSource` moves every organization between the in-memory demo ledger and
+ * Postgres, `xenditEnabled` decides whether payment calls reach the real
+ * provider, and `mcpToken` authenticates the MCP surface.
+ *
+ * The previous guard answered only "is anybody signed in?". Any authenticated
+ * principal — including a SUPPORT user, and including the memberless registrant
+ * that §3.5 used to hand OWNER of `org_demo` — could therefore switch every
+ * tenant between `"memory"` and `"postgres"`, disable or enable live Xendit
+ * calls, rotate the MCP token, and read the new token straight back out of the
+ * response body.
+ *
+ * Each action now names the least privilege it actually needs and goes through
+ * `requireStrictOrgContext`, the same seam every other mutation uses, so the demo
+ * fallback cannot satisfy it in production either.
+ *
+ * STILL OPEN (roadmap Phase 3): `settings.manage` is OWNER-only, but it is OWNER
+ * *of some tenant*. These settings are global, so one tenant's owner still
+ * changes behaviour for all of them. Narrowing that needs the platform-admin
+ * principal Phase 3 introduces; this commit removes the "any signed-in user"
+ * half of the exposure, not the cross-tenant half.
+ */
+// Typed `ActionState<never>` rather than a generic: a denial carries no payload,
+// and `never` is assignable to every `data?: T` the actions below declare, so the
+// payload type does not have to be repeated at six call sites.
+async function requireRuntimePermission(permission: Permission): Promise<ActionState<never> | null> {
   try {
-    const { auth } = await import("@/lib/auth");
-    const { headers } = await import("next/headers");
-    const session = await auth.api.getSession({ headers: await headers() });
-    return Boolean(session?.user?.id);
-  } catch {
-    return false;
+    await requireStrictOrgContext(permission);
+    return null;
+  } catch (e) {
+    if (e instanceof OrgContextError) {
+      return {
+        status: "error",
+        message: e.message.includes("Authentication")
+          ? "Sign in to manage MCP and runtime settings."
+          : "You don't have permission to manage MCP and runtime settings.",
+      };
+    }
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Sign in to manage MCP and runtime settings.",
+    };
   }
-}
-
-function unauthorized(): ActionState {
-  return { status: "error", message: "Sign in to manage MCP and runtime settings." };
 }
 
 function revalidateRuntimeSettings() {
@@ -36,7 +72,8 @@ export type RuntimeSettingsState = ActionState<{
 }>;
 
 export async function getRuntimeSettingsAction(): Promise<RuntimeSettingsState> {
-  if (!(await requireSession())) return unauthorized();
+  const denied = await requireRuntimePermission("settings.manage");
+  if (denied) return denied;
   const store = getRuntimeSettingsStore();
   const settings = await store.get();
   return {
@@ -49,7 +86,8 @@ export async function getRuntimeSettingsAction(): Promise<RuntimeSettingsState> 
 const DataSourceSchema = z.enum(DATA_SOURCES);
 
 export async function setDataSourceAction(rawSource: string): Promise<RuntimeSettingsState> {
-  if (!(await requireSession())) return unauthorized();
+  const denied = await requireRuntimePermission("settings.manage");
+  if (denied) return denied;
   const parsed = DataSourceSchema.safeParse(rawSource);
   if (!parsed.success) {
     return { status: "error", message: "Choose a valid data source." };
@@ -65,7 +103,8 @@ export async function setDataSourceAction(rawSource: string): Promise<RuntimeSet
 }
 
 export async function setMcpEnabledAction(rawEnabled: boolean): Promise<RuntimeSettingsState> {
-  if (!(await requireSession())) return unauthorized();
+  const denied = await requireRuntimePermission("settings.manage");
+  if (denied) return denied;
   const store = getRuntimeSettingsStore();
   const next = await store.update({ mcpEnabled: rawEnabled === true });
   revalidateRuntimeSettings();
@@ -77,7 +116,8 @@ export async function setMcpEnabledAction(rawEnabled: boolean): Promise<RuntimeS
 }
 
 export async function setXenditEnabledAction(rawEnabled: boolean): Promise<RuntimeSettingsState> {
-  if (!(await requireSession())) return unauthorized();
+  const denied = await requireRuntimePermission("provider.connect.live");
+  if (denied) return denied;
   const store = getRuntimeSettingsStore();
   const next = await store.update({ xenditEnabled: rawEnabled === true });
   revalidateRuntimeSettings();
@@ -94,7 +134,8 @@ export type RotateMcpTokenState = ActionState<{
 }>;
 
 export async function rotateMcpTokenAction(): Promise<RotateMcpTokenState> {
-  if (!(await requireSession())) return unauthorized();
+  const denied = await requireRuntimePermission("settings.manage");
+  if (denied) return denied;
   const store = getRuntimeSettingsStore();
   const { token, settings } = await store.rotateMcpToken();
   revalidateRuntimeSettings();
@@ -108,7 +149,8 @@ export async function rotateMcpTokenAction(): Promise<RotateMcpTokenState> {
 export type TestXenditConnectionState = ActionState<{ ok: boolean; detail: string }>;
 
 export async function testXenditConnectionAction(): Promise<TestXenditConnectionState> {
-  if (!(await requireSession())) return unauthorized();
+  const denied = await requireRuntimePermission("provider.connect.test");
+  if (denied) return denied;
   const settings = await getRuntimeSettingsStore().get();
   if (!settings.xenditEnabled) {
     return {
