@@ -3,6 +3,7 @@ import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { WebhookStatusPill } from "@/components/webhooks/webhook-status-pill";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
+import { resolveIngestOrganizationContext } from "@/server/services/ingest-organization-context";
 import { formatRelative } from "@/lib/format";
 
 // System Status (ADR-0017). The prototype invented an entire observability
@@ -25,7 +26,9 @@ const OUTCOMES = [
 ] as const;
 
 export default async function SystemPage() {
-  const summary = await getSystemWebhookSummary();
+  // Wave 7G: the system health summary counts the caller's own callback log.
+  const { context } = await resolveIngestOrganizationContext();
+  const summary = await getSystemWebhookSummary(context);
 
   return (
     <main className="mx-auto w-full max-w-container-max p-gutter space-y-6">

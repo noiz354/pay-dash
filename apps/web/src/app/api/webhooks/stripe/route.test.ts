@@ -1,10 +1,15 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it } from "vitest";
 import { POST, GET } from "./route";
-import { listWebhooks } from "@/server/data/webhooks";
+import { listWebhooks, UNATTRIBUTED_ORGANIZATION_ID } from "@/server/data/webhooks";
+import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
 
 // No STRIPE_WEBHOOK_SECRET configured → dev pass-through (verification covered
 // in route.auth.test.ts). Exercises the full pipeline as HTTP would.
+
+/** Wave 7G: ingress events land in the unattributed partition, so the route
+ * tests read the door's log through an unattributed context rather than demo. */
+const DOOR_CTX = parseOrganizationContext({ organizationId: UNATTRIBUTED_ORGANIZATION_ID });
 
 function resetAllStores() {
   const g = globalThis as unknown as {
@@ -39,7 +44,7 @@ describe("POST /api/webhooks/stripe (no secret configured)", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: true, event: "payment_intent.succeeded" });
 
-    const rows = listWebhooks({ q: "evt_stripe_1", pageSize: 100 });
+    const rows = listWebhooks(DOOR_CTX, { q: "evt_stripe_1", pageSize: 100 });
     expect(rows.total).toBe(1);
     expect(rows.rows[0]?.status).toBe("RECEIVED");
     expect(rows.rows[0]?.type).toBe("payment_intent.succeeded");
@@ -60,21 +65,22 @@ describe("POST /api/webhooks/stripe (no secret configured)", () => {
     expect(second.status).toBe(200);
     expect(await second.json()).toEqual({ received: true, deduped: true });
 
-    const rows = listWebhooks({ q: "evt_stripe_2", pageSize: 100 });
+    const rows = listWebhooks(DOOR_CTX, { q: "evt_stripe_2", pageSize: 100 });
     expect(rows.total).toBe(2);
     expect(rows.rows.map((r) => r.status).sort()).toEqual(["DUPLICATED", "RECEIVED"]);
   });
 
   it("does not collide with an Xendit event of the same id (provider-scoped dedupe)", async () => {
-    // A Xendit callback with the same event id arrives first.
-    const { recordInbound } = await import("@/server/data/webhooks");
-    recordInbound({ eventId: "evt_shared", type: "payment.succeeded", payload: {}, source: "xendit" });
+    // A Xendit callback with the same event id arrives first. Wave 7G: an
+    // unattributable callback at the door uses the ctx-less door writer.
+    const { recordUnattributedInbound } = await import("@/server/data/webhooks");
+    recordUnattributedInbound({ eventId: "evt_shared", type: "payment.succeeded", payload: {}, source: "xendit" });
 
     const res = await post(JSON.stringify({ id: "evt_shared", type: "charge.succeeded", data: { object: { id: "ch_1" } } }));
     expect(res.status).toBe(200);
     expect((await res.json()).deduped).toBeUndefined();
 
-    const rows = listWebhooks({ q: "evt_shared", pageSize: 100 });
+    const rows = listWebhooks(DOOR_CTX, { q: "evt_shared", pageSize: 100 });
     expect(rows.total).toBe(2);
     expect(rows.rows.filter((r) => r.source === "stripe" && r.status === "RECEIVED")).toHaveLength(1);
     expect(rows.rows.filter((r) => r.source === "xendit" && r.status === "RECEIVED")).toHaveLength(1);
@@ -84,7 +90,7 @@ describe("POST /api/webhooks/stripe (no secret configured)", () => {
     const res = await post("not-json{{");
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("Invalid JSON");
-    const rejected = listWebhooks({ status: "REJECTED", pageSize: 100 }).rows;
+    const rejected = listWebhooks(DOOR_CTX, { status: "REJECTED", pageSize: 100 }).rows;
     expect(rejected.some((r) => r.reason === "Invalid JSON" && r.source === "stripe")).toBe(true);
   });
 

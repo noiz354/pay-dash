@@ -4,13 +4,13 @@ import { formatMoney } from "@/lib/format";
 import type { AuditCategoryValue, AuditRangeValue, AuditStatusValue } from "@/lib/audit-options";
 import { BLOCKLIST_REASON_LABELS, BLOCKLIST_TYPE_LABELS } from "@/lib/blocklist-options";
 import { ROLE_LABELS } from "@/lib/team-roles";
-import { listBlocklist } from "./blocklist";
+import { legacyListBlocklist } from "./blocklist-unscoped";
 import { legacyPayoutBatches } from "./payouts-unscoped";
-import { getRiskOverview } from "./risk";
+import { legacyGetRiskOverview } from "./risk-unscoped";
 import { legacyListApiKeys } from "./settings-unscoped";
 import { legacyListMembers } from "./team-unscoped";
 import { legacyLedgerRows } from "./transactions-unscoped";
-import { listWebhooks } from "./webhooks";
+import { legacyListWebhooks } from "./webhooks-unscoped";
 
 // ---------------------------------------------------------------------------
 // Audit log data source (ADR-0026).
@@ -134,8 +134,8 @@ export async function getAuditEvents(): Promise<AuditEvent[]> {
     // derived surface over four unscoped owners, so these two reads ride the
     // slice quarantines (fail closed the moment a second tenant holds rows).
     legacyListApiKeys("audit"),
-    listBlocklist({ page: 1, pageSize: 100 }),
-    getRiskOverview(),
+    legacyListBlocklist("audit", { page: 1, pageSize: 100 }),
+    legacyGetRiskOverview("audit"),
     legacyListMembers("audit", { page: 1, pageSize: 100 }),
   ]);
 
@@ -202,7 +202,7 @@ export async function getAuditEvents(): Promise<AuditEvent[]> {
   }
 
   // --- webhooks ← the inbound callback log -----------------------------------
-  const webhooks = listWebhooks({ page: 1, pageSize: 100 });
+  const webhooks = legacyListWebhooks("audit", { page: 1, pageSize: 100 });
   for (const ev of webhooks.rows) {
     const action =
       ev.status === "RECEIVED"

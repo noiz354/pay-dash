@@ -16,6 +16,7 @@ import { CopyButton } from "@/components/common/copy-button";
 import { WebhookStatusPill } from "@/components/webhooks/webhook-status-pill";
 import { ReplayWebhookButton } from "@/components/webhooks/replay-webhook-button";
 import { getWebhookEvent } from "@/server/data/webhooks";
+import { resolveIngestOrganizationContext } from "@/server/services/ingest-organization-context";
 import { formatDateLong, formatDateTime, formatRelative } from "@/lib/format";
 import { WEBHOOK_SOURCE_LABELS, KNOWN_WEBHOOK_EVENTS } from "@/lib/webhook-status";
 
@@ -50,7 +51,10 @@ function payloadText(payload: unknown): string {
 
 export default async function WebhookDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const event = await getWebhookEvent(id);
+  // Wave 7G: a foreign event id answers exactly like an unknown one (null →
+  // notFound), so the detail page is not an enumeration oracle.
+  const { context } = await resolveIngestOrganizationContext();
+  const event = await getWebhookEvent(context, id);
   if (!event) notFound();
 
   const known = (KNOWN_WEBHOOK_EVENTS as readonly string[]).includes(event.type);

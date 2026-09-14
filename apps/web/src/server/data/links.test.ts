@@ -11,6 +11,7 @@ import {
 } from "./links";
 import { getTransaction } from "./transactions";
 import { DEMO_CONTEXT } from "@/test/organization-context";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 
 function resetAllStores() {
   const g = globalThis as unknown as {
@@ -31,6 +32,9 @@ const CANCELLED_SEED = "plink_7f8g9h0j";
 
 function baseLink(overrides: Partial<PaymentLink> = {}): PaymentLink {
   return {
+    // Wave 7G: PaymentLink carries its owner. The helper defaults to demo so
+    // legacy expectations keep working; `...overrides` can still replace it.
+    organizationId: DEFAULT_DEMO_ORG,
     id: "plink_test",
     kind: "single",
     items: [{ id: "it_1", label: "Payment", amount: 100_000 }],
@@ -46,7 +50,7 @@ function baseLink(overrides: Partial<PaymentLink> = {}): PaymentLink {
 
 describe("seed coverage", () => {
   it("lists eight seeded links with derived statuses", () => {
-    const data = listLinks({ pageSize: 100 });
+    const data = listLinks(DEMO_CONTEXT, { pageSize: 100 });
     expect(data.total).toBe(8);
 
     const byStatus = new Map<string, number>();
@@ -58,72 +62,72 @@ describe("seed coverage", () => {
   });
 
   it("seeds every derived status with the right shape", () => {
-    expect(getLink(PAID_SEED)?.status).toBe("PAID");
-    expect(getLink(OPEN_SINGLE_SEED)?.status).toBe("OPEN");
-    expect(getLink(OPEN_MULTI_SEED)?.status).toBe("OPEN");
-    expect(getLink(EXPIRED_SEED)?.status).toBe("EXPIRED");
-    expect(getLink(CANCELLED_SEED)?.status).toBe("CANCELLED");
+    expect(getLink(DEMO_CONTEXT, PAID_SEED)?.status).toBe("PAID");
+    expect(getLink(DEMO_CONTEXT, OPEN_SINGLE_SEED)?.status).toBe("OPEN");
+    expect(getLink(DEMO_CONTEXT, OPEN_MULTI_SEED)?.status).toBe("OPEN");
+    expect(getLink(DEMO_CONTEXT, EXPIRED_SEED)?.status).toBe("EXPIRED");
+    expect(getLink(DEMO_CONTEXT, CANCELLED_SEED)?.status).toBe("CANCELLED");
 
-    const paid = getLink(PAID_SEED);
+    const paid = getLink(DEMO_CONTEXT, PAID_SEED);
     expect(paid?.total).toBe(totalOf(paid!));
     expect(paid?.total).toBe(4_250_000);
-    expect(getLink(OPEN_MULTI_SEED)?.total).toBe(58_750_000);
+    expect(getLink(DEMO_CONTEXT, OPEN_MULTI_SEED)?.total).toBe(58_750_000);
   });
 
   it("sorts by createdAt descending", () => {
-    const rows = listLinks({ pageSize: 100 }).rows;
+    const rows = listLinks(DEMO_CONTEXT, { pageSize: 100 }).rows;
     for (let i = 1; i < rows.length; i++) {
       expect(rows[i - 1].createdAt >= rows[i].createdAt).toBe(true);
     }
   });
 
   it("returns null for unknown ids", () => {
-    expect(getLink("plink_does_not_exist")).toBeNull();
+    expect(getLink(DEMO_CONTEXT, "plink_does_not_exist")).toBeNull();
   });
 });
 
 describe("filters and pagination", () => {
   it("filters by kind", () => {
-    expect(listLinks({ kind: "single", pageSize: 100 }).total).toBe(5);
-    expect(listLinks({ kind: "multiple", pageSize: 100 }).total).toBe(3);
+    expect(listLinks(DEMO_CONTEXT, { kind: "single", pageSize: 100 }).total).toBe(5);
+    expect(listLinks(DEMO_CONTEXT, { kind: "multiple", pageSize: 100 }).total).toBe(3);
   });
 
   it("filters by status", () => {
-    expect(listLinks({ status: "PAID", pageSize: 100 }).total).toBe(2);
-    expect(listLinks({ status: "OPEN", pageSize: 100 }).total).toBe(3);
-    expect(listLinks({ status: "EXPIRED", pageSize: 100 }).total).toBe(2);
-    expect(listLinks({ status: "CANCELLED", pageSize: 100 }).total).toBe(1);
+    expect(listLinks(DEMO_CONTEXT, { status: "PAID", pageSize: 100 }).total).toBe(2);
+    expect(listLinks(DEMO_CONTEXT, { status: "OPEN", pageSize: 100 }).total).toBe(3);
+    expect(listLinks(DEMO_CONTEXT, { status: "EXPIRED", pageSize: 100 }).total).toBe(2);
+    expect(listLinks(DEMO_CONTEXT, { status: "CANCELLED", pageSize: 100 }).total).toBe(1);
   });
 
   it("searches id, payer email and item labels", () => {
-    const byEmail = listLinks({ q: "starkindustries", pageSize: 100 });
+    const byEmail = listLinks(DEMO_CONTEXT, { q: "starkindustries", pageSize: 100 });
     expect(byEmail.total).toBe(2);
     expect(byEmail.rows.every((r) => r.payerEmail === "billing@starkindustries.com")).toBe(true);
 
-    const byId = listLinks({ q: "plink_4c5d6e7f" });
+    const byId = listLinks(DEMO_CONTEXT, { q: "plink_4c5d6e7f" });
     expect(byId.total).toBe(1);
     expect(byId.rows[0]?.id).toBe("plink_4c5d6e7f");
 
-    const byLabel = listLinks({ q: "Licensing" });
+    const byLabel = listLinks(DEMO_CONTEXT, { q: "Licensing" });
     expect(byLabel.total).toBe(1);
     expect(byLabel.rows[0]?.id).toBe(OPEN_MULTI_SEED);
 
-    expect(listLinks({ q: "no-such-needle-xyz" }).total).toBe(0);
+    expect(listLinks(DEMO_CONTEXT, { q: "no-such-needle-xyz" }).total).toBe(0);
   });
 
   it("pages correctly and clamps out-of-range pages", () => {
-    const first = listLinks({ pageSize: 3, page: 1 });
+    const first = listLinks(DEMO_CONTEXT, { pageSize: 3, page: 1 });
     expect(first.total).toBe(8);
     expect(first.pageCount).toBe(3);
     expect(first.rows).toHaveLength(3);
 
-    const second = listLinks({ pageSize: 3, page: 2 });
+    const second = listLinks(DEMO_CONTEXT, { pageSize: 3, page: 2 });
     expect(second.rows).toHaveLength(3);
     // No overlap between adjacent pages.
     expect(new Set(first.rows.map((r) => r.id)).intersection(new Set(second.rows.map((r) => r.id)))).toHaveLength(0);
 
     // Past the last page → clamps to the last page, not an empty slice.
-    const clamped = listLinks({ pageSize: 3, page: 99 });
+    const clamped = listLinks(DEMO_CONTEXT, { pageSize: 3, page: 99 });
     expect(clamped.page).toBe(3);
     expect(clamped.rows).toHaveLength(2);
   });
@@ -170,8 +174,8 @@ describe("deriveLinkStatus precedence", () => {
 
 describe("createLink", () => {
   it("adds a link that lists first and derives OPEN", () => {
-    const before = listLinks({ pageSize: 100 }).total;
-    const link = createLink({
+    const before = listLinks(DEMO_CONTEXT, { pageSize: 100 }).total;
+    const link = createLink(DEMO_CONTEXT, {
       kind: "single",
       items: [{ label: "Website checkout", amount: 250_000 }],
       payerEmail: "billing@customer.com",
@@ -179,8 +183,8 @@ describe("createLink", () => {
     });
 
     expect(link.id).toMatch(/^plink_/);
-    expect(listLinks({ pageSize: 100 }).total).toBe(before + 1);
-    const listed = getLink(link.id);
+    expect(listLinks(DEMO_CONTEXT, { pageSize: 100 }).total).toBe(before + 1);
+    const listed = getLink(DEMO_CONTEXT, link.id);
     expect(listed?.status).toBe("OPEN");
     expect(listed?.total).toBe(250_000);
   });
@@ -188,39 +192,39 @@ describe("createLink", () => {
 
 describe("expireLink", () => {
   it("closes an open link", () => {
-    const link = createLink({
+    const link = createLink(DEMO_CONTEXT, {
       kind: "single",
       items: [{ label: "Payment", amount: 50_000 }],
       payerEmail: null,
       expiresAt: null,
     });
-    expireLink(link.id);
-    expect(getLink(link.id)?.status).toBe("CANCELLED");
-    expect(getLink(link.id)?.cancelledAt).toBeTruthy();
+    expireLink(DEMO_CONTEXT, link.id);
+    expect(getLink(DEMO_CONTEXT, link.id)?.status).toBe("CANCELLED");
+    expect(getLink(DEMO_CONTEXT, link.id)?.cancelledAt).toBeTruthy();
   });
 
   it("rejects unknown, already-closed and paid links", () => {
-    expect(() => expireLink("plink_nope")).toThrow(/Unknown payment link/);
+    expect(() => expireLink(DEMO_CONTEXT, "plink_nope")).toThrow(/Unknown payment link/);
 
-    const closed = createLink({
+    const closed = createLink(DEMO_CONTEXT, {
       kind: "single",
       items: [{ label: "Payment", amount: 50_000 }],
       payerEmail: null,
       expiresAt: null,
     });
-    expireLink(closed.id);
-    expect(() => expireLink(closed.id)).toThrow(/already closed/);
+    expireLink(DEMO_CONTEXT, closed.id);
+    expect(() => expireLink(DEMO_CONTEXT, closed.id)).toThrow(/already closed/);
 
     const paid = baseLink({ paidAt: new Date().toISOString() });
     expect(deriveLinkStatus(paid, new Set())).toBe("PAID");
     // A paid seed (ledger-confirmed) cannot be closed either.
-    expect(() => expireLink(PAID_SEED)).toThrow(/cannot be expired/);
+    expect(() => expireLink(DEMO_CONTEXT, PAID_SEED)).toThrow(/cannot be expired/);
   });
 });
 
 describe("recordLinkPayment (TEST MODE)", () => {
   it("creates a SUCCEEDED ledger row that references the link and flips it to PAID", async () => {
-    const link = createLink({
+    const link = createLink(DEMO_CONTEXT, {
       kind: "multiple",
       items: [
         { label: "Consulting — March", amount: 10_000_000 },
@@ -229,7 +233,7 @@ describe("recordLinkPayment (TEST MODE)", () => {
       payerEmail: "billing@customer.com",
       expiresAt: null,
     });
-    const beforeLedger = listLinks({ pageSize: 100 }).total;
+    const beforeLedger = listLinks(DEMO_CONTEXT, { pageSize: 100 }).total;
 
     const { transactionId, total } = await recordLinkPayment(DEMO_CONTEXT, link.id);
 
@@ -243,15 +247,15 @@ describe("recordLinkPayment (TEST MODE)", () => {
     expect(tx?.amount).toBe(12_000_000);
 
     // The link flipped — driven by the ledger reference, not a stored status.
-    const after = getLink(link.id);
+    const after = getLink(DEMO_CONTEXT, link.id);
     expect(after?.status).toBe("PAID");
     expect(after?.paidAt).toBeTruthy();
     // No phantom link was created.
-    expect(listLinks({ pageSize: 100 }).total).toBe(beforeLedger);
+    expect(listLinks(DEMO_CONTEXT, { pageSize: 100 }).total).toBe(beforeLedger);
   });
 
   it("refuses to pay twice, or pay a closed link", async () => {
-    const link = createLink({
+    const link = createLink(DEMO_CONTEXT, {
       kind: "single",
       items: [{ label: "Payment", amount: 50_000 }],
       payerEmail: null,
@@ -260,13 +264,13 @@ describe("recordLinkPayment (TEST MODE)", () => {
     await recordLinkPayment(DEMO_CONTEXT, link.id);
     await expect(recordLinkPayment(DEMO_CONTEXT, link.id)).rejects.toThrow(/only open links/i);
 
-    const closed = createLink({
+    const closed = createLink(DEMO_CONTEXT, {
       kind: "single",
       items: [{ label: "Payment", amount: 50_000 }],
       payerEmail: null,
       expiresAt: null,
     });
-    expireLink(closed.id);
+    expireLink(DEMO_CONTEXT, closed.id);
     await expect(recordLinkPayment(DEMO_CONTEXT, closed.id)).rejects.toThrow(/only open links/i);
   });
 

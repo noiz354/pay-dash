@@ -1,7 +1,9 @@
 import "server-only";
-import { createTransaction } from "./transactions";
-import type { OrganizationContext } from "@/domain/tenancy/organization-context";
-import { legacyLedgerRows } from "./transactions-unscoped";
+import { createTransaction, getLedgerRows } from "./transactions";
+import { parseOrganizationContext, type OrganizationContext } from "@/domain/tenancy/organization-context";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
+import { TenantIsolationError } from "@/domain/security/tenant";
+import { recordTenantDenial } from "@/server/services/tenant-denial";
 import { LINK_STATUSES } from "@/lib/link-status";
 import type { LinkStatus } from "@/lib/link-status";
 
@@ -24,6 +26,9 @@ export type LinkItem = {
 };
 
 export type PaymentLink = {
+  /** Wave 7G: the merchant this link was created for. A link is a money path,
+   * so its owner is part of the row, not of the query that found it. */
+  organizationId: string;
   id: string;
   kind: LinkKind;
   items: LinkItem[];
@@ -60,9 +65,10 @@ const daysAgo = (n: number, hours = 0) =>
   new Date(Date.now() - n * 24 * 60 * 60 * 1000 - hours * 60 * 60 * 1000).toISOString();
 const inDays = (n: number) => new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString();
 
-function seed(): PaymentLink[] {
+function seed(organizationId: string): PaymentLink[] {
   return [
     {
+      organizationId,
       id: "plink_8x9a2b1c",
       kind: "single",
       items: [{ id: "it_1", label: "Website checkout", amount: 4_250_000 }],
@@ -74,6 +80,7 @@ function seed(): PaymentLink[] {
       currency: CURRENCY,
     },
     {
+      organizationId,
       id: "plink_3k4m5n6p",
       kind: "single",
       items: [{ id: "it_1", label: "Invoice INV-2041 — July", amount: 12_000_000 }],
@@ -85,6 +92,7 @@ function seed(): PaymentLink[] {
       currency: CURRENCY,
     },
     {
+      organizationId,
       id: "plink_9q8w7e6r",
       kind: "single",
       items: [{ id: "it_1", label: "Top-up — operating account", amount: 150_000 }],
@@ -96,6 +104,7 @@ function seed(): PaymentLink[] {
       currency: CURRENCY,
     },
     {
+      organizationId,
       id: "plink_2z3x4c5v",
       kind: "multiple",
       items: [
@@ -112,6 +121,7 @@ function seed(): PaymentLink[] {
       currency: CURRENCY,
     },
     {
+      organizationId,
       id: "plink_1a2s3d4f",
       kind: "multiple",
       items: [
@@ -126,6 +136,7 @@ function seed(): PaymentLink[] {
       currency: CURRENCY,
     },
     {
+      organizationId,
       id: "plink_7f8g9h0j",
       kind: "single",
       items: [{ id: "it_1", label: "Legacy portal top-up", amount: 95_000_000 }],
@@ -137,6 +148,7 @@ function seed(): PaymentLink[] {
       currency: CURRENCY,
     },
     {
+      organizationId,
       id: "plink_4c5d6e7f",
       kind: "single",
       items: [{ id: "it_1", label: "Website checkout", amount: 2_750_000 }],
@@ -148,6 +160,7 @@ function seed(): PaymentLink[] {
       currency: CURRENCY,
     },
     {
+      organizationId,
       id: "plink_0a1b2c3d",
       kind: "multiple",
       items: [
@@ -165,11 +178,103 @@ function seed(): PaymentLink[] {
   ];
 }
 
-type Store = { links: PaymentLink[] };
+type Partition = { links: PaymentLink[] };
+type Store = { tenants: Map<string, Partition> };
 const g = globalThis as unknown as { __kineticLinksStore?: Store };
 function store(): Store {
-  if (!g.__kineticLinksStore) g.__kineticLinksStore = { links: seed() };
+  if (!g.__kineticLinksStore) g.__kineticLinksStore = { tenants: new Map() };
   return g.__kineticLinksStore;
+}
+
+/** A read for a tenant with no links answers empty; it never materialises one. */
+const EMPTY_PARTITION: Partition = { links: [] };
+
+/**
+ * Validate the caller's context at the boundary. `parseOrganizationContext` is
+ * the only constructor, so a malformed or missing ctx throws here rather than
+ * becoming "the demo tenant" (contract C-1/C-2).
+ */
+function scopeOf(ctx: OrganizationContext): OrganizationContext {
+  return parseOrganizationContext(ctx);
+}
+
+/**
+ * The caller's links. The eight prototype links are the *demo tenant's* — a
+ * fresh merchant starts with none, which is the honest answer and the same shape
+ * 7F established for settings (`freshState()`).
+ */
+function readPartition(ctx: OrganizationContext): Partition {
+  const { organizationId } = scopeOf(ctx);
+  const tenants = store().tenants;
+  const existing = tenants.get(organizationId);
+  if (existing) return existing;
+  if (organizationId === DEFAULT_DEMO_ORG) {
+    const seeded = { links: seed(organizationId) };
+    tenants.set(organizationId, seeded);
+    return seeded;
+  }
+  return EMPTY_PARTITION;
+}
+
+/** The caller's links, materialised for a write. */
+function writePartition(organizationId: string): Partition {
+  const tenants = store().tenants;
+  const existing = tenants.get(organizationId);
+  if (existing) return existing;
+  const created: Partition = organizationId === DEFAULT_DEMO_ORG ? { links: seed(organizationId) } : { links: [] };
+  tenants.set(organizationId, created);
+  return created;
+}
+
+/**
+ * Which tenant owns this link id, if any other than the caller's. Consulted
+ * *after* the caller's own partition has answered nothing, so it can never widen
+ * a read — it only lets a refused write be attributed (contract C-4).
+ */
+function linkOwnedByAnotherTenant(organizationId: string, id: string): string | null {
+  for (const [tenantId, partition] of store().tenants.entries()) {
+    if (tenantId === organizationId) continue;
+    if (partition.links.some((l) => l.id === id)) return tenantId;
+  }
+  return null;
+}
+
+/** Internal signal: the id exists in no tenant, so the caller answers not-found. */
+class UnknownLinkError extends Error {
+  constructor() {
+    super("Unknown payment link.");
+    this.name = "UnknownLinkError";
+  }
+}
+
+/**
+ * Refuse a write on another tenant's link: audited, then thrown. The wire answer
+ * is the caller's uniform not-found string, so "not yours" and "does not exist"
+ * stay indistinguishable — while the denial sink keeps the asymmetry for
+ * operators (contract C-4/C-5).
+ */
+/**
+ * How many tenants hold payment links. Row-free tenancy probe: answers a
+ * question about the store, never returns a link — it is the quarantine gate and
+ * the seam's demo-fallback refusal, so it cannot take a ctx (7C/7D/7F precedent).
+ */
+export function countLinkTenants(): number {
+  let count = 0;
+  for (const partition of store().tenants.values()) {
+    if (partition.links.length > 0) count += 1;
+  }
+  return count;
+}
+
+/** The single tenant holding links, or `null` when there is none or more than one. */
+export function soleLinkOrganizationId(): string | null {
+  let sole: string | null = null;
+  for (const [organizationId, partition] of store().tenants) {
+    if (partition.links.length === 0) continue;
+    if (sole !== null) return null;
+    sole = organizationId;
+  }
+  return sole;
 }
 
 export function totalOf(link: Pick<PaymentLink, "items">): number {
@@ -190,21 +295,26 @@ export function deriveLinkStatus(link: PaymentLink, paidReferenceIds: ReadonlySe
   return "OPEN";
 }
 
-function paidReferenceIds(): Set<string> {
+function paidReferenceIds(ctx: OrganizationContext): Set<string> {
   const ids = new Set<string>();
-  for (const t of legacyLedgerRows("links")) {
+  // Wave 7G: the derivation is scoped BEFORE it derives — a settled payment in
+  // one tenant must not flip another tenant's identically-id'd link to PAID.
+  // This is also what retired the `links` entry in LEGACY_LEDGER_SURFACES.
+  for (const t of getLedgerRows(ctx)) {
     if (t.status === "SUCCEEDED" && t.referenceId) ids.add(t.referenceId);
   }
   return ids;
 }
 
-export function listLinks(filters: LinkFilters = {}): PaginatedLinks {
+export function listLinks(ctx: OrganizationContext, filters: LinkFilters = {}): PaginatedLinks {
   const { q = "", status = "all", kind = "all", page = 1, pageSize = 10 } = filters;
-  const paid = paidReferenceIds();
+  const paid = paidReferenceIds(ctx);
   const needle = q.trim().toLowerCase();
 
-  const all = store().links
-    .map((l) => ({ ...l, status: deriveLinkStatus(l, paid), total: totalOf(l) }))
+  // The partition IS the predicate (7B M1 lesson): q/status/kind/page narrow
+  // inside it and can never widen across tenants.
+  const all = readPartition(ctx).links
+    .map((l) => ({ ...l, items: l.items.map((i) => ({ ...i })), status: deriveLinkStatus(l, paid), total: totalOf(l) }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const filtered = all.filter((l) => {
@@ -227,10 +337,18 @@ export function listLinks(filters: LinkFilters = {}): PaginatedLinks {
   };
 }
 
-export function getLink(id: string): LinkRow | null {
-  const link = store().links.find((l) => l.id === id.trim());
+export function getLink(ctx: OrganizationContext, id: string): LinkRow | null {
+  // "Not yours" and "does not exist" are the same null — no enumeration oracle.
+  const link = readPartition(ctx).links.find((l) => l.id === id.trim());
   if (!link) return null;
-  return { ...link, status: deriveLinkStatus(link, paidReferenceIds()), total: totalOf(link) };
+  // Deep copy: the caller gets data, not a handle into the store. `items` is an
+  // array of objects, so a shallow spread would still share the nested rows.
+  return {
+    ...link,
+    items: link.items.map((i) => ({ ...i })),
+    status: deriveLinkStatus(link, paidReferenceIds(ctx)),
+    total: totalOf(link),
+  };
 }
 
 export type CreateLinkInput = {
@@ -240,9 +358,13 @@ export type CreateLinkInput = {
   expiresAt: string | null;
 };
 
-export function createLink(input: CreateLinkInput): PaymentLink {
+export function createLink(ctx: OrganizationContext, input: CreateLinkInput): PaymentLink {
+  // The owner comes from the context, never from the input: `CreateLinkInput`
+  // carries no tenant field, so a forged organizationId has nowhere to land.
+  const { organizationId } = scopeOf(ctx);
   const id = `plink_${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
   const link: PaymentLink = {
+    organizationId,
     id,
     kind: input.kind,
     items: input.items.map((i, n) => ({ id: `it_${n + 1}`, label: i.label, amount: i.amount })),
@@ -253,14 +375,36 @@ export function createLink(input: CreateLinkInput): PaymentLink {
     paidAt: null,
     currency: CURRENCY,
   };
-  store().links.unshift(link);
+  writePartition(organizationId).links.unshift(link);
   return { ...link, items: link.items.map((i) => ({ ...i })) };
 }
 
-export function expireLink(id: string): PaymentLink {
-  const link = store().links.find((l) => l.id === id.trim());
-  if (!link) throw new Error("Unknown payment link.");
-  const status = deriveLinkStatus(link, paidReferenceIds());
+export function expireLink(ctx: OrganizationContext, id: string): PaymentLink {
+  // Order is the contract (spec G-13): tenant -> row -> status -> write. Closing
+  // somebody else's link is a mutation on their money path, so it is attributed
+  // and refused loudly rather than answered with a boolean.
+  const { organizationId } = scopeOf(ctx);
+  const trimmed = id.trim();
+  const link = readPartition(ctx).links.find((l) => l.id === trimmed);
+  if (!link) {
+    const foreignOwner = linkOwnedByAnotherTenant(organizationId, trimmed);
+    if (foreignOwner) {
+      recordTenantDenial({
+        surface: "links.expire",
+        actorOrganizationId: organizationId,
+        requestedOrganizationId: foreignOwner,
+        actorId: null,
+        resourceId: trimmed,
+      });
+      throw new TenantIsolationError(
+        "CROSS_TENANT_WRITE",
+        { surface: "links.expire", actorOrg: organizationId, requestedOrg: foreignOwner },
+        `Refusing a cross-tenant write on links.expire: the payment link belongs to another organization.`,
+      );
+    }
+    throw new UnknownLinkError();
+  }
+  const status = deriveLinkStatus(link, paidReferenceIds(ctx));
   if (status === "CANCELLED") throw new Error("This link is already closed.");
   if (status === "PAID") throw new Error("A paid link cannot be expired — the money already moved.");
   if (status === "EXPIRED") throw new Error("This link has already expired.");
@@ -279,9 +423,32 @@ export async function recordLinkPayment(
   ctx: OrganizationContext,
   id: string,
 ): Promise<{ link: PaymentLink; transactionId: string; total: number }> {
-  const link = store().links.find((l) => l.id === id.trim());
-  if (!link) throw new Error("Unknown payment link.");
-  const status = deriveLinkStatus(link, paidReferenceIds());
+  // Order is the contract (spec G-13): tenant -> link -> ledger write. The
+  // caller's partition is consulted first, and only then is a foreign id
+  // attributed and refused — so a payment can never be credited into another
+  // organization's ledger, and a forged link id never becomes a probe.
+  const { organizationId } = scopeOf(ctx);
+  const trimmed = id.trim();
+  const link = readPartition(ctx).links.find((l) => l.id === trimmed);
+  if (!link) {
+    const foreignOwner = linkOwnedByAnotherTenant(organizationId, trimmed);
+    if (foreignOwner) {
+      recordTenantDenial({
+        surface: "links.pay",
+        actorOrganizationId: organizationId,
+        requestedOrganizationId: foreignOwner,
+        actorId: null,
+        resourceId: trimmed,
+      });
+      throw new TenantIsolationError(
+        "CROSS_TENANT_WRITE",
+        { surface: "links.pay", actorOrg: organizationId, requestedOrg: foreignOwner },
+        `Refusing a cross-tenant write on links.pay: the payment link belongs to another organization.`,
+      );
+    }
+    throw new UnknownLinkError();
+  }
+  const status = deriveLinkStatus(link, paidReferenceIds(ctx));
   if (status !== "OPEN") throw new Error(`Only open links can be paid — this one is ${status.toLowerCase()}.`);
 
   const total = totalOf(link);

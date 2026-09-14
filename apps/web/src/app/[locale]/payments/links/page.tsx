@@ -8,6 +8,7 @@ import { LinksTable } from "@/components/links/links-table";
 import { LinksKindTabs } from "@/components/links/links-kind-tabs";
 import { CreateLinkDialog } from "@/components/links/create-link-dialog";
 import { listLinks } from "@/server/data/links";
+import { resolveIngestOrganizationContext } from "@/server/services/ingest-organization-context";
 import type { LinkKind } from "@/server/data/links";
 import { LINK_STATUSES } from "@/lib/link-status";
 import type { LinkStatus } from "@/lib/link-status";
@@ -45,7 +46,10 @@ async function LinksList({ searchParams, kind }: { searchParams: SearchParams; k
   const q = one(sp.q) ?? "";
   const status = statusOf(one(sp.status));
 
-  const data = listLinks({
+  // Wave 7G: payment links are per tenant — the partition is the predicate,
+  // so q/status/kind/page narrow inside it and never widen across tenants.
+  const { context } = await resolveIngestOrganizationContext({ organizationId: one(sp.organizationId) });
+  const data = listLinks(context, {
     q,
     status,
     kind,

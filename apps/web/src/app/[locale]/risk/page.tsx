@@ -6,6 +6,7 @@ import { RiskProfilePanel } from "@/components/risk/risk-profile-panel";
 import { RulesTable } from "@/components/risk/rules-table";
 import { VolumeLimitsCard } from "@/components/risk/volume-limits-card";
 import { getRiskOverview } from "@/server/data/risk";
+import { resolveIngestOrganizationContext } from "@/server/services/ingest-organization-context";
 
 // Risk & Velocity Limits (ADR-0023). INTEGRATION.md:117/:320: no Xendit
 // source — "Velocity/risk thresholds are Dashboard-only" — so the ruleset,
@@ -23,7 +24,10 @@ export const metadata: Metadata = {
 };
 
 export default async function RiskPage() {
-  const overview = await getRiskOverview();
+  // Wave 7G: risk policy and its derived alerts are per tenant — a second
+  // merchant never inherits the demo tenant's caps or investigation state.
+  const { context } = await resolveIngestOrganizationContext();
+  const overview = await getRiskOverview(context);
   const hasDraft = overview.draft !== null;
 
   return (

@@ -252,9 +252,11 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
   );
   server.registerTool(
     "list_links",
-    { title: "List payment links", description: "List payment links.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listLinks(asFilters<Parameters<typeof listLinks>[0]>({ page, pageSize })), notImplementedPg("list_links"))
+    { title: "List payment links", description: "List payment links **for the organization bound to this request** — a link is a money path, so an unbound request is refused rather than answered with somebody's checkout URLs.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listLinks(scoped, asFilters<Parameters<typeof listLinks>[1]>({ page, pageSize })), notImplementedPg("list_links"));
+    }
   );
   server.registerTool(
     "get_kyc_submission",
@@ -271,25 +273,35 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
   );
   server.registerTool(
     "get_risk_overview",
-    { title: "Get risk overview", description: "Risk alerts and settings overview.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getRiskOverview(), notImplementedPg("get_risk_overview"))
+    { title: "Get risk overview", description: "Risk alerts and settings overview **for the organization bound to this request** — the deployed velocity caps and high-risk alerts are that tenant's fraud posture, so an unbound request is refused rather than leaked.", inputSchema: sourceSchema },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getRiskOverview(scoped), notImplementedPg("get_risk_overview"));
+    }
   );
   server.registerTool(
     "list_webhooks",
-    { title: "List webhook deliveries", description: "List webhook events and deliveries.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listWebhooks(asFilters<Parameters<typeof listWebhooks>[0]>({ page, pageSize })), notImplementedPg("list_webhooks"))
+    { title: "List webhook deliveries", description: "List webhook events and deliveries **for the organization bound to this request** — the callback log carries provider payloads about that tenant's integration, so an unbound request is refused rather than answered with somebody's traffic.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listWebhooks(scoped, asFilters<Parameters<typeof listWebhooks>[1]>({ page, pageSize })), notImplementedPg("list_webhooks"));
+    }
   );
   server.registerTool(
     "get_webhook_event",
-    { title: "Get webhook event", description: "Get one webhook event by id.", inputSchema: { id: z.string(), ...sourceSchema } },
-    async ({ id, ...input }) => sourceAware(input, () => getWebhookEvent(id), notImplementedPg("get_webhook_event"))
+    { title: "Get webhook event", description: "Get one webhook event by id **within the organization bound to this request** — a foreign id answers exactly like an unknown one (null), so the tool is not an enumeration oracle.", inputSchema: { id: z.string(), ...sourceSchema } },
+    async ({ id, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getWebhookEvent(scoped, id), notImplementedPg("get_webhook_event"));
+    }
   );
   server.registerTool(
     "list_blocklist",
-    { title: "List blocklist", description: "Blocklisted IPs, card ranges and email domains.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listBlocklist(asFilters<Parameters<typeof listBlocklist>[0]>({ page, pageSize })), notImplementedPg("list_blocklist"))
+    { title: "List blocklist", description: "Blocklisted IPs, card ranges and email domains **for the organization bound to this request** — a fraud blocklist discloses which entities a merchant considers malicious, so an unbound request is refused rather than leaked.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listBlocklist(scoped, asFilters<Parameters<typeof listBlocklist>[1]>({ page, pageSize })), notImplementedPg("list_blocklist"));
+    }
   );
   server.registerTool(
     "get_merchant_profile",

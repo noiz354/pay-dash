@@ -4,9 +4,9 @@ import { hasPermission, type OrganizationRole, type Permission } from "@/domain/
 import { compareSla, evaluateSla, isOverdueBand, type SlaBand, type SlaEntityType } from "@/lib/sla";
 import { legacyPayoutBatches } from "./payouts-unscoped";
 import { legacyLedgerRows, legacyRefundQueue } from "./transactions-unscoped";
-import { getRiskOverview } from "./risk";
+import { legacyGetRiskOverview } from "./risk-unscoped";
 import { legacyKycSubmission } from "./kyc-unscoped";
-import { listWebhooks } from "./webhooks";
+import { legacyListWebhooks } from "./webhooks-unscoped";
 import {
   canActOnHandoff,
   handoffIdentity,
@@ -218,7 +218,7 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
   }
 
   // 4. High-risk transactions (the real fraud signal — `deriveAlerts`).
-  const risk = await getRiskOverview();
+  const risk = await legacyGetRiskOverview("handoff");
   for (const alert of risk.alerts) {
     if (!alert.transactionId) continue; // volume-cap alerts have no single target
     const tx = legacyLedgerRows("handoff").find((t) => t.id === alert.transactionId);
@@ -262,7 +262,7 @@ export async function deriveHandoffs(now: Date = new Date()): Promise<DerivedHan
 
   // 6. Rejected webhook deliveries in the last 7 days.
   const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-  const webhooks = listWebhooks({ status: "REJECTED", page: 1, pageSize: 100 });
+  const webhooks = legacyListWebhooks("handoff", { status: "REJECTED", page: 1, pageSize: 100 });
   for (const event of webhooks.rows) {
     if (new Date(event.receivedAt).getTime() < sevenDaysAgo) continue;
     sources.push({

@@ -180,6 +180,14 @@ describe("S-2 the unscoped readers are a closed set", () => {
    * Wave 7B shrinks this list, one module per PR. It never grows: a *new*
    * unscoped reader fails this test, which is the point.
    */
+  // Wave 7F removed server/data/onboarding.ts from this list: the onboarding
+  // checklist now reads the ledger through the scoped `getLedgerRows(ctx)`, so
+  // it is no longer a quarantine consumer. Shrink-only — the entry must not
+  // come back (WAVE_ROADMAP_7D_TO_11.md §4).
+  // Wave 7G removed server/data/links.ts, server/data/risk.ts and
+  // server/data/webhooks.ts: all three now read the ledger through the scoped
+  // `getLedgerRows(ctx)`, retiring their LEGACY_LEDGER_SURFACES entries and
+  // closing D-29. Shrink-only — these entries must not come back.
   const ALLOWED_UNSCOPED_CONSUMERS = [
     "app/[locale]/reports/builder/page.tsx",
     "server/data/audit.ts",
@@ -187,13 +195,6 @@ describe("S-2 the unscoped readers are a closed set", () => {
     "server/data/command-center.ts",
     "server/data/customers.ts",
     "server/data/handoff.ts",
-    "server/data/links.ts",
-    // Wave 7F removed server/data/onboarding.ts from this list: the onboarding
-    // checklist now reads the ledger through the scoped `getLedgerRows(ctx)`, so
-    // it is no longer a quarantine consumer. Shrink-only — the entry must not
-    // come back (WAVE_ROADMAP_7D_TO_11.md §4).
-    "server/data/risk.ts",
-    "server/data/webhooks.ts",
   ].sort();
 
   const consumers = allFiles

@@ -136,7 +136,7 @@ describe("audit — filters", () => {
 
 describe("audit — live reads", () => {
   it("re-derives when the owners change", async () => {
-    await addBlocklist({ type: "IP", value: "203.0.113.99", reason: "MANUAL_ENTRY" });
+    await addBlocklist(demo, { type: "IP", value: "203.0.113.99", reason: "MANUAL_ENTRY" });
     await createApiKey(demo, { name: "Staging", environment: "TEST", scopes: ["read"] });
     const summary = await auditSummary();
     expect(summary.byCategory.CONFIGURATION).toBe(22);

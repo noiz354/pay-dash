@@ -101,26 +101,14 @@ const profileChecks = (profile: {
 /**
  * The webhook callback count for the Technical Setup item.
  *
- * Cross-slice debt, recorded not fixed here (Wave 7G owns webhooks): the read is
- * still process-wide, and its store seeds itself from the Wave 7A ledger
- * quarantine — so in a process whose ledger holds more than one tenant the read
- * *refuses*. Degrading to zero events is the conservative answer: it neither
- * widens the view (no other tenant's count is substituted) nor lets an unrelated
- * slice's gate take the whole checklist down, which is the availability failure
- * this wave just retired for the ledger read above. The item reads "No callback
- * events received yet" until 7G scopes it.
- *
- * Matched by error name rather than by import: naming the quarantine module here
- * would make this file a consumer of it, which the structural ratchet (FS-4)
- * rightly forbids.
+ * Wave 7G closed this debt: `listWebhooks` is scoped, and its seed reads the
+ * ledger through `getLedgerRows(ctx)` rather than the 7A quarantine — so the
+ * count is the caller's own, the `UnscopedLedgerAccessError` degrade-to-zero
+ * path is gone, and onboarding is *not* a webhook quarantine consumer (GS-4
+ * pins that it never imports one). This is the surface that closes D-29.
  */
-function callbackEventCount(): number {
-  try {
-    return listWebhooks({ pageSize: 1 }).total;
-  } catch (e) {
-    if (e instanceof Error && e.name === "UnscopedLedgerAccessError") return 0;
-    throw e;
-  }
+function callbackEventCount(ctx: OrganizationContext): number {
+  return listWebhooks(ctx, { pageSize: 1 }).total;
 }
 
 /**
@@ -143,9 +131,9 @@ function callbackEventCount(): number {
  *     therefore dropped from `LEGACY_LEDGER_SURFACES` (12 → 11) — the entry
  *     Wave 7E's ES-6 deletion gate needs cleared.
  *
- * Cross-slice, recorded not fixed here: the webhook count still comes from the
- * unscoped `listWebhooks` (Wave 7G's slice). It contributes one integer to a
- * checklist item and no tenant-attributable content.
+ * Wave 7G closed the last cross-slice note here: the webhook count comes from
+ * the scoped `listWebhooks(ctx, …)`, so every input to this checklist is the
+ * caller's own partition and onboarding imports no quarantine (GS-4).
  */
 export async function getOnboardingStatus(ctx: OrganizationContext): Promise<OnboardingStatus> {
   const scoped = parseOrganizationContext(ctx);
@@ -158,7 +146,7 @@ export async function getOnboardingStatus(ctx: OrganizationContext): Promise<Onb
       profileKycCompleteness(scoped),
       Promise.resolve(getKycSubmission(scoped)),
     ]);
-  const webhookTotal = callbackEventCount();
+  const webhookTotal = callbackEventCount(scoped);
 
   // --- Business Profile (settings.merchant) --------------------------------
   const profileChecksList = profileChecks(profile);
