@@ -17,6 +17,7 @@ import { LinkStatusPill } from "@/components/links/link-status-pill";
 import { ExpireLinkButton } from "@/components/links/expire-link-button";
 import { SimulatePaymentButton } from "@/components/links/simulate-payment-button";
 import { getLink } from "@/server/data/links";
+import { resolveIngestOrganizationContext } from "@/server/services/ingest-organization-context";
 import { getTransaction } from "@/server/data/transactions";
 import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import { formatMoney, formatDateLong, formatDateTime, formatRelative } from "@/lib/format";
@@ -49,7 +50,10 @@ function Row({ label, value, mono }: { label: string; value: React.ReactNode; mo
 
 export default async function PaymentLinkDetailPage({ params }: { params: Params }) {
   const { id } = await params;
-  const link = await getLink(id);
+  // Wave 7G: a foreign link id answers exactly like an unknown one (null →
+  // notFound), so the detail page is not an enumeration oracle.
+  const { context: ingestContext } = await resolveIngestOrganizationContext();
+  const link = await getLink(ingestContext, id);
   if (!link) notFound();
 
   const open = link.status === "OPEN";

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { listWebhooks } from "@/server/data/webhooks";
+import { listWebhooks, UNATTRIBUTED_ORGANIZATION_ID } from "@/server/data/webhooks";
+import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
 
 // Signature-verification path. The env module reads STRIPE_WEBHOOK_SECRET at
 // import time (createEnv), so stub the variable BEFORE the route module is
@@ -10,6 +11,10 @@ import { listWebhooks } from "@/server/data/webhooks";
 vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_test_secret");
 
 const { POST } = await import("./route");
+
+/** Wave 7G: ingress events land in the unattributed partition, so the route
+ * tests read the door's log through an unattributed context rather than demo. */
+const DOOR_CTX = parseOrganizationContext({ organizationId: UNATTRIBUTED_ORGANIZATION_ID });
 
 function resetAllStores() {
   const g = globalThis as unknown as {
@@ -45,7 +50,7 @@ describe("POST /api/webhooks/stripe (signature verification)", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("Invalid Stripe signature");
 
-    const rejected = listWebhooks({ status: "REJECTED", pageSize: 100 }).rows;
+    const rejected = listWebhooks(DOOR_CTX, { status: "REJECTED", pageSize: 100 }).rows;
     expect(rejected.some((r) => (r.reason ?? "").endsWith("MALFORMED_SIGNATURE") && r.source === "stripe")).toBe(true);
   });
 
@@ -72,7 +77,7 @@ describe("POST /api/webhooks/stripe (signature verification)", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).event).toBe("charge.succeeded");
 
-    const rows = listWebhooks({ q: "evt_sig_4", pageSize: 100 });
+    const rows = listWebhooks(DOOR_CTX, { q: "evt_sig_4", pageSize: 100 });
     expect(rows.rows[0]?.status).toBe("RECEIVED");
     expect(rows.rows[0]?.unhandled).toBe(false);
   });

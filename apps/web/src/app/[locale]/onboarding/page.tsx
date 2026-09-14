@@ -3,6 +3,7 @@ import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { OnboardingCard } from "@/components/onboarding/onboarding-card";
 import { getOnboardingStatus } from "@/server/data/onboarding";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 
 // Sub-Merchant Onboarding (ADR-0025). The prototype hard-coded "3 of 4
 // sections completed · 75%", an invented ****4592 account, "Verified on Oct
@@ -17,7 +18,11 @@ export const metadata: Metadata = {
 };
 
 export default async function OnboardingPage() {
-  const status = await getOnboardingStatus();
+  // Wave 7F: the checklist is derived from five stores, so it is a cross-slice
+  // leak amplifier — the header, the profile rows, the key/transaction counts
+  // and the compliance document are all the caller tenant's own.
+  const { context } = await resolveIdentityOrganizationContext();
+  const status = await getOnboardingStatus(context);
 
   return (
     <main className="mx-auto max-w-container-max p-gutter space-y-6">

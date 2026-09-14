@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEMO_CONTEXT } from "@/test/organization-context";
 import {
   addBlocklist,
   blocklistSummary,
@@ -15,7 +16,7 @@ const ALL = { type: "ALL", pageSize: 100 } as const;
 
 describe("blocklist store (ADR-0024)", () => {
   it("seeds one coherent world: 10 entries across all three types, date-relative", async () => {
-    const { rows } = await listBlocklist(ALL);
+    const { rows } = await listBlocklist(DEMO_CONTEXT, ALL);
     expect(rows).toHaveLength(10);
     const byType = (t: string) => rows.filter((r) => r.type === t).length;
     expect(byType("IP")).toBe(6);
@@ -35,7 +36,7 @@ describe("blocklist store (ADR-0024)", () => {
   });
 
   it("the summary derives per-type counts and 30d activity", async () => {
-    const s = await blocklistSummary();
+    const s = await blocklistSummary(DEMO_CONTEXT);
     expect(s.total).toBe(10);
     expect(s.byType).toEqual({ IP: 6, CARD: 2, EMAIL: 2 });
     expect(s.addedLast30d).toBeGreaterThanOrEqual(7);
@@ -43,15 +44,15 @@ describe("blocklist store (ADR-0024)", () => {
   });
 
   it("filters by type and query, and the two routes share the store", async () => {
-    const cards = await listBlocklist({ type: "CARD" });
+    const cards = await listBlocklist(DEMO_CONTEXT, { type: "CARD" });
     expect(cards.total).toBe(2);
     expect(cards.rows.every((r) => r.type === "CARD")).toBe(true);
 
-    const hit = await listBlocklist({ q: "203.0" });
+    const hit = await listBlocklist(DEMO_CONTEXT, { q: "203.0" });
     expect(hit.total).toBe(1);
     expect(hit.rows[0].type).toBe("IP");
 
-    const none = await listBlocklist({ type: "CARD", q: "203.0" });
+    const none = await listBlocklist(DEMO_CONTEXT, { type: "CARD", q: "203.0" });
     expect(none.total).toBe(0);
   });
 
@@ -67,9 +68,9 @@ describe("blocklist store (ADR-0024)", () => {
   });
 
   it("addBlocklist: valid add lands, invalid and duplicate adds are rejected", async () => {
-    const before = (await blocklistSummary()).total;
+    const before = (await blocklistSummary(DEMO_CONTEXT)).total;
 
-    const ok = await addBlocklist({
+    const ok = await addBlocklist(DEMO_CONTEXT, {
       type: "IP",
       value: "93.184.216.34",
       reason: "MANUAL_ENTRY",
@@ -77,13 +78,13 @@ describe("blocklist store (ADR-0024)", () => {
     expect(ok.ok).toBe(true);
     if (ok.ok) {
       expect(ok.entry.addedAt).toBeTruthy();
-      const fetched = await getBlocklistEntry(ok.entry.id);
+      const fetched = await getBlocklistEntry(DEMO_CONTEXT, ok.entry.id);
       expect(fetched?.value).toBe("93.184.216.34");
     }
-    expect((await blocklistSummary()).total).toBe(before + 1);
+    expect((await blocklistSummary(DEMO_CONTEXT)).total).toBe(before + 1);
 
     // card input is raw digits, stored masked
-    const card = await addBlocklist({
+    const card = await addBlocklist(DEMO_CONTEXT, {
       type: "CARD",
       value: "5105105105100100",
       reason: "CHARGEBACK_ABUSE",
@@ -91,33 +92,33 @@ describe("blocklist store (ADR-0024)", () => {
     expect(card.ok).toBe(true);
     if (card.ok) expect(card.entry.value).toBe("510510 •••• 0100");
 
-    const dup = await addBlocklist({ type: "IP", value: "93.184.216.34", reason: "MANUAL_ENTRY" });
+    const dup = await addBlocklist(DEMO_CONTEXT, { type: "IP", value: "93.184.216.34", reason: "MANUAL_ENTRY" });
     expect(dup.ok).toBe(false);
     if (!dup.ok) expect(dup.error).toBe("Already on the blocklist.");
 
-    const badIp = await addBlocklist({ type: "IP", value: "999.1.1.1", reason: "MANUAL_ENTRY" });
+    const badIp = await addBlocklist(DEMO_CONTEXT, { type: "IP", value: "999.1.1.1", reason: "MANUAL_ENTRY" });
     expect(badIp.ok).toBe(false);
 
-    const fullEmail = await addBlocklist({ type: "EMAIL", value: "a@b.com", reason: "MANUAL_ENTRY" });
+    const fullEmail = await addBlocklist(DEMO_CONTEXT, { type: "EMAIL", value: "a@b.com", reason: "MANUAL_ENTRY" });
     expect(fullEmail.ok).toBe(false);
 
     // clean up so later specs see the seeded world
-    if (ok.ok) expect(await removeBlocklist(ok.entry.id)).toBe(true);
-    if (card.ok) expect(await removeBlocklist(card.entry.id)).toBe(true);
-    expect((await blocklistSummary()).total).toBe(before);
+    if (ok.ok) expect(await removeBlocklist(DEMO_CONTEXT, ok.entry.id)).toBe(true);
+    if (card.ok) expect(await removeBlocklist(DEMO_CONTEXT, card.entry.id)).toBe(true);
+    expect((await blocklistSummary(DEMO_CONTEXT)).total).toBe(before);
   });
 
   it("removeBlocklist: removes once, is a no-op afterwards", async () => {
-    const added = await addBlocklist({ type: "EMAIL", value: "throwaway.net", reason: "HIGH_FREQUENCY" });
+    const added = await addBlocklist(DEMO_CONTEXT, { type: "EMAIL", value: "throwaway.net", reason: "HIGH_FREQUENCY" });
     expect(added.ok).toBe(true);
     if (!added.ok) return;
-    expect(await removeBlocklist(added.entry.id)).toBe(true);
-    expect(await getBlocklistEntry(added.entry.id)).toBeNull();
-    expect(await removeBlocklist(added.entry.id)).toBe(false);
+    expect(await removeBlocklist(DEMO_CONTEXT, added.entry.id)).toBe(true);
+    expect(await getBlocklistEntry(DEMO_CONTEXT, added.entry.id)).toBeNull();
+    expect(await removeBlocklist(DEMO_CONTEXT, added.entry.id)).toBe(false);
   });
 
   it("exports csv with one row per entry and raw values", async () => {
-    const { rows } = await listBlocklist(ALL);
+    const { rows } = await listBlocklist(DEMO_CONTEXT, ALL);
     const csv = blocklistToCsv(rows);
     const lines = csv.trim().split("\n");
     expect(lines[0]).toBe("type,value,reason,added_at");

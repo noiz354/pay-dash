@@ -2,12 +2,16 @@ import { CreateTransactionDialog } from "@/components/transactions/create-transa
 import { ExportCsvButton } from "@/components/transactions/export-csv-button";
 import { merchantGreeting } from "@/lib/settings-options";
 import { getMerchantProfile } from "@/server/data/settings";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 
 // Dashboard header — the greeting comes from the merchant profile
 // (ADR-0009), not from a hard-coded person: the data model has no owner
 // name field, so the prototype's "Sarah" was fabricated identity data.
 export async function DashboardHeader() {
-  const profile = await getMerchantProfile();
+  // Wave 7F: the greeting is the merchant's own trading name. Rendering it from
+  // a process-wide profile meant every tenant's dashboard said "Acme".
+  const { context } = await resolveIdentityOrganizationContext();
+  const profile = await getMerchantProfile(context);
   const name = merchantGreeting(profile);
 
   return (

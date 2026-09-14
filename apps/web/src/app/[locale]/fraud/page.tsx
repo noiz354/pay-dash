@@ -5,6 +5,7 @@ import { AddBlocklistDialog } from "@/components/blocklist/add-blocklist-dialog"
 import { BlocklistPanel } from "@/components/blocklist/blocklist-panel";
 import { ExportCsvButton } from "@/components/transactions/export-csv-button";
 import { listBlocklist, blocklistSummary } from "@/server/data/blocklist";
+import { resolveIngestOrganizationContext } from "@/server/services/ingest-organization-context";
 import type { BlocklistType } from "@/lib/blocklist-options";
 
 // The panel (and deep links) carry the lowercase tab value; the store uses
@@ -41,11 +42,15 @@ export default async function FraudPage({
   const type = TAB_TYPE[(one(sp.type) ?? "").toLowerCase()] ?? "IP";
   const q = one(sp.q) ?? "";
 
+  // Wave 7G: the fraud blocklist is per tenant — a second merchant never sees
+  // the demo tenant's blocked IPs, cards or domains, and the summary counts
+  // only the caller's own entries.
+  const { context } = await resolveIngestOrganizationContext({ organizationId: one(sp.organizationId) });
   const [ip, card, email, summary] = await Promise.all([
-    listBlocklist({ type: "IP", q, page: 1, pageSize: 10 }),
-    listBlocklist({ type: "CARD", q, page: 1, pageSize: 10 }),
-    listBlocklist({ type: "EMAIL", q, page: 1, pageSize: 10 }),
-    blocklistSummary(),
+    listBlocklist(context, { type: "IP", q, page: 1, pageSize: 10 }),
+    listBlocklist(context, { type: "CARD", q, page: 1, pageSize: 10 }),
+    listBlocklist(context, { type: "EMAIL", q, page: 1, pageSize: 10 }),
+    blocklistSummary(context),
   ]);
   const sections = { IP: ip, CARD: card, EMAIL: email };
 

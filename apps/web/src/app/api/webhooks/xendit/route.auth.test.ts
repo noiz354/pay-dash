@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { listWebhooks } from "@/server/data/webhooks";
+import { listWebhooks, UNATTRIBUTED_ORGANIZATION_ID } from "@/server/data/webhooks";
+import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
 
 // Token-verification path. The env module reads XENDIT_WEBHOOK_TOKEN at
 // import time (createEnv), so stub the variable BEFORE the route module is
@@ -9,6 +10,10 @@ import { listWebhooks } from "@/server/data/webhooks";
 vi.stubEnv("XENDIT_WEBHOOK_TOKEN", "wh_test_token");
 
 const { POST } = await import("./route");
+
+/** Wave 7G: ingress events land in the unattributed partition, so the route
+ * tests read the door's log through an unattributed context rather than demo. */
+const DOOR_CTX = parseOrganizationContext({ organizationId: UNATTRIBUTED_ORGANIZATION_ID });
 
 function resetAllStores() {
   const g = globalThis as unknown as {
@@ -37,11 +42,11 @@ describe("POST /api/webhooks/xendit (token configured)", () => {
     expect(res.status).toBe(401);
     expect((await res.json()).error).toBe("Invalid x-callback-token");
 
-    const rejected = listWebhooks({ status: "REJECTED", pageSize: 100 }).rows;
+    const rejected = listWebhooks(DOOR_CTX, { status: "REJECTED", pageSize: 100 }).rows;
     expect(rejected.some((r) => r.reason === "Invalid x-callback-token")).toBe(true);
     // Nothing was RECEIVED (the raw body is still searchable on the rejected
     // row — that is deliberate, it is how you debug a bad callback).
-    const matches = listWebhooks({ q: "evt_auth_1", pageSize: 100 }).rows;
+    const matches = listWebhooks(DOOR_CTX, { q: "evt_auth_1", pageSize: 100 }).rows;
     expect(matches.every((r) => r.status === "REJECTED")).toBe(true);
   });
 
@@ -60,6 +65,6 @@ describe("POST /api/webhooks/xendit (token configured)", () => {
     );
     expect(res.status).toBe(200);
     expect((await res.json()).event).toBe("payment.succeeded");
-    expect(listWebhooks({ q: "evt_auth_3", pageSize: 100 }).rows[0]?.status).toBe("RECEIVED");
+    expect(listWebhooks(DOOR_CTX, { q: "evt_auth_3", pageSize: 100 }).rows[0]?.status).toBe("RECEIVED");
   });
 });

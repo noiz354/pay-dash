@@ -10,6 +10,7 @@ import { getRiskOverview } from "@/server/data/risk";
 import { getLedgerMetrics, listTransactions } from "@/server/data/transactions";
 import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import { resolvePayoutOrganizationContext } from "@/server/services/payout-organization-context";
+import { resolveIngestOrganizationContext } from "@/server/services/ingest-organization-context";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
 
 export const dynamic = "force-dynamic";
@@ -37,12 +38,16 @@ export default async function MerchantOpsCopilotPage() {
   // a prompt attached, so the model only ever receives this tenant's rows.
   const { context } = await resolveTransactionOrganizationContext();
   const { context: payoutContext } = await resolvePayoutOrganizationContext();
+  // Wave 7G: risk policy and the webhook summary are ingest-slice reads, so
+  // they resolve through the ingest seam — the agent only ever receives this
+  // tenant's fraud posture and callback log.
+  const { context: ingestContext } = await resolveIngestOrganizationContext();
   const [metrics, balance, payouts, risk, webhooks, failed] = await Promise.all([
     getLedgerMetrics(context),
     getBalanceOverview(),
     getPayoutsOverview(payoutContext),
-    getRiskOverview(),
-    Promise.resolve(getSystemWebhookSummary()),
+    getRiskOverview(ingestContext),
+    Promise.resolve(getSystemWebhookSummary(ingestContext)),
     listTransactions(context, { status: "FAILED", pageSize: 5 }),
   ]);
 

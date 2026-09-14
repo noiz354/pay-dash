@@ -3,6 +3,18 @@ import { addBlocklist } from "./blocklist";
 import { auditEventsToCsv, auditSummary, getAuditEvents, listAuditEvents } from "./audit";
 import { createApiKey } from "./settings";
 
+import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
+/**
+ * Wave 7F — the identity DALs are ctx-first, so this legacy suite now exercises
+ * the *demo* tenant explicitly: the prototype values it asserts (Acme's profile,
+ * the seeded roster, the three seeded keys) are the demo tenant's records, not a
+ * process-wide default. Cross-tenant behaviour lives in the sibling
+ * `*.tenant-isolation.test.ts` files.
+ */
+const demo = parseOrganizationContext({ organizationId: DEFAULT_DEMO_ORG });
+
+
 function resetAllStores() {
   const g = globalThis as unknown as {
     __kineticSettingsStore?: unknown;
@@ -124,8 +136,8 @@ describe("audit — filters", () => {
 
 describe("audit — live reads", () => {
   it("re-derives when the owners change", async () => {
-    await addBlocklist({ type: "IP", value: "203.0.113.99", reason: "MANUAL_ENTRY" });
-    await createApiKey({ name: "Staging", environment: "TEST", scopes: ["read"] });
+    await addBlocklist(demo, { type: "IP", value: "203.0.113.99", reason: "MANUAL_ENTRY" });
+    await createApiKey(demo, { name: "Staging", environment: "TEST", scopes: ["read"] });
     const summary = await auditSummary();
     expect(summary.byCategory.CONFIGURATION).toBe(22);
     expect(summary.total).toBe(SEED_TOTAL + 2);

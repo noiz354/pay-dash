@@ -4,6 +4,7 @@ import { SettingsNav } from "@/components/settings/settings-nav";
 import { ApiKeysTable } from "@/components/settings/api-keys-table";
 import { CreateApiKeyDialog } from "@/components/settings/create-api-key-dialog";
 import { listApiKeys } from "@/server/data/settings";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 
 export const metadata: Metadata = {
   title: "API Keys · Settings",
@@ -11,7 +12,11 @@ export const metadata: Metadata = {
 };
 
 export default async function ApiKeysPage() {
-  const keys = await listApiKeys();
+  // Wave 7F: this page renders a key ring — names, environments, scopes and
+  // masked secrets. It is the slice's sharpest secret surface, so the tenant is
+  // resolved before the list is read and the list can only ever be the caller's.
+  const { context } = await resolveIdentityOrganizationContext();
+  const keys = await listApiKeys(context);
   const live = keys.filter((k) => k.environment === "LIVE");
   const test = keys.filter((k) => k.environment === "TEST");
 

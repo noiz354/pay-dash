@@ -1,5 +1,18 @@
 # TODO — PayDash MCP lanjutan
 
+> **Roadmap (2026-09-13):** sembilan spec baru (Wave 7D–7H dan 8–11) sudah ter-draft, dan
+> urutan kerjanya kini tercatat di **`WAVE_ROADMAP_7D_TO_11.md`** — dependensi antar-wave,
+> peta debt→wave (D-01..D-28), ledger quarantine, dan alokasi nomor ADR (0044–0051).
+> Checklist di bawah **tidak dihapus**; ia hanya dipetakan ke wave yang mengeksekusinya:
+> - **"Wave 4 — sisa pekerjaan"** (jalankan Playwright gates, performance verification,
+>   documentation & gate closure) → **Wave 9** (`WAVE_9_VERIFICATION_SPEC.md`; D-01..D-04).
+>   Verdict Release Readiness diterbitkan di sana, jadi Wave 9 jalan paling akhir.
+> - **"(a) Sweep tool yang tersisa"** (`get_webhook_event`, row #20) → **Wave 9** Q7 checklist (D-21).
+> - **"(c) Remediasi audit MCP"** R1–R6 → **Wave 8** (`WAVE_8_MCP_AUTH_HARDENING_SPEC.md`):
+>   R1→D-06 (rate limit MCP), R2→D-07 (audit log), R3→D-08 (`timingSafeEqual`),
+>   R5→scope token read-only/write, D-05 (limiter sign-in) + D-20 (UX 429) ikut di wave yang sama.
+>   R4/R6 = konfigurasi mesin lokal (Firebase/gcloud project, path chromium) — **bukan** pekerjaan repo.
+
 ## Wave 4 — sisa pekerjaan (PR #9, jangan merge sebelum semua selesai)
 
 Urutan disepakati: SLA wiring → component tests → Playwright → performance → report/gate closure.

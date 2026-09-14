@@ -51,19 +51,26 @@ import {
 import { parseOrganizationContext, type OrganizationContext } from "@/domain/tenancy/organization-context";
 
 /** The frozen set of derived surfaces still reading the ledger unscoped. */
+// Wave 7F retired the onboarding entry: `getOnboardingStatus(ctx)` now reads the
+// ledger through the scoped `getLedgerRows(ctx)`, so the fail-closed
+// single-tenant refusal (D-28) no longer gates the checklist. Eleven surfaces
+// remain; shrink-only, never re-grow (WAVE_ROADMAP_7D_TO_11.md §4). The note
+// lives above the array on purpose — the structural ratchet reads this literal
+// as text, and a quoted surface name inside a comment would read as an entry.
+// Wave 7G retired the links, risk and webhooks entries: those three DALs now
+// read the ledger through the scoped `getLedgerRows(ctx)`, so the fail-closed
+// single-tenant refusal (D-28) no longer gates them. Seven surfaces remain;
+// shrink-only, never re-grow (WAVE_ROADMAP_7D_TO_11.md §4). The note lives
+// above the array on purpose — the structural ratchet reads this literal as
+// text, and a quoted surface name inside a comment would read as an entry.
 export const LEGACY_LEDGER_SURFACES = [
   "audit",
   "balance",
   "command-center",
   "customers",
-  "handoff",
-  "invoices",
-  "links",
-  "onboarding",
-  "reports",
-  "risk",
   "finance-snapshot",
-  "webhooks",
+  "handoff",
+  "reports",
 ] as const;
 
 export type LegacyLedgerSurface = (typeof LEGACY_LEDGER_SURFACES)[number];

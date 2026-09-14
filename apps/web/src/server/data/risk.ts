@@ -14,8 +14,9 @@ import "server-only";
 // ---------------------------------------------------------------------------
 
 import { HIGH_RISK_SCORE, VOLUME_ALERT_PCT } from "@/lib/risk-options";
-import { type Transaction } from "./transactions";
-import { legacyLedgerRows } from "./transactions-unscoped";
+import { getLedgerRows, type Transaction } from "./transactions";
+import { parseOrganizationContext, type OrganizationContext } from "@/domain/tenancy/organization-context";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 
 export { HIGH_RISK_SCORE, VOLUME_ALERT_PCT } from "@/lib/risk-options";
 
@@ -139,6 +140,8 @@ type RiskStore = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** The demo tenant's history: deployed twelve days ago, so Deploy/Discard have a
+ * real baseline. This is the *demo world's* age, not a product constant. */
 function seedStore(): RiskStore {
   const anchor = new Date();
   anchor.setUTCHours(9, 0, 0, 0);
@@ -149,10 +152,84 @@ function seedStore(): RiskStore {
   };
 }
 
-const globalStore = globalThis as unknown as { __kineticRiskStore?: RiskStore };
-function store(): RiskStore {
-  if (!globalStore.__kineticRiskStore) globalStore.__kineticRiskStore = seedStore();
+/**
+ * A fresh tenant's state: the product-default ruleset and caps (shared
+ * vocabulary, like the blocklist reason enum), but *now* as `deployedAt` — a
+ * merchant that has never deployed anything does not inherit the demo tenant's
+ * twelve-day-old history (spec G-5).
+ */
+function freshState(): RiskStore {
+  return {
+    deployed: structuredClone(DEPLOYED_SETTINGS),
+    deployedAt: new Date().toISOString(),
+    draft: null,
+  };
+}
+
+type RiskStoreMap = { tenants: Map<string, RiskStore> };
+const globalStore = globalThis as unknown as { __kineticRiskStore?: RiskStoreMap };
+function store(): RiskStoreMap {
+  if (!globalStore.__kineticRiskStore) globalStore.__kineticRiskStore = { tenants: new Map() };
   return globalStore.__kineticRiskStore;
+}
+
+/**
+ * Validate the caller's context at the boundary. `parseOrganizationContext` is
+ * the only constructor, so a malformed or missing ctx throws here rather than
+ * becoming "the demo tenant" (contract C-1/C-2).
+ */
+function scopeOf(ctx: OrganizationContext): OrganizationContext {
+  return parseOrganizationContext(ctx);
+}
+
+/**
+ * The caller's risk policy. The demo tenant seeds lazily on first read (its
+ * twelve-day history is part of the demo world); any other tenant gets a fresh
+ * state that is **not materialised** — a read cannot invent a tenant, and the
+ * probes stay honest until a write happens.
+ */
+function readPartition(ctx: OrganizationContext): RiskStore {
+  const { organizationId } = scopeOf(ctx);
+  const tenants = store().tenants;
+  const existing = tenants.get(organizationId);
+  if (existing) return existing;
+  if (organizationId === DEFAULT_DEMO_ORG) {
+    const seeded = seedStore();
+    tenants.set(organizationId, seeded);
+    return seeded;
+  }
+  return freshState();
+}
+
+/** The caller's policy, materialised for a write. */
+function writePartition(organizationId: string): RiskStore {
+  const tenants = store().tenants;
+  const existing = tenants.get(organizationId);
+  if (existing) return existing;
+  const created = organizationId === DEFAULT_DEMO_ORG ? seedStore() : freshState();
+  tenants.set(organizationId, created);
+  return created;
+}
+
+/**
+ * How many tenants hold a risk policy. Row-free tenancy probe: answers a
+ * question about the store, never returns a policy — it is the quarantine gate
+ * and the seam's demo-fallback refusal, so it cannot take a ctx (7C/7D/7F
+ * precedent). Only materialised partitions count: a read that fabricated a fresh
+ * state has not created a tenant.
+ */
+export function countRiskTenants(): number {
+  return store().tenants.size;
+}
+
+/** The single tenant holding a policy, or `null` when there is none or more than one. */
+export function soleRiskOrganizationId(): string | null {
+  let sole: string | null = null;
+  for (const [organizationId] of store().tenants) {
+    if (sole !== null) return null;
+    sole = organizationId;
+  }
+  return sole;
 }
 
 function clone(s: RiskSettings): RiskSettings {
@@ -200,9 +277,12 @@ export function deriveAlerts(settings: RiskSettings, rows: Transaction[]): RiskA
   return alerts.sort((a, b) => b.at.localeCompare(a.at));
 }
 
-export async function getRiskOverview(): Promise<RiskOverview> {
-  const s = store();
-  const rows = legacyLedgerRows("risk");
+export async function getRiskOverview(ctx: OrganizationContext): Promise<RiskOverview> {
+  // Wave 7G: the aggregation is scoped BEFORE it derives — volume, distribution
+  // and alerts answer for the caller's ledger alone. This is also what retired
+  // the `risk` entry in LEGACY_LEDGER_SURFACES.
+  const s = readPartition(ctx);
+  const rows = getLedgerRows(ctx);
 
   const dailyVolume24h = settleVolumeSince(rows, DAY_MS);
   const monthlyVolume30d = settleVolumeSince(rows, 30 * DAY_MS);
@@ -215,11 +295,13 @@ export async function getRiskOverview(): Promise<RiskOverview> {
     else distribution.low += 1;
   }
 
+  // The answer is a deep copy: mutating the overview cannot reach the store
+  // (7C/7F precedent — the caller gets data, not a handle).
   return {
-    effective: s.draft ? s.draft.settings : deployed,
-    deployed,
+    effective: clone(s.draft ? s.draft.settings : deployed),
+    deployed: clone(deployed),
     deployedAt: s.deployedAt,
-    draft: s.draft,
+    draft: s.draft ? { settings: clone(s.draft.settings), savedAt: s.draft.savedAt } : null,
     alerts: deriveAlerts(deployed, rows),
     alertCount: rows.filter((t) => t.riskScore >= HIGH_RISK_SCORE).length,
     scanned: rows.length,
@@ -242,8 +324,12 @@ export type DraftPatch =
 /** Apply one patch to the draft (creating it from the effective settings if
  * none exists). The draft is the app's pending configuration — it changes
  * nothing live until deployed. */
-export function patchDraft(patch: DraftPatch): RiskDraft {
-  const s = store();
+export function patchDraft(ctx: OrganizationContext, patch: DraftPatch): RiskDraft {
+  // Order is the contract (spec G-13): tenant -> policy -> write. Each tenant
+  // edits its own draft; a shared-policy write was the loudest class in this
+  // programme (A deploying a cap silently changed B's effective limits).
+  const { organizationId } = scopeOf(ctx);
+  const s = writePartition(organizationId);
   const base = s.draft ? s.draft.settings : clone(s.deployed);
   const settings = clone(base);
   if ("ruleId" in patch) {
@@ -258,18 +344,26 @@ export function patchDraft(patch: DraftPatch): RiskDraft {
   return s.draft;
 }
 
-export function deployRiskSettings(): { deployedAt: string; ruleCount: number } {
-  const s = store();
-  if (!s.draft) return { deployedAt: s.deployedAt, ruleCount: s.deployed.rules.length };
-  s.deployed = clone(s.draft.settings);
+export function deployRiskSettings(ctx: OrganizationContext): { deployedAt: string; ruleCount: number } {
+  const { organizationId } = scopeOf(ctx);
+  // Read first: deploying with no draft is a no-op that fabricates nothing and
+  // does not materialise a partition for a tenant that has never written.
+  const current = readPartition(ctx);
+  if (!current.draft) {
+    return { deployedAt: current.deployedAt, ruleCount: current.deployed.rules.length };
+  }
+  const s = writePartition(organizationId);
+  s.deployed = clone(s.draft!.settings);
   s.deployedAt = new Date().toISOString();
   s.draft = null;
   return { deployedAt: s.deployedAt, ruleCount: s.deployed.rules.length };
 }
 
-export function discardDraft(): boolean {
-  const s = store();
+export function discardDraft(ctx: OrganizationContext): boolean {
+  // A cannot discard B's pending draft: the caller's own partition is consulted
+  // first, and "no draft here" is the honest `false` — never a cross-tenant prune.
+  const s = readPartition(ctx);
   if (!s.draft) return false;
-  s.draft = null;
+  writePartition(scopeOf(ctx).organizationId).draft = null;
   return true;
 }

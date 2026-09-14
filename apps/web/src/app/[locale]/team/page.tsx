@@ -8,6 +8,7 @@ import { PendingInvites } from "@/components/team/pending-invites";
 import { TeamFilters } from "@/components/team/team-filters";
 import { INVITE_TTL_DAYS } from "@/lib/team-roles";
 import { listMembers, roleCatalog } from "@/server/data/team";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 
 // Team & Permissions (ADR-0022). INTEGRATION.md (:97/:122/:318) documents the
 // screen with no Xendit source — "Role-based access control is Dashboard-only" —
@@ -38,10 +39,14 @@ async function MembersTab({
   const role = (one(sp.role) as "ADMIN" | "DEVELOPER" | "ANALYST" | "RISK_ANALYST" | "ALL") ?? "ALL";
   const page = Number(one(sp.page) ?? 1) || 1;
 
+  // Wave 7F: the roster is per tenant, so the session tenant is resolved before
+  // any filter runs — the predicate below can narrow it, never widen it.
+  const { context } = await resolveIdentityOrganizationContext();
+
   // The Members tab owns ACTIVE + DEACTIVATED; invites live in Pending
   // Invites (ADR-0022) — the prototype listed its one "Invited" member in
   // both places' contradiction.
-  const result = await listMembers({
+  const result = await listMembers(context, {
     q,
     role,
     statuses: ["ACTIVE", "DEACTIVATED"],
@@ -65,7 +70,10 @@ async function MembersTab({
 }
 
 async function RolesTab() {
-  const catalog = await roleCatalog();
+  // Member counts are an aggregate over a roster, so they are per tenant too:
+  // counting another merchant's Admins would disclose their staffing.
+  const { context } = await resolveIdentityOrganizationContext();
+  const catalog = await roleCatalog(context);
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-container-lowest)]">
       <div className="border-b border-[var(--border-subtle)] px-4 py-3">
@@ -117,7 +125,8 @@ async function RolesTab() {
 }
 
 async function PendingTab() {
-  const result = await listMembers({ statuses: ["INVITED"], pageSize: 100 });
+  const { context } = await resolveIdentityOrganizationContext();
+  const result = await listMembers(context, { statuses: ["INVITED"], pageSize: 100 });
   return <PendingInvites invites={result.rows} />;
 }
 

@@ -219,74 +219,132 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
     }
   );
 
-  // Invoices
+  // Invoices — tenant-bound (Wave 7D). Invoices are ledger-derived, so an
+  // unbound tool answered with a *computed* view of every tenant's fees. No
+  // tenant on the request ⇒ refuse; a foreign period is not-found, never
+  // forbidden (no enumeration oracle).
   server.registerTool(
     "list_invoices",
-    { title: "List invoices", description: "List hosted payment invoices.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
-    async ({ page, pageSize, status, ...input }) =>
-      sourceAware(input, () => listInvoices(asFilters<Parameters<typeof listInvoices>[0]>({ page, pageSize, status })), notImplementedPg("list_invoices"))
+    { title: "List invoices", description: "List hosted payment invoices **for the organization bound to this request**.", inputSchema: { ...pageSchema, ...sourceSchema, status: z.string().optional() } },
+    async ({ page, pageSize, status, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listInvoices(scoped, asFilters<Parameters<typeof listInvoices>[1]>({ page, pageSize, status })), notImplementedPg("list_invoices"));
+    }
   );
   server.registerTool(
     "get_invoice",
-    { title: "Get invoice", description: "Get one invoice by id.", inputSchema: { id: z.string(), ...sourceSchema } },
-    async ({ id, ...input }) => sourceAware(input, () => getInvoice(id), notImplementedPg("get_invoice"))
+    { title: "Get invoice", description: "Get one invoice by id or number, within the bound organization. A foreign id is indistinguishable from a missing one.", inputSchema: { id: z.string(), ...sourceSchema } },
+    async ({ id, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, async () => (await getInvoice(scoped, id)) ?? { error: "Invoice not found." }, notImplementedPg("get_invoice"));
+    }
   );
 
   // Subscriptions / links / kyc / risk / webhooks / blocklist / settings / team / audit / onboarding
+  // (subscriptions tenant-bound in Wave 7D; the rest are Wave 7F/7G slices.)
   server.registerTool(
     "list_subscriptions",
-    { title: "List subscriptions", description: "List recurring subscriptions.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listSubscriptions(asFilters<Parameters<typeof listSubscriptions>[0]>({ page, pageSize })), notImplementedPg("list_subscriptions"))
+    { title: "List subscriptions", description: "List recurring subscriptions **for the organization bound to this request**.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listSubscriptions(scoped, asFilters<Parameters<typeof listSubscriptions>[1]>({ page, pageSize })), notImplementedPg("list_subscriptions"));
+    }
   );
   server.registerTool(
     "list_links",
-    { title: "List payment links", description: "List payment links.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listLinks(asFilters<Parameters<typeof listLinks>[0]>({ page, pageSize })), notImplementedPg("list_links"))
+    { title: "List payment links", description: "List payment links **for the organization bound to this request** — a link is a money path, so an unbound request is refused rather than answered with somebody's checkout URLs.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listLinks(scoped, asFilters<Parameters<typeof listLinks>[1]>({ page, pageSize })), notImplementedPg("list_links"));
+    }
   );
   server.registerTool(
     "get_kyc_submission",
-    { title: "Get KYC submission", description: "Current KYC submission status.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getKycSubmission(), notImplementedPg("get_kyc_submission"))
+    {
+      title: "Get KYC submission",
+      description:
+        "Current KYC submission status **for the organization bound to this request**. A compliance document is PII about a legal entity, so an unbound request is refused rather than answered with somebody's document.",
+      inputSchema: sourceSchema,
+    },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getKycSubmission(scoped), notImplementedPg("get_kyc_submission"));
+    }
   );
   server.registerTool(
     "get_risk_overview",
-    { title: "Get risk overview", description: "Risk alerts and settings overview.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getRiskOverview(), notImplementedPg("get_risk_overview"))
+    { title: "Get risk overview", description: "Risk alerts and settings overview **for the organization bound to this request** — the deployed velocity caps and high-risk alerts are that tenant's fraud posture, so an unbound request is refused rather than leaked.", inputSchema: sourceSchema },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getRiskOverview(scoped), notImplementedPg("get_risk_overview"));
+    }
   );
   server.registerTool(
     "list_webhooks",
-    { title: "List webhook deliveries", description: "List webhook events and deliveries.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listWebhooks(asFilters<Parameters<typeof listWebhooks>[0]>({ page, pageSize })), notImplementedPg("list_webhooks"))
+    { title: "List webhook deliveries", description: "List webhook events and deliveries **for the organization bound to this request** — the callback log carries provider payloads about that tenant's integration, so an unbound request is refused rather than answered with somebody's traffic.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listWebhooks(scoped, asFilters<Parameters<typeof listWebhooks>[1]>({ page, pageSize })), notImplementedPg("list_webhooks"));
+    }
   );
   server.registerTool(
     "get_webhook_event",
-    { title: "Get webhook event", description: "Get one webhook event by id.", inputSchema: { id: z.string(), ...sourceSchema } },
-    async ({ id, ...input }) => sourceAware(input, () => getWebhookEvent(id), notImplementedPg("get_webhook_event"))
+    { title: "Get webhook event", description: "Get one webhook event by id **within the organization bound to this request** — a foreign id answers exactly like an unknown one (null), so the tool is not an enumeration oracle.", inputSchema: { id: z.string(), ...sourceSchema } },
+    async ({ id, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getWebhookEvent(scoped, id), notImplementedPg("get_webhook_event"));
+    }
   );
   server.registerTool(
     "list_blocklist",
-    { title: "List blocklist", description: "Blocklisted IPs, card ranges and email domains.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listBlocklist(asFilters<Parameters<typeof listBlocklist>[0]>({ page, pageSize })), notImplementedPg("list_blocklist"))
+    { title: "List blocklist", description: "Blocklisted IPs, card ranges and email domains **for the organization bound to this request** — a fraud blocklist discloses which entities a merchant considers malicious, so an unbound request is refused rather than leaked.", inputSchema: { ...pageSchema, ...sourceSchema } },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => listBlocklist(scoped, asFilters<Parameters<typeof listBlocklist>[1]>({ page, pageSize })), notImplementedPg("list_blocklist"));
+    }
   );
   server.registerTool(
     "get_merchant_profile",
-    { title: "Get merchant profile", description: "Merchant profile settings.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getMerchantProfile(), notImplementedPg("get_merchant_profile"))
+    {
+      title: "Get merchant profile",
+      description:
+        "Merchant profile settings **for the organization bound to this request** — legal name, tax id and contact details of that tenant only.",
+      inputSchema: sourceSchema,
+    },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getMerchantProfile(scoped), notImplementedPg("get_merchant_profile"));
+    }
   );
   server.registerTool(
     "get_settings_overview",
-    { title: "Get settings overview", description: "High-level settings section summary.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getSettingsOverview(), notImplementedPg("get_settings_overview"))
+    {
+      title: "Get settings overview",
+      description:
+        "High-level settings section summary **for the organization bound to this request**. The counts are aggregates over that tenant's own keys, topics and IP rules — never a process-wide tally.",
+      inputSchema: sourceSchema,
+    },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getSettingsOverview(scoped), notImplementedPg("get_settings_overview"));
+    }
   );
   server.registerTool(
     "list_team_members",
-    { title: "List team members", description: "List organization members.", inputSchema: { ...pageSchema, ...sourceSchema } },
-    async ({ page, pageSize, ...input }) =>
-      sourceAware(input, () => listMembers(asFilters<Parameters<typeof listMembers>[0]>({ page, pageSize })), notImplementedPg("list_team_members"))
+    {
+      title: "List team members",
+      description:
+        "List organization members **for the organization bound to this request**. Roles are per tenant: an Admin here is a stranger in any other organization.",
+      inputSchema: { ...pageSchema, ...sourceSchema },
+    },
+    async ({ page, pageSize, ...input }) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(
+        input,
+        () => listMembers(scoped, asFilters<Parameters<typeof listMembers>[1]>({ page, pageSize })),
+        notImplementedPg("list_team_members"),
+      );
+    }
   );
   server.registerTool(
     "list_audit_events",
@@ -296,7 +354,15 @@ export function registerDomainTools(server: McpServer, organization?: Organizati
   );
   server.registerTool(
     "get_onboarding_status",
-    { title: "Get onboarding status", description: "Merchant onboarding progress.", inputSchema: sourceSchema },
-    async (input) => sourceAware(input, () => getOnboardingStatus(), notImplementedPg("get_onboarding_status"))
+    {
+      title: "Get onboarding status",
+      description:
+        "Merchant onboarding progress **for the organization bound to this request**. The checklist is derived from five stores, so an unbound request would print another merchant's profile, keys and compliance document.",
+      inputSchema: sourceSchema,
+    },
+    async (input) => {
+      if (!scoped) return textResult(NO_TENANT);
+      return sourceAware(input, () => getOnboardingStatus(scoped), notImplementedPg("get_onboarding_status"));
+    }
   );
 }

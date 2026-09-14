@@ -14,7 +14,7 @@ import {
 } from "@/lib/command-center";
 import { legacyPayoutBatches } from "./payouts-unscoped";
 import { legacyLedgerRows } from "./transactions-unscoped";
-import { listWebhooks } from "./webhooks";
+import { legacyListWebhooks } from "./webhooks-unscoped";
 import { canActOnHandoff } from "./handoff-store";
 import { deriveHandoffs, type DerivedHandoff } from "./handoff";
 
@@ -256,7 +256,7 @@ export async function getCommandCenter(roles: OrganizationRole[] = [], now: Date
   );
   if (failedPayoutRecipients) raw.failed.push(failedPayoutRecipients);
 
-  const rejectedWebhooks = listWebhooks({ status: "REJECTED", page: 1, pageSize: 100 }).rows.filter(
+  const rejectedWebhooks = legacyListWebhooks("command-center", { status: "REJECTED", page: 1, pageSize: 100 }).rows.filter(
     (e) => now.getTime() - new Date(e.receivedAt).getTime() <= 7 * RECENT_WINDOW_MS,
   );
   const webhookFailures = group(
