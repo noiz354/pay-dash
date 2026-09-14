@@ -1,0 +1,80 @@
+# AWS runtime for the Merchant Ops Agent (Strands + Bedrock)
+#
+# All agent technology is AWS (per project decision). GCP components
+# (Gemini journal, Cloud SQL, Firebase) stay exactly as they are.
+#
+# Usage (see README.md in this folder for the full runbook):
+#   IMAGE_TAG=<git-sha> APP_DOMAIN=pay.example.com docker compose -f compose.aws.yaml up -d
+#
+# AWS credentials are injected via env, never baked into images or this file:
+#   - on Lightsail: AWS_BEARER_TOKEN_BEDROCK (Bedrock API key, recommended) or
+#     short-lived AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY with the Bedrock-only
+#     IAM policy in iam-agent-bedrock-policy.json
+#   - on EC2/ECS: IAM instance/task role (no keys at all)
+
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: ghcr.io/noiz354/pay-dash/web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    init: true
+    env_file: /opt/paydash/.env
+    environment:
+      # Strands agent → Amazon Bedrock (AWS-only model path)
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-global.anthropic.claude-sonnet-4-6}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AGENT_MAX_TOOL_TURNS: ${AGENT_MAX_TOOL_TURNS:-6}
+      AGENT_RUNTIME_TIMEOUT_MS: ${AGENT_RUNTIME_TIMEOUT_MS:-60000}
+    mem_limit: 1g
+    cpus: 1.5
+    user: "1001:1001"            # non-root (matches Dockerfile)
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,uid=1001
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-pay.example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro   # origin certificate (Cloudflare Origin CA)
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # One-off Prisma migration runner (idempotent: `prisma migrate deploy`).
+  # Target DB = AWS Lightsail Managed PostgreSQL (see DATABASE_MIGRATION.md).
+  # Run: docker compose -f infra/aws/compose.aws.yaml --profile migrate run --rm migrate
+  migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.migrate
+    image: ghcr.io/noiz354/pay-dash/migrate:${IMAGE_TAG:-latest}
+    profiles: ["migrate"]
+    restart: "no"
+    env_file: /opt/paydash/.env   # DATABASE_URL → Lightsail endpoint
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  caddy_data:
+  caddy_config:

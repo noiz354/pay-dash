@@ -39,6 +39,7 @@ const nextConfig: NextConfig = {
       "/onboarding",
       "/support",
       "/risk",
+      "/agent",
       "/ai-journal",
       "/ai-journal/ops-copilot",
       "/ai-journal/recovery-agent",
