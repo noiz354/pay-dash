@@ -1,0 +1,10 @@
+{$APP_DOMAIN} {
+    encode zstd gzip
+    tls /etc/caddy/certs/origin-cert.pem /etc/caddy/certs/origin-key.pem
+    header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    reverse_proxy web:3000
+    log {
+        output stdout
+        format json
+    }
+}
