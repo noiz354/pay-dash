@@ -4,6 +4,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { ClickableRow } from "@/components/transactions/clickable-row";
 import { TablePagination } from "@/components/transactions/table-pagination";
 import { WebhookStatusPill } from "@/components/webhooks/webhook-status-pill";
+import { SeedBadge } from "@/components/layout/demo-data-notice";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { WEBHOOK_SOURCE_LABELS } from "@/lib/webhook-status";
 import type { WebhookEvent } from "@/server/data/webhooks";
@@ -86,6 +87,7 @@ export function WebhooksTable({ rows, total, page, pageCount, pageSize, hasFilte
                 <td className="px-4 py-3 align-top">
                   <div className="data-mono text-xs text-[var(--on-surface)] flex items-center gap-1.5">
                     {e.type}
+                    {e.seeded ? <SeedBadge /> : null}
                     {e.unhandled ? (
                       <span className="rounded bg-[var(--surface-container-high)] px-1.5 py-0.5 text-[10px] text-[var(--on-surface-variant)]">
                         unhandled
