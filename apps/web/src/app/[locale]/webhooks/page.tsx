@@ -9,6 +9,7 @@ import { WebhooksTable } from "@/components/webhooks/webhooks-table";
 import { WebhookConfigCard } from "@/components/webhooks/webhook-config-card";
 import { SimulateWebhookDialog } from "@/components/webhooks/simulate-webhook-dialog";
 import { listWebhooks } from "@/server/data/webhooks";
+import { resolveIngestOrganizationContext } from "@/server/services/ingest-organization-context";
 import { env } from "@/lib/env";
 import { WEBHOOK_STATUSES } from "@/lib/webhook-status";
 import type { WebhookStatus } from "@/lib/webhook-status";
@@ -43,7 +44,10 @@ async function WebhookLog({ searchParams }: { searchParams: SearchParams }) {
   const status = statusOf(one(sp.status));
   const type = one(sp.type) ?? "all";
 
-  const data = listWebhooks({
+  // Wave 7G: the webhook log is per tenant — resolve the caller's partition
+  // before reading, so one merchant never sees another's callback traffic.
+  const { context } = await resolveIngestOrganizationContext({ organizationId: one(sp.organizationId) });
+  const data = listWebhooks(context, {
     q,
     status,
     type,

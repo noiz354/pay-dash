@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Link } from "@/i18n/navigation";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { getSettingsOverview } from "@/server/data/settings";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
@@ -17,7 +18,11 @@ export const metadata: Metadata = {
  * before you click into anything.
  */
 export default async function SettingsPage() {
-  const sections = await getSettingsOverview();
+  // Wave 7F: the hub cards aggregate the caller's own settings — a card reading
+  // "2 live keys active" or another merchant's legal name would disclose their
+  // posture without a single row in sight.
+  const { context } = await resolveIdentityOrganizationContext();
+  const sections = await getSettingsOverview(context);
 
   return (
     <main className="mx-auto w-full max-w-container-max space-y-6 p-gutter">

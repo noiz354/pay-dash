@@ -9,6 +9,7 @@ import { DeveloperToggle } from "@/components/settings/developer-toggle";
 import { IpAllowlistManager } from "@/components/settings/ip-allowlist-manager";
 import { CreateApiKeyDialog } from "@/components/settings/create-api-key-dialog";
 import { getDeveloperSettings, listApiKeys } from "@/server/data/settings";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 import { KNOWN_WEBHOOK_EVENTS } from "@/lib/webhook-status";
 import { env } from "@/lib/env";
 import { formatRelative } from "@/lib/format";
@@ -26,7 +27,10 @@ export const metadata: Metadata = {
 // (api.acme.com "Active" / staging.acme.com "Failing") are gone: there is
 // nothing in this app that delivers webhooks.
 export default async function DeveloperSettingsPage() {
-  const [developer, keys] = await Promise.all([getDeveloperSettings(), listApiKeys()]);
+  // Wave 7F: sandbox mode, the IP allowlist and the key ring are all per
+  // tenant — one context, resolved once, feeds every read below.
+  const { context } = await resolveIdentityOrganizationContext();
+  const [developer, keys] = await Promise.all([getDeveloperSettings(context), listApiKeys(context)]);
   const activeKeys = keys.filter((k) => k.status === "ACTIVE");
   const host = (await headers()).get("host") ?? "localhost:3000";
   const endpointUrl = `https://${host}/api/webhooks/xendit`;

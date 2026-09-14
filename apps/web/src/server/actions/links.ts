@@ -4,11 +4,37 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseAmount } from "@/lib/payout-status";
 import { formatMoney } from "@/lib/format";
+import { TenantIsolationError } from "@/domain/security/tenant";
 import { createLink, expireLink, recordLinkPayment, getLink, totalOf } from "@/server/data/links";
+import {
+  ingestAccessDeniedState,
+  requireIngestOrganizationContext,
+} from "@/server/services/ingest-organization-context";
 import { requireTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import type { ActionState } from "./payouts";
 
 export type { ActionState };
+
+/** A cross-tenant id answers exactly like an unknown one (C-5). */
+function isCrossTenant(e: unknown): boolean {
+  return e instanceof TenantIsolationError;
+}
+
+/** The DAL's own not-found signal, matched by name (the class is not exported). */
+function isUnknownLink(e: unknown): boolean {
+  return e instanceof Error && e.name === "UnknownLinkError";
+}
+
+/**
+ * Uniform wire answer for "no such link you can touch": identical for a foreign
+ * id and an unknown id, so the action is not an enumeration oracle. Reuses the
+ * DAL's legacy message so existing callers and tests see no vocabulary change.
+ */
+const LINK_NOT_FOUND_MESSAGE = "Unknown payment link.";
+
+function denied<T>(e: unknown): ActionState<T> {
+  return ingestAccessDeniedState(e) as ActionState<T>;
+}
 
 // Server Actions for the payment-link journey (ADR-0013). Same serialisable
 // ActionState contract as the other mutation surfaces.
@@ -108,7 +134,18 @@ export async function createPaymentLinkAction(
       : parsed.data.items.map((i) => ({ label: i.label, amount: i.amount }));
   const expiresAt = parsed.data.expiresIn === "" ? null : new Date(Date.now() + Number(parsed.data.expiresIn) * 86_400_000).toISOString();
 
-  const link = createLink({
+  // Authorization runs after validation (a malformed amount is a field error,
+  // not an auth error) and before any store write. The owner comes from the
+  // session tenant — `CreateLinkInput` carries no organization field, so a
+  // forged one has nowhere to land (P-10).
+  let access;
+  try {
+    access = await requireIngestOrganizationContext("money_in.create");
+  } catch (e) {
+    return denied<{ id: string; checkoutUrl?: string }>(e);
+  }
+
+  const link = createLink(access.context, {
     kind: parsed.data.kind,
     items: linkItems,
     payerEmail: parsed.data.payerEmail || null,
@@ -150,11 +187,25 @@ export async function expirePaymentLinkAction(
   formData: FormData
 ): Promise<ActionState<undefined>> {
   const id = String(formData.get("id") ?? "").trim();
+
+  let access;
   try {
-    expireLink(id);
+    access = await requireIngestOrganizationContext("money_in.create");
+  } catch (e) {
+    return denied<undefined>(e);
+  }
+
+  try {
+    // Order is the contract (G-13): tenant -> link -> status -> write. Closing
+    // somebody else's link is refused in the DAL (audited) and mapped here to
+    // the same message an unknown id gets.
+    expireLink(access.context, id);
     revalidateLinks(id);
     return { status: "success", message: `Link ${id} closed — it can no longer be paid.` };
   } catch (error) {
+    if (isCrossTenant(error) || isUnknownLink(error)) {
+      return { status: "error", message: LINK_NOT_FOUND_MESSAGE };
+    }
     return { status: "error", message: error instanceof Error ? error.message : "Could not close the link." };
   }
 }
@@ -176,6 +227,12 @@ export async function payPaymentLinkAction(
       data: { transactionId, total },
     };
   } catch (error) {
+    // Paying a foreign link is refused in the DAL *before* any ledger write
+    // (G-13): the money-path assertion is that nothing is credited anywhere.
+    // The wire answer matches an unknown id — no enumeration oracle.
+    if (isCrossTenant(error) || isUnknownLink(error)) {
+      return { status: "error", message: LINK_NOT_FOUND_MESSAGE };
+    }
     return { status: "error", message: error instanceof Error ? error.message : "Could not record the payment." };
   }
 }

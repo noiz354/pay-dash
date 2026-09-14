@@ -80,4 +80,4 @@ Q0 spec (this doc) → Q1 failing tests (red: no limiter, no audit rows, `!==` p
 unscoped tokens) → Q2 rate-limit + audit + timingSafeEqual + scopes + sign-in limiter +
 429 UX → Q3 legacy/adjacent test updates → Q4 docs (runbook: limits, buckets, rotation) →
 Q5 full gates → Q6 4 negative checks above → Q7 report + matrix (per-tool allow/deny table) +
-ADR + close D-05/D-06/D-07/D-08/D-20 + commit one slice.
+ADR-0049 + close D-05/D-06/D-07/D-08/D-20 + commit one slice.

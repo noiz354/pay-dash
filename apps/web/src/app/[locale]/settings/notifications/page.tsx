@@ -3,6 +3,7 @@ import { Link } from "@/i18n/navigation";
 import { SettingsNav } from "@/components/settings/settings-nav";
 import { NotificationPreferencesForm } from "@/components/settings/notification-preferences-form";
 import { getNotificationSettings } from "@/server/data/settings";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 
 export const metadata: Metadata = {
   title: "Notifications · Settings",
@@ -10,7 +11,10 @@ export const metadata: Metadata = {
 };
 
 export default async function NotificationsPage() {
-  const settings = await getNotificationSettings();
+  // Wave 7F: delivery preferences are the caller tenant's own choices over the
+  // shared topic catalog.
+  const { context } = await resolveIdentityOrganizationContext();
+  const settings = await getNotificationSettings(context);
 
   return (
     <main className="mx-auto w-full max-w-container-max p-gutter space-y-6 bg-[var(--surface-canvas)]">

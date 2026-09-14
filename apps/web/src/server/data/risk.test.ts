@@ -13,7 +13,7 @@ import { DEMO_CONTEXT } from "@/test/organization-context";
 
 describe("risk store (ADR-0023)", () => {
   it("seeds an app-owned ruleset: four rules, IDR caps, no draft", async () => {
-    const o = await getRiskOverview();
+    const o = await getRiskOverview(DEMO_CONTEXT);
     expect(o.draft).toBeNull();
     expect(o.effective).toEqual(o.deployed);
     expect(o.deployed.dailyVolumeLimit).toBe(2_000_000_000);
@@ -28,7 +28,7 @@ describe("risk store (ADR-0023)", () => {
   });
 
   it("derives alerts from the ledger, and every transactionId resolves", async () => {
-    const o = await getRiskOverview();
+    const o = await getRiskOverview(DEMO_CONTEXT);
     const rows = getLedgerRows(DEMO_CONTEXT);
     const expected = rows.filter((t) => t.riskScore >= HIGH_RISK_SCORE).length;
     // a volume alert may be present only when usage >= VOLUME_ALERT_PCT
@@ -51,7 +51,7 @@ describe("risk store (ADR-0023)", () => {
   });
 
   it("derives cap usage and the score distribution from the ledger", async () => {
-    const o = await getRiskOverview();
+    const o = await getRiskOverview(DEMO_CONTEXT);
     const rows = getLedgerRows(DEMO_CONTEXT);
     expect(o.scanned).toBe(rows.length);
     expect(o.usage.dailyVolume24h).toBeGreaterThan(0);
@@ -61,17 +61,17 @@ describe("risk store (ADR-0023)", () => {
   });
 
   it("draft lifecycle: patch -> deploy -> deployed wins, discard reverts", async () => {
-    const before = await getRiskOverview();
+    const before = await getRiskOverview(DEMO_CONTEXT);
     const beforeDeployedAt = before.deployedAt;
 
-    patchDraft({ dailyVolumeLimit: 3_000_000_000 });
-    let o = await getRiskOverview();
+    patchDraft(DEMO_CONTEXT, { dailyVolumeLimit: 3_000_000_000 });
+    let o = await getRiskOverview(DEMO_CONTEXT);
     expect(o.draft).not.toBeNull();
     expect(o.effective.dailyVolumeLimit).toBe(3_000_000_000);
     expect(o.deployed.dailyVolumeLimit).toBe(before.deployed.dailyVolumeLimit);
 
-    const deployedAt = deployRiskSettings().deployedAt;
-    o = await getRiskOverview();
+    const deployedAt = deployRiskSettings(DEMO_CONTEXT).deployedAt;
+    o = await getRiskOverview(DEMO_CONTEXT);
     expect(o.draft).toBeNull();
     expect(o.deployed.dailyVolumeLimit).toBe(3_000_000_000);
     expect(o.effective).toEqual(o.deployed);
@@ -80,20 +80,20 @@ describe("risk store (ADR-0023)", () => {
     );
 
     // deploy with no draft is a no-op
-    const again = deployRiskSettings();
+    const again = deployRiskSettings(DEMO_CONTEXT);
     expect(again.deployedAt).toBe(deployedAt);
 
     // rule toggle drafts, deploy commits, discard reverts
-    patchDraft({ ruleId: "rule_high_value", ruleEnabled: true });
-    o = await getRiskOverview();
+    patchDraft(DEMO_CONTEXT, { ruleId: "rule_high_value", ruleEnabled: true });
+    o = await getRiskOverview(DEMO_CONTEXT);
     expect(o.effective.rules.find((r) => r.id === "rule_high_value")?.enabled).toBe(true);
     expect(o.deployed.rules.find((r) => r.id === "rule_high_value")?.enabled).toBe(false);
 
-    expect(discardDraft()).toBe(true);
-    o = await getRiskOverview();
+    expect(discardDraft(DEMO_CONTEXT)).toBe(true);
+    o = await getRiskOverview(DEMO_CONTEXT);
     expect(o.draft).toBeNull();
     expect(o.effective.rules.find((r) => r.id === "rule_high_value")?.enabled).toBe(false);
-    expect(discardDraft()).toBe(false);
+    expect(discardDraft(DEMO_CONTEXT)).toBe(false);
   });
 
   it("raises the volume alert only when 24h usage reaches the threshold", () => {

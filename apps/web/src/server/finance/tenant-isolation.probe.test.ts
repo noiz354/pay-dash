@@ -226,6 +226,226 @@ describe("tenant isolation matrix — in-memory data layer", () => {
     });
   });
 
+  /**
+   * CLOSED in Wave 7D Q5 (opened in Q1 as two `CURRENT GAP` rows).
+   *
+   * The Q1 versions asserted the *broken* behaviour, Wave 6 tripwire style:
+   *   • `expect(listSubscriptions.length).toBe(0)` — one process-wide `{ plans }`
+   *     array, so every tenant's plans in every answer (a leak);
+   *   • `expect(listInvoices({ pageSize: 100 })).rejects.toThrow(/more than one
+   *     tenant/)` — statements derived from the ledger through the 7A quarantine,
+   *     so a two-tenant process served *nobody*, owner included (fail-closed,
+   *     "safe but unavailable": debt D-28's shape).
+   * Both were the same defect: no `OrganizationContext` at the boundary. Both
+   * fired; the two rows below are the response.
+   *
+   * Kept in this file, deliberately: the matrix is the measurement, and a closed
+   * gap has to be visible as closed rather than deleted from history.
+   */
+  it("Wave 7D — server/data/subscriptions requires a tenant scope on every read/write", async () => {
+    (globalThis as unknown as { __kineticSubscriptionStore?: unknown }).__kineticSubscriptionStore = undefined;
+    const { createSubscription, listSubscriptions, getSubscription } = await import("@/server/data/subscriptions");
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+
+    // Arity is the evidence in the other direction now: a scope is required
+    // ((ctx, filters = {}) → length 1; (ctx, input) → length 2).
+    expect(listSubscriptions.length).toBe(1);
+    expect(createSubscription.length).toBe(2);
+
+    await createSubscription(scopeA, {
+      customerName: "Alpha Probe",
+      customerEmail: "probe-growth@alpha.example",
+      planName: "Growth",
+      interval: "monthly",
+      amount: 15_000_000,
+    });
+    const betaPlan = await createSubscription(scopeB, {
+      customerName: "Beta Probe",
+      customerEmail: "probe-growth@beta.example",
+      planName: "Growth",
+      interval: "monthly",
+      amount: 15_000_999,
+    });
+
+    const page = await listSubscriptions(scopeA, { pageSize: 100 });
+    const emails = page.rows.map((s: { customerEmail: string }) => s.customerEmail);
+    // The leak, measured closed: A's answer is A's plan and nobody else's.
+    expect(emails).toContain("probe-growth@alpha.example");
+    expect(emails).not.toContain("probe-growth@beta.example");
+    expect(page.rows.every((s: { organizationId: string }) => s.organizationId === ORG_A)).toBe(true);
+    // A foreign id reads as ∅ rather than forbidden (C-5).
+    expect(await getSubscription(scopeA, betaPlan.id)).toBeNull();
+
+    record({
+      surface: "server/data/subscriptions (list/get/create)",
+      isolated: true,
+      mechanism: "required OrganizationContext + per-tenant plan partition",
+    });
+  });
+
+  it("Wave 7D — server/data/invoices derives per tenant and refuses a foreign settlement", async () => {
+    (globalThis as unknown as { __kineticInvoiceStore?: unknown }).__kineticInvoiceStore = undefined;
+    (globalThis as unknown as { __kineticTxStore?: unknown }).__kineticTxStore = undefined;
+    const { listInvoices, getInvoice, payInvoice } = await import("@/server/data/invoices");
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+    const mk = (id: string, createdAt: string, fee: number) => ({
+      id,
+      createdAt,
+      amount: 1_000_000,
+      fee,
+      net: 1_000_000 - fee,
+      status: "SUCCEEDED" as const,
+      currency: "IDR",
+      channel: "CARD" as const,
+      customerName: `${id} buyer`,
+      customerEmail: `${id}@example.com`,
+    });
+    seedDemoLedgerForOrganization(scopeA, { mode: "replace", rows: [mk("txn_probe_jan", "2026-01-15T10:00:00.000Z", 29_000)] });
+    seedDemoLedgerForOrganization(scopeB, { mode: "replace", rows: [mk("txn_probe_feb", "2026-02-15T10:00:00.000Z", 58_000)] });
+
+    // The money mutation takes a tenant now: (ctx, id, method).
+    expect(listInvoices.length).toBe(1);
+    expect(payInvoice.length).toBe(3);
+
+    const a = await listInvoices(scopeA, { pageSize: 100 });
+    const b = await listInvoices(scopeB, { pageSize: 100 });
+    // Derivation is per tenant, and the three prototype statements are the demo
+    // tenant's records rather than every tenant's — so the aggregate (MRR-style
+    // "fees this month") is a per-merchant figure at last.
+    expect(a.rows.map((r: { number: string }) => r.number)).toEqual(["INV-2026-01-LEDGER"]);
+    expect(b.rows.map((r: { number: string }) => r.number)).toEqual(["INV-2026-02-LEDGER"]);
+    expect(await getInvoice(scopeA, b.rows[0]!.id)).toBeNull();
+    // A foreign settlement writes nothing anywhere. It answers *uniformly*:
+    // attribution is bounded to owners this module can name without an unscoped
+    // read (demo tenant, payment-holding tenants, the sole ledger tenant), and
+    // Wave 7A pins its tenancy probes to `number | string | null` — so an id this
+    // module cannot attribute answers not-found, exactly like a missing one. The
+    // audited `TenantIsolationError` path is exercised where attribution does
+    // succeed, in `invoices.tenant-isolation.test.ts` (B-13).
+    expect(await payInvoice(scopeA, b.rows[0]!.id, "Bank transfer — Mandiri")).toBeNull();
+    // Refused means unwritten: B's statement is still unsettled.
+    expect((await listInvoices(scopeB, { pageSize: 100 })).rows[0]!.status).not.toBe("PAID");
+
+    record({
+      surface: "server/data/invoices (list/get/pay/statement)",
+      isolated: true,
+      mechanism: "required OrganizationContext + per-tenant derivation + partition-bound payments",
+    });
+  });
+
+  /**
+   * CLOSED in Wave 7F Q5 (opened in Q1 as two `CURRENT GAP` rows).
+   *
+   * The Q1 versions asserted the *broken* behaviour, Wave 6 tripwire style:
+   *   • `expect(listMembers.length).toBe(0)` plus `changeMemberRole(beta.id, …)`
+   *     — one process-wide `{ members }` roster, so every tenant's members came
+   *     back in every answer *and* any id could be re-roled by anybody
+   *     (privilege escalation, not a display bug);
+   *   • `expect(getMerchantProfile.length).toBe(0)` — one process-wide
+   *     `{ merchant, notifications, keys, developer }` record and one
+   *     `{ submission }` KYC slot, so a caller read another merchant's legal
+   *     identity, API-key inventory and compliance document, and the derived
+   *     onboarding checklist printed the same merchant to everybody.
+   * Both were the same defect: no `OrganizationContext` at the boundary. Both
+   * fired; the two rows below are the response.
+   *
+   * Kept in this file, deliberately: the matrix is the measurement, and a closed
+   * gap has to be visible as closed rather than deleted from history.
+   */
+  it("Wave 7F — server/data/team requires a tenant and refuses a foreign role change", async () => {
+    (globalThis as unknown as { __kineticTeamStore?: unknown }).__kineticTeamStore = undefined;
+    const { inviteMember, listMembers, getMember, changeMemberRole } = await import("@/server/data/team");
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+
+    // Arity is the evidence in the direction of isolation now: a scope is
+    // required — (ctx, filters = {}) → 1, (ctx, id) → 2, (ctx, id, role) → 3.
+    expect(listMembers.length).toBe(1);
+    expect(getMember.length).toBe(2);
+    expect(changeMemberRole.length).toBe(3);
+
+    await inviteMember(scopeA, { name: "Alpha Probe", email: "probe@alpha.example", role: "ANALYST" });
+    const beta = await inviteMember(scopeB, { name: "Beta Probe", email: "probe@beta.example", role: "ANALYST" });
+
+    const page = await listMembers(scopeA, { pageSize: 100 });
+    const emails = page.rows.map((m: { email: string }) => m.email);
+    // The leak, measured closed: A's answer is A's roster and nobody else's —
+    // not B's probe, and not the demo persona's seeded team.
+    expect(emails).toContain("probe@alpha.example");
+    expect(emails).not.toContain("probe@beta.example");
+    expect(emails).not.toContain("daniel@acmecorp.com");
+    expect(page.rows.every((m: { organizationId: string }) => m.organizationId === ORG_A)).toBe(true);
+    // A foreign id reads as ∅ rather than forbidden (C-5)…
+    expect(await getMember(scopeA, beta.id)).toBeNull();
+    // …and the escalation edge refuses loudly instead of silently re-roling
+    // somebody else's member. Refused means unwritten.
+    await expect(changeMemberRole(scopeA, beta.id, "ADMIN")).rejects.toBeInstanceOf(TenantIsolationError);
+    expect((await getMember(scopeB, beta.id))?.role).toBe("ANALYST");
+
+    record({
+      surface: "server/data/team (list/get/invite/role/lifecycle)",
+      isolated: true,
+      mechanism: "required OrganizationContext + per-tenant roster partition + audited role-change refusal",
+    });
+  });
+
+  it("Wave 7F — settings, KYC and the derived checklist answer one tenant", async () => {
+    (globalThis as unknown as { __kineticSettingsStore?: unknown }).__kineticSettingsStore = undefined;
+    (globalThis as unknown as { __kineticKycStore?: unknown }).__kineticKycStore = undefined;
+    const { createApiKey, getApiKey, getMerchantProfile, listApiKeys, updateMerchantProfile } = await import(
+      "@/server/data/settings"
+    );
+    const { getKycSubmission, submitKycDocument } = await import("@/server/data/kyc");
+    const { getOnboardingStatus } = await import("@/server/data/onboarding");
+    const scopeA = parseOrganizationContext({ organizationId: ORG_A });
+    const scopeB = parseOrganizationContext({ organizationId: ORG_B });
+
+    expect(getMerchantProfile.length).toBe(1);
+    expect(listApiKeys.length).toBe(2);
+    expect(getKycSubmission.length).toBe(1);
+    expect(getOnboardingStatus.length).toBe(1);
+
+    await updateMerchantProfile(scopeA, { legalName: "Alpha PT", taxId: "11-2223334" });
+    await updateMerchantProfile(scopeB, { legalName: "Beta Pte Ltd", taxId: "SG-77" });
+    const { key } = await createApiKey(scopeB, {
+      name: "Beta Live Key",
+      environment: "LIVE",
+      scopes: ["read", "write"],
+    });
+    submitKycDocument(scopeB, {
+      fileName: "beta-articles-of-association.pdf",
+      sizeBytes: 991_002,
+      docType: "articles",
+      jurisdiction: "SG",
+    });
+
+    // The secrets and the PII, measured closed: A never sees B's profile, key
+    // inventory or compliance document — and B's write no longer overwrote A's
+    // legal identity, which is what one shared record used to mean.
+    expect((await getMerchantProfile(scopeA)).legalName).toBe("Alpha PT");
+    expect((await getMerchantProfile(scopeB)).legalName).toBe("Beta Pte Ltd");
+    expect((await listApiKeys(scopeA)).some((k: { id: string }) => k.id === key.id)).toBe(false);
+    expect(JSON.stringify(await listApiKeys(scopeA))).not.toContain("Beta Live Key");
+    expect(await getApiKey(scopeA, key.id)).toBeNull();
+    expect(getKycSubmission(scopeA)).toBeNull();
+    expect(getKycSubmission(scopeB)?.fileName).toBe("beta-articles-of-association.pdf");
+
+    // The derived checklist — five stores folded into one answer — names the
+    // caller's own merchant. It also no longer rides the ledger quarantine: a
+    // two-tenant process serves both tenants, which retires the fail-closed
+    // "safe but unavailable" shape (D-28) for this surface.
+    expect((await getOnboardingStatus(scopeA)).merchantName).toBe("Alpha PT");
+    expect((await getOnboardingStatus(scopeB)).merchantName).toBe("Beta Pte Ltd");
+
+    record({
+      surface: "server/data/settings + kyc + onboarding (profile/keys/documents/checklist)",
+      isolated: true,
+      mechanism: "required OrganizationContext + per-tenant settings/KYC partitions + scoped derivation",
+    });
+  });
+
   it("publishes the measured matrix so the report cannot drift from reality", () => {
     const isolated = MATRIX.filter((r) => r.isolated);
     const gaps = MATRIX.filter((r) => !r.isolated);
@@ -240,8 +460,10 @@ describe("tenant isolation matrix — in-memory data layer", () => {
     expect(isolated.length).toBeGreaterThan(0);
     // The assertion that matters: gaps are KNOWN and counted, never zero-by-accident.
     // Wave 6 measured 2; Wave 7A closed Transactions; Wave 7B closed Payouts;
-    // Wave 7C closed Customers — zero measured gaps. The next slice re-opens
-    // this count the moment it adds a probe that fails.
+    // Wave 7C closed Customers; Wave 7D closed Billing (subscriptions +
+    // invoices); Wave 7F closed Identity & Access (team roster + role
+    // escalation, settings secrets, KYC documents, the derived checklist).
+    // The next slice re-opens this count the moment it adds a probe that fails.
     expect(gaps.length).toBe(0);
   });
 });

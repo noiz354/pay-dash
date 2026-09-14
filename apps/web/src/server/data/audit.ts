@@ -4,13 +4,13 @@ import { formatMoney } from "@/lib/format";
 import type { AuditCategoryValue, AuditRangeValue, AuditStatusValue } from "@/lib/audit-options";
 import { BLOCKLIST_REASON_LABELS, BLOCKLIST_TYPE_LABELS } from "@/lib/blocklist-options";
 import { ROLE_LABELS } from "@/lib/team-roles";
-import { listBlocklist } from "./blocklist";
+import { legacyListBlocklist } from "./blocklist-unscoped";
 import { legacyPayoutBatches } from "./payouts-unscoped";
-import { getRiskOverview } from "./risk";
-import { listApiKeys } from "./settings";
-import { listMembers } from "./team";
+import { legacyGetRiskOverview } from "./risk-unscoped";
+import { legacyListApiKeys } from "./settings-unscoped";
+import { legacyListMembers } from "./team-unscoped";
 import { legacyLedgerRows } from "./transactions-unscoped";
-import { listWebhooks } from "./webhooks";
+import { legacyListWebhooks } from "./webhooks-unscoped";
 
 // ---------------------------------------------------------------------------
 // Audit log data source (ADR-0026).
@@ -130,10 +130,13 @@ function syncEvents(): AuditEvent[] {
 /** The full derived event history, newest first. Read-only over the owners. */
 export async function getAuditEvents(): Promise<AuditEvent[]> {
   const [keys, blocklist, risk, members] = await Promise.all([
-    listApiKeys(),
-    listBlocklist({ page: 1, pageSize: 100 }),
-    getRiskOverview(),
-    listMembers({ page: 1, pageSize: 100 }),
+    // Wave 7F: the identity owners are tenant-scoped now; audit is a Wave 7E
+    // derived surface over four unscoped owners, so these two reads ride the
+    // slice quarantines (fail closed the moment a second tenant holds rows).
+    legacyListApiKeys("audit"),
+    legacyListBlocklist("audit", { page: 1, pageSize: 100 }),
+    legacyGetRiskOverview("audit"),
+    legacyListMembers("audit", { page: 1, pageSize: 100 }),
   ]);
 
   const asyncEvents: AuditEvent[] = [];
@@ -199,7 +202,7 @@ export async function getAuditEvents(): Promise<AuditEvent[]> {
   }
 
   // --- webhooks ← the inbound callback log -----------------------------------
-  const webhooks = listWebhooks({ page: 1, pageSize: 100 });
+  const webhooks = legacyListWebhooks("audit", { page: 1, pageSize: 100 });
   for (const ev of webhooks.rows) {
     const action =
       ev.status === "RECEIVED"

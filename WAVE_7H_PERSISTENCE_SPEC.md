@@ -87,4 +87,4 @@ re-open + analytics routing → Q3 (folded: legacy tests) → Q4 MCP postgres pa
 verification → Q5 probe final + full gates (incl. integration file re-check P-8) → Q6
 8 mutations (drop RLS policy, unset app.org_id, backfill-to-demo, raw org id event,
 bypass-catalog track, remove where-clause, duplicate-id same-org, postgres-tool without
-org) → Q7 report + matrix + ADR + close D-26/D-27 + commit one slice.
+org) → Q7 report + matrix + ADR-0048 + close D-26/D-27 + commit one slice.

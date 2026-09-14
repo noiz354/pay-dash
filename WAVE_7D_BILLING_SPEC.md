@@ -2,7 +2,7 @@
 
 Date: 2026-09-13 · Branch: `wave-7d-derived-scoping` (main@a4b595a, Waves 7A/7B/7C PASS)
 Predecessors: 7A Transactions, 7B Payouts+Refunds, 7C Customers (probe gaps = 0)
-Status: **Proposed** · Follows ADR-0041/0042/0043 · Reuses `domain/tenancy/organization-context.ts` unchanged
+Status: **Implemented** (Wave 7D Q7, 2026-09-13 — see `WAVE_7D_IMPLEMENTATION_REPORT.md`, `BILLING_TENANT_ISOLATION_MATRIX.md`, `docs/adr/0044-billing-tenant-isolation.md`) · Follows ADR-0041/0042/0043 · Reuses `domain/tenancy/organization-context.ts` unchanged
 
 ---
 
@@ -62,6 +62,14 @@ fail-closed quarantine with surface-naming for the not-yet-scoped.
 
 ## 4. Quarantine design (one per DAL, established pattern)
 
+> **Superseded at Q2 (approved deviation).** No billing quarantine module was created: verification
+> found every caller in the table below wireable inside this wave, and a quarantine that exists is a
+> quarantine Wave 7E must later delete. `billing-structural.test.ts` R-4 now *forbids* a billing
+> `*-unscoped.ts` file and any quarantine import from a production billing path. The two legacy
+> allowlists shrank instead (`LEGACY_LEDGER_SURFACES` 12 → 11 dropping `invoices`;
+> `LEGACY_CUSTOMER_SURFACES` 2 → 1 dropping `subscriptions`). See
+> `WAVE_7D_IMPLEMENTATION_REPORT.md` §7.1 and `WAVE_ROADMAP_7D_TO_11.md` §4.2.
+
 `server/data/subscriptions-unscoped.ts` + `server/data/invoices-unscoped.ts`:
 `LEGACY_SUBSCRIPTION_SURFACES` / `LEGACY_INVOICE_SURFACES` (seed at Q2 from the caller
 table — verify; frozen, shrink-only) + `UnscopedBillingAccessError`-shaped errors naming
@@ -71,6 +79,15 @@ the surface when > 1 tenant has rows. `subscriptionsToCsv`/`invoicesToCsv` stay 
 New seam: `server/services/billing-organization-context.ts` (resolve/require +
 refuseMultiTenantDemo, shared slice seam for both modules — one slice, one seam).
 No change to `mcp/auth.ts` (reuse `registerDomainTools` org param — 7B decision stands).
+
+Deletion ownership (roadmap finding G-1): these two modules are **slice** quarantines, not
+legacy ones — Wave 7E's ES-6 gate pins the three legacy paths by name and does *not* assert
+on these. Deletion criterion is 7E P-10 verbatim (allowlist empty AND consumer scan green
+AND full suite green without the file); it is executed at the Q7 of whichever wave empties
+the list — this one if Q2/Q4 wire every caller, a later slice otherwise. Whatever survives
+this wave's Q7 is recorded in `WAVE_ROADMAP_7D_TO_11.md` §4 with its remaining surfaces and
+an owner. Shrink-only: an allowlist may never re-grow, and no new `*-unscoped.ts` file may
+appear after 7G (roadmap §4 is the ratchet).
 
 ## 5. Tests
 
@@ -95,4 +112,4 @@ GAPs) → Q2 scoped DALs + partitioned stores + seam + session wiring vs quarant
 (folded: legacy tests to demo ctx) → Q4 export routes + MCP + action tests → Q5 probe
 final + full gates → Q6 8 mutations (predicate removal, global lookup, hardcoded export
 org, MCP bypass, quarantine import in prod path, org col in CSV, per-org status
-loosening, pay-before-tenant-check) → Q7 report + matrix + ADR + commit one slice.
+loosening, pay-before-tenant-check) → Q7 report + matrix + ADR-0044 + commit one slice.

@@ -3,6 +3,7 @@ import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { KycUpload } from "@/components/kyc/kyc-upload";
 import { getKycSubmission, profileKycCompleteness } from "@/server/data/kyc";
+import { resolveIdentityOrganizationContext } from "@/server/services/identity-organization-context";
 import { KYC_DOC_TYPES } from "@/lib/kyc-options";
 import { formatDateLong, formatRelative } from "@/lib/format";
 
@@ -44,7 +45,15 @@ function StepDot({ done, active }: { done: boolean; active: boolean }) {
 }
 
 export default async function KycPage() {
-  const [submission, completeness] = await Promise.all([getKycSubmission(), profileKycCompleteness()]);
+  // Wave 7F: this page names a compliance document and reports completeness
+  // from the merchant profile — both are PII about a legal entity, so both reads
+  // are the caller tenant's own. "Not yet submitted" must mean *you* have not
+  // submitted, not that somebody else's document was hidden.
+  const { context } = await resolveIdentityOrganizationContext();
+  const [submission, completeness] = await Promise.all([
+    Promise.resolve(getKycSubmission(context)),
+    profileKycCompleteness(context),
+  ]);
   const submitted = !!submission;
 
   const steps = [

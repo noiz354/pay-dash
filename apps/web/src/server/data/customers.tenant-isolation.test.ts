@@ -221,7 +221,10 @@ describe("U-12 quarantine gate + invalid ctx", () => {
     await createCustomer(ctxA, { name: "QA", email: "qa@alpha.example" });
     await createCustomer(ctxB, { name: "QB", email: "qb@beta.example" });
 
-    expect(() => mod.legacyListCustomers("subscriptions")).toThrow(/subscriptions/i);
+    // Wave 7D retired the `"subscriptions"` surface: the subscriptions page reads
+    // the scoped DAL with its own context now. `reports` is the one entry left in
+    // LEGACY_CUSTOMER_SURFACES (7E's slice), and the gate still refuses it.
+    expect(() => mod.legacyListCustomers("reports")).toThrow(/reports/i);
   });
 
   it("an invalid ctx never becomes a tenant", async () => {

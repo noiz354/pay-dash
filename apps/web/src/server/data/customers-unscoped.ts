@@ -29,7 +29,6 @@ import { parseOrganizationContext, type OrganizationContext } from "@/domain/ten
 /** The frozen set of surfaces still reading the directory unscoped. */
 export const LEGACY_CUSTOMER_SURFACES = [
   "reports",
-  "subscriptions",
 ] as const;
 
 export type LegacyCustomerSurface = (typeof LEGACY_CUSTOMER_SURFACES)[number];

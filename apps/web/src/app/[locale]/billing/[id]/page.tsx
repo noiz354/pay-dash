@@ -28,6 +28,7 @@ import {
   getInvoiceTimeline,
   getInvoiceTransactions,
 } from "@/server/data/invoices";
+import { resolveBillingOrganizationContext } from "@/server/services/billing-organization-context";
 
 // Invoice detail — the destination the prototype already linked to
 // (`/billing/[id]`) but never created.
@@ -37,12 +38,16 @@ type Params = Promise<{ locale: string; id: string }>;
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { id } = await params;
-  const invoice = await getInvoice(decodeURIComponent(id));
+  // Wave 7D: the detail screen resolves the tenant from the session, so a
+  // foreign invoice id renders as "not found" instead of leaking a number.
+  const { context } = await resolveBillingOrganizationContext();
+  const invoice = await getInvoice(context, decodeURIComponent(id));
   return { title: `${invoice?.number ?? id} — Invoice — Kinetic Ledger` };
 }
 
 async function BilledTransactions({ id }: { id: string }) {
-  const rows = await getInvoiceTransactions(id);
+  const { context } = await resolveBillingOrganizationContext();
+  const rows = await getInvoiceTransactions(context, id);
   return (
     <section className="space-y-3" aria-label="Billed transactions">
       <div className="flex items-center justify-between">
@@ -61,20 +66,23 @@ async function BilledTransactions({ id }: { id: string }) {
 }
 
 async function LineItems({ id }: { id: string }) {
-  const [invoice, items] = await Promise.all([getInvoice(id), getInvoiceLineItems(id)]);
+  const { context } = await resolveBillingOrganizationContext();
+  const [invoice, items] = await Promise.all([getInvoice(context, id), getInvoiceLineItems(context, id)]);
   if (!invoice) return null;
   return <InvoiceLineItems items={items} invoice={invoice} />;
 }
 
 async function Timeline({ id }: { id: string }) {
-  const events = await getInvoiceTimeline(id);
+  const { context } = await resolveBillingOrganizationContext();
+  const events = await getInvoiceTimeline(context, id);
   return <InvoicePaymentTimeline events={events} />;
 }
 
 export default async function InvoiceDetailPage({ params }: { params: Params }) {
   const { id: rawId } = await params;
   const id = decodeURIComponent(rawId);
-  const invoice = await getInvoice(id);
+  const { context } = await resolveBillingOrganizationContext();
+  const invoice = await getInvoice(context, id);
   if (!invoice) notFound();
 
   return (

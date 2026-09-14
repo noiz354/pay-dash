@@ -10,15 +10,18 @@ import { getCustomer } from "./customers";
 import { parseOrganizationContext } from "@/domain/tenancy/organization-context";
 import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
 
-// Wave 7C: the directory is tenant-scoped; the subscription suite runs
-// single-tenant against the demo partition.
+// Wave 7C scoped the directory; Wave 7D scopes the plan book itself. This suite
+// is the product-behaviour suite (seeds, MRR, filters, CSV), so it runs
+// single-tenant against the demo partition — the isolation pairs live in
+// `subscriptions.tenant-isolation.test.ts` and the contract ratchet in
+// `billing-structural.test.ts`.
 const demo = parseOrganizationContext({ organizationId: DEFAULT_DEMO_ORG });
 
 const ALL = { pageSize: 100 };
 
 describe("subscription store (ADR-0021)", () => {
   it("seeds 10 plans, every one tied to a real customer in the directory", async () => {
-    const { rows } = await listSubscriptions(ALL);
+    const { rows } = await listSubscriptions(demo, ALL);
     expect(rows).toHaveLength(10);
     for (const s of rows) {
       const customer = await getCustomer(demo, s.customerEmail);
@@ -30,7 +33,7 @@ describe("subscription store (ADR-0021)", () => {
   });
 
   it("has a stable status mix with a computable MRR", async () => {
-    const { rows } = await listSubscriptions(ALL);
+    const { rows } = await listSubscriptions(demo, ALL);
     const summary = subscriptionSummary(rows);
     expect(summary.active).toBe(6);
     expect(summary.pendingSetup).toBe(2);
@@ -46,7 +49,7 @@ describe("subscription store (ADR-0021)", () => {
   });
 
   it("cancelled plans have no next billing date", async () => {
-    const { rows } = await listSubscriptions(ALL);
+    const { rows } = await listSubscriptions(demo, ALL);
     const cancelled = rows.filter((s) => s.status === "CANCELLED");
     expect(cancelled).toHaveLength(1);
     expect(cancelled[0].nextBillingAt).toBeNull();
@@ -56,42 +59,42 @@ describe("subscription store (ADR-0021)", () => {
   });
 
   it("filters by query and status, and sorts by amount", async () => {
-    const byName = await listSubscriptions({ q: "initech" });
+    const byName = await listSubscriptions(demo, { q: "initech" });
     expect(byName.total).toBe(1);
     expect(byName.rows[0].customerName).toBe("Initech BV");
 
-    const byId = await listSubscriptions({ q: (await listSubscriptions(ALL)).rows[0].id });
+    const byId = await listSubscriptions(demo, { q: (await listSubscriptions(demo, ALL)).rows[0].id });
     expect(byId.total).toBe(1);
 
-    const pastDue = await listSubscriptions({ status: "PAST_DUE" });
+    const pastDue = await listSubscriptions(demo, { status: "PAST_DUE" });
     expect(pastDue.total).toBe(1);
     expect(pastDue.rows[0].status).toBe("PAST_DUE");
 
-    const byAmount = await listSubscriptions({ sort: "amount" });
+    const byAmount = await listSubscriptions(demo, { sort: "amount" });
     const amounts = byAmount.rows.map((s) => s.amount);
     expect([...amounts].sort((a, b) => b - a)).toEqual(amounts);
   });
 
   it("paginates with the shared bounds (min 5, max 100)", async () => {
-    const page1 = await listSubscriptions({ page: 1, pageSize: 5 });
+    const page1 = await listSubscriptions(demo, { page: 1, pageSize: 5 });
     expect(page1.rows).toHaveLength(5);
     expect(page1.total).toBe(10);
     expect(page1.pageCount).toBe(2);
-    const page2 = await listSubscriptions({ page: 2, pageSize: 5 });
+    const page2 = await listSubscriptions(demo, { page: 2, pageSize: 5 });
     expect(page2.rows).toHaveLength(5);
     expect(new Set(page1.rows.map((r) => r.id)).size).toBe(5);
     for (const row of page2.rows) {
       expect(page1.rows.map((r) => r.id)).not.toContain(row.id);
     }
     // page beyond the end clamps instead of erroring
-    const beyond = await listSubscriptions({ page: 99, pageSize: 5 });
+    const beyond = await listSubscriptions(demo, { page: 99, pageSize: 5 });
     expect(beyond.page).toBe(2);
   });
 
   it("createSubscription lands in PENDING_SETUP with a future first billing", async () => {
-    const before = (await listSubscriptions(ALL)).total;
+    const before = (await listSubscriptions(demo, ALL)).total;
     // The dialog only offers directory customers — so does this test.
-    const sub = await createSubscription({
+    const sub = await createSubscription(demo, {
       customerName: "Warung Kopi Nusantara",
       customerEmail: "owner@kopinusantara.id",
       planName: "Growth",
@@ -101,7 +104,7 @@ describe("subscription store (ADR-0021)", () => {
     expect(sub.status).toBe("PENDING_SETUP");
     expect(sub.id).toMatch(/^sub_[0-9a-z]+$/);
     expect(new Date(sub.nextBillingAt!).getTime()).toBeGreaterThan(Date.now());
-    const after = await listSubscriptions(ALL);
+    const after = await listSubscriptions(demo, ALL);
     expect(after.total).toBe(before + 1);
     expect(after.rows[0].id).toBe(sub.id); // newest first (recent sort)
     // the customer id resolves through the same pure hash the directory uses
@@ -110,7 +113,7 @@ describe("subscription store (ADR-0021)", () => {
   });
 
   it("exports csv with exactly one line per plan and raw values", async () => {
-    const { rows } = await listSubscriptions(ALL);
+    const { rows } = await listSubscriptions(demo, ALL);
     const csv = subscriptionsToCsv(rows);
     const lines = csv.trim().split("\n");
     expect(lines[0]).toBe(

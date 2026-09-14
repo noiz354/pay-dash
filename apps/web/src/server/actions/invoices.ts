@@ -4,12 +4,22 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { PAYMENT_METHODS } from "@/lib/invoice-status";
 import { payInvoice } from "@/server/data/invoices";
+import {
+  BILLING_NOT_FOUND_MESSAGE,
+  requireBillingOrganizationContext,
+} from "@/server/services/billing-organization-context";
+import { TenantIsolationError } from "@/domain/security/tenant";
 
 export { PAYMENT_METHODS };
 
 // Server Actions for the billing journey. Same serialisable contract as the
 // transaction and customer actions so client components can drive pending /
 // success / error UI without inventing a second convention.
+//
+// Wave 7D: the tenant comes from the session seam before any store access —
+// `payInvoice` is a money mutation, so it resolves through
+// `requireBillingOrganizationContext` (strict: no demo fallback) and a foreign
+// id answers with the same string as a missing one.
 
 export type ActionState<T = undefined> = {
   status: "idle" | "success" | "error";
@@ -52,8 +62,9 @@ export async function payInvoiceAction(
   }
 
   try {
-    const result = await payInvoice(parsed.data.id, parsed.data.method);
-    if (!result) return { status: "error", message: "That invoice no longer exists." };
+    const access = await requireBillingOrganizationContext("recurring.immediate_charge");
+    const result = await payInvoice(access.context, parsed.data.id, parsed.data.method);
+    if (!result) return { status: "error", message: BILLING_NOT_FOUND_MESSAGE };
     revalidateBilling(result.invoice.id);
     return {
       status: "success",
@@ -61,6 +72,11 @@ export async function payInvoiceAction(
       data: { id: result.invoice.id, reference: result.reference },
     };
   } catch (error) {
+    // A foreign id is indistinguishable from a missing one on the wire (C-5);
+    // the refusal itself is audited inside the DAL, not explained to the caller.
+    if (error instanceof TenantIsolationError) {
+      return { status: "error", message: BILLING_NOT_FOUND_MESSAGE };
+    }
     return {
       status: "error",
       message: error instanceof Error ? error.message : "The payment could not be processed. Try again.",
@@ -84,20 +100,41 @@ export async function payInvoicesAction(
 
   if (ids.length === 0) return { status: "error", message: "Nothing to settle." };
 
+  // Resolve the tenant once, before the loop: a bulk settle with no session must
+  // not touch the store at all. Per-row scoping is the DAL's job — a row that is
+  // not the caller's is counted as a failure, never silently dropped and never
+  // silently charged (spec §5: "no silent cross-tenant drops").
+  let ctx;
+  try {
+    ctx = (await requireBillingOrganizationContext("recurring.immediate_charge")).context;
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Not authorized to settle invoices.",
+    };
+  }
+
   let paid = 0;
   let failed = 0;
   for (const id of ids) {
     try {
-      const result = await payInvoice(id, method);
+      const result = await payInvoice(ctx, id, method);
       if (result) paid += 1;
       else failed += 1;
     } catch {
+      // Cross-tenant and already-settled rows both land here: the count is the
+      // honest answer, and the refusal is audited in the DAL.
       failed += 1;
     }
   }
 
   revalidateBilling();
-  if (paid === 0) return { status: "error", message: "No invoices could be settled." };
+  // The count is part of the answer even when it is zero: a batch that settled
+  // nothing still has to tell the caller how many rows were attempted, and that
+  // none of them were charged (spec: no silent cross-tenant drops).
+  if (paid === 0) {
+    return { status: "error", message: "No invoices could be settled.", data: { paid, failed } };
+  }
   return {
     status: failed ? "error" : "success",
     message: failed
@@ -145,8 +182,10 @@ export async function createInvoiceAction(
   }
   try {
     // Org-context authz: the acting org + role come from the session membership.
-    const { requireOrgContext } = await import("@/server/services/session-org-context");
-    const ctx = await requireOrgContext("money_in.create");
+    // Wave 7D: through the billing seam, so the demo fallback is refused the
+    // moment a second tenant holds invoices.
+    const access = await requireBillingOrganizationContext("money_in.create");
+    const ctx = access.context;
 
     const { createProviderInvoice } = await import("@/server/services/commerce");
     const out = await createProviderInvoice({

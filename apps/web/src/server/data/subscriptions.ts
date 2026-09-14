@@ -12,6 +12,8 @@
 // customer that exists in the customer directory (ids via the same pure hash).
 
 import { customerIdFromEmail } from "./customers";
+import { DEFAULT_DEMO_ORG } from "@/domain/payments/runtime-defaults";
+import { parseOrganizationContext, type OrganizationContext } from "@/domain/tenancy/organization-context";
 import {
   SUBSCRIPTION_STATUSES,
   type SubscriptionStatus,
@@ -23,6 +25,13 @@ export type SubscriptionInterval = "monthly" | "yearly";
 
 export type Subscription = {
   id: string;
+  /**
+   * Owner tenant (Wave 7D). The plan id is a pure hash of `(email, planName)`,
+   * so the same customer on the same plan in two tenants produces the same id
+   * *shape* — the partition, not the id, is what makes them different rows
+   * (spec P-10, mirroring 7C's composite customer key).
+   */
+  organizationId: string;
   planName: string;
   customerId: string;
   customerName: string;
@@ -196,10 +205,11 @@ const SEED_PLANS: SeedPlan[] = [
   },
 ];
 
-function seedPlans(): Subscription[] {
+function seedPlans(organizationId: string): Subscription[] {
   const anchor = Date.now();
   return SEED_PLANS.map((p) => ({
     id: subscriptionIdFrom(p.customerEmail, p.planName),
+    organizationId,
     planName: p.planName,
     customerId: customerIdFromEmail(p.customerEmail),
     customerName: p.customerName,
@@ -218,25 +228,91 @@ function seedPlans(): Subscription[] {
 
 /* ---------------------------------- store ---------------------------------- */
 
-type Store = { plans: Subscription[] };
+type TenantPlanState = { plans: Subscription[] };
+type Store = { tenants: Map<string, TenantPlanState> };
 
 const globalStore = globalThis as unknown as { __kineticSubscriptionStore?: Store };
 function store(): Store {
   if (!globalStore.__kineticSubscriptionStore) {
-    globalStore.__kineticSubscriptionStore = { plans: seedPlans() };
+    // The demo organization is seeded eagerly so a first read already renders
+    // the prototype world; every other tenant starts empty on first write
+    // (7C's rule: an empty tenant gets `[]`, not somebody else's plan book).
+    globalStore.__kineticSubscriptionStore = {
+      tenants: new Map([[DEFAULT_DEMO_ORG, { plans: seedPlans(DEFAULT_DEMO_ORG) }]]),
+    };
   }
   return globalStore.__kineticSubscriptionStore;
 }
 
+// --- Wave 7D: tenancy seam ---------------------------------------------------
+//
+// Mirrors `server/data/customers.ts` (7C), `payouts.ts` (7B) and
+// `transactions.ts` (7A): the tenant predicate lives at the data boundary.
+// Every read filters on the resolved context BEFORE any search/filter/sort/
+// pagination, so a needle can only ever match the caller's own plans; a foreign
+// id answers `null` (never 403 — no enumeration oracle), and a create lands in
+// the caller's partition and nowhere else.
+
+function scopeOf(ctx: OrganizationContext): OrganizationContext {
+  return parseOrganizationContext(ctx);
+}
+
+function freshTenantState(): TenantPlanState {
+  return { plans: [] };
+}
+
+/** Read-only view of one tenant's plan book; never persists. */
+function readPartition(organizationId: string): TenantPlanState {
+  return store().tenants.get(organizationId) ?? freshTenantState();
+}
+
+/** Writable view of one tenant's plan book; persists the partition. */
+function writePartition(organizationId: string): TenantPlanState {
+  const s = store();
+  let partition = s.tenants.get(organizationId);
+  if (!partition) {
+    const plans = organizationId === DEFAULT_DEMO_ORG ? seedPlans(organizationId) : [];
+    partition = { plans };
+    s.tenants.set(organizationId, partition);
+  }
+  return partition;
+}
+
+/**
+ * How many tenants hold plans. Tenancy *probe*: answers a question about the
+ * store, never returns a plan row — the billing seam's demo-fallback refusal is
+ * its only consumer (`server/services/billing-organization-context.ts`).
+ */
+export function countSubscriptionTenants(): number {
+  return [...store().tenants.entries()].filter(([, t]) => t.plans.length > 0).length;
+}
+
+/**
+ * The identity of the only plan-holding tenant, or `null` when there is not
+ * exactly one. Same probe contract as `countSubscriptionTenants`: ids, no rows.
+ */
+export function soleSubscriptionOrganizationId(): string | null {
+  const ids = [...store().tenants.entries()]
+    .filter(([, t]) => t.plans.length > 0)
+    .map(([id]) => id);
+  return ids.length === 1 ? (ids[0] ?? null) : null;
+}
+
 /* ----------------------------------- api ----------------------------------- */
 
-export async function listSubscriptions(filters: SubscriptionFilters = {}): Promise<PaginatedSubscriptions> {
+export async function listSubscriptions(
+  ctx: OrganizationContext,
+  filters: SubscriptionFilters = {},
+): Promise<PaginatedSubscriptions> {
+  const { organizationId } = scopeOf(ctx);
   const { q = "", status = "ALL", sort = "recent" } = filters;
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(100, Math.max(5, filters.pageSize ?? 10));
   const needle = q.trim().toLowerCase();
 
-  const all = store().plans;
+  // The predicate is the partition: filter/sort/page below only ever see the
+  // caller's plans, so no needle or status can widen the answer.
+  const all = readPartition(organizationId).plans;
   const filtered = all.filter((s) => {
     if (status !== "ALL" && s.status !== status) return false;
     if (needle) {
@@ -263,8 +339,10 @@ export async function listSubscriptions(filters: SubscriptionFilters = {}): Prom
   };
 }
 
-export async function getSubscription(id: string): Promise<Subscription | null> {
-  return store().plans.find((s) => s.id === id) ?? null;
+export async function getSubscription(ctx: OrganizationContext, id: string): Promise<Subscription | null> {
+  const { organizationId } = scopeOf(ctx);
+  // A foreign id and a missing id answer identically: `null` (spec §2 C-5).
+  return readPartition(organizationId).plans.find((s) => s.id === id) ?? null;
 }
 
 export type CreateSubscriptionInput = {
@@ -277,10 +355,18 @@ export type CreateSubscriptionInput = {
 
 // A new plan lands in PENDING_SETUP — the customer must confirm before the
 // first charge, so the app never claims a plan is live the moment it is made.
-export async function createSubscription(input: CreateSubscriptionInput): Promise<Subscription> {
+export async function createSubscription(
+  ctx: OrganizationContext,
+  input: CreateSubscriptionInput,
+): Promise<Subscription> {
+  // The owner comes from the context only — never from the form, never from a
+  // default. This runs before the row is built, so there is no window in which
+  // an ownerless plan exists.
+  const { organizationId } = scopeOf(ctx);
   const now = Date.now();
   const sub: Subscription = {
     id: subscriptionIdFrom(input.customerEmail, input.planName) + new Date(now).getTime().toString(36),
+    organizationId,
     planName: input.planName,
     customerId: customerIdFromEmail(input.customerEmail),
     customerName: input.customerName,
@@ -293,7 +379,8 @@ export async function createSubscription(input: CreateSubscriptionInput): Promis
     nextBillingAt: new Date(now + (input.interval === "monthly" ? 30 : 365) * DAY).toISOString(),
     cancelledAt: null,
   };
-  store().plans = [sub, ...store().plans];
+  const partition = writePartition(organizationId);
+  partition.plans = [sub, ...partition.plans];
   return sub;
 }
 

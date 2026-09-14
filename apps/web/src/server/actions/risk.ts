@@ -8,9 +8,17 @@ import {
   getRiskOverview,
   patchDraft,
 } from "@/server/data/risk";
+import {
+  ingestAccessDeniedState,
+  requireIngestOrganizationContext,
+} from "@/server/services/ingest-organization-context";
 import type { ActionState } from "./payouts";
 
 export type { ActionState };
+
+function denied(e: unknown): ActionState {
+  return ingestAccessDeniedState(e) as ActionState;
+}
 
 function revalidateRisk() {
   revalidatePath("/[locale]/risk", "page");
@@ -36,7 +44,17 @@ export async function saveVolumeDraftAction(
     return { status: "error", message: "The monthly cap must be at least the daily cap." };
   }
 
-  patchDraft({ dailyVolumeLimit: daily, monthlyVolumeLimit: monthly });
+  // Authorization runs after validation (a bad cap is a field error, not an
+  // auth error) and before any store write. Each tenant drafts in its own
+  // partition — a shared-policy write was the loudest class in this programme.
+  let access;
+  try {
+    access = await requireIngestOrganizationContext("settings.manage");
+  } catch (e) {
+    return denied(e);
+  }
+
+  patchDraft(access.context, { dailyVolumeLimit: daily, monthlyVolumeLimit: monthly });
   revalidateRisk();
   return { status: "success", message: "Draft updated — deploy to make it live." };
 }
@@ -48,11 +66,19 @@ export async function setVolumeEnabledAction(
   formData: FormData
 ): Promise<ActionState> {
   const enabled = String(formData.get("enabled") ?? "") === "true";
-  const overview = await getRiskOverview();
+
+  let access;
+  try {
+    access = await requireIngestOrganizationContext("settings.manage");
+  } catch (e) {
+    return denied(e);
+  }
+
+  const overview = await getRiskOverview(access.context);
   if (overview.effective.volumeLimitsEnabled === enabled) {
     return { status: "error", message: "Already in that state." };
   }
-  patchDraft({ volumeLimitsEnabled: enabled });
+  patchDraft(access.context, { volumeLimitsEnabled: enabled });
   revalidateRisk();
   return {
     status: "success",
@@ -67,11 +93,21 @@ export async function toggleRuleAction(
 ): Promise<ActionState> {
   const ruleId = String(formData.get("id") ?? "").trim();
   const enabled = String(formData.get("enabled") ?? "") === "true";
-  const rule = (await getRiskOverview()).effective.rules.find((r) => r.id === ruleId);
+
+  let access;
+  try {
+    access = await requireIngestOrganizationContext("settings.manage");
+  } catch (e) {
+    return denied(e);
+  }
+
+  // Rule ids are product vocabulary (shared across tenants), but the *toggle*
+  // lands in the caller's own draft — B's copy of the same rule id is untouched.
+  const rule = (await getRiskOverview(access.context)).effective.rules.find((r) => r.id === ruleId);
   if (!rule) return { status: "error", message: "Rule not found." };
   if (rule.enabled === enabled) return { status: "error", message: "Already in that state." };
 
-  patchDraft({ ruleId, ruleEnabled: enabled });
+  patchDraft(access.context, { ruleId, ruleEnabled: enabled });
   revalidateRisk();
   return {
     status: "success",
@@ -83,9 +119,18 @@ export async function deployRiskAction(
   _prev: ActionState | undefined,
   _formData: FormData
 ): Promise<ActionState> {
-  const overview = await getRiskOverview();
+  let access;
+  try {
+    access = await requireIngestOrganizationContext("settings.manage");
+  } catch (e) {
+    return denied(e);
+  }
+
+  const overview = await getRiskOverview(access.context);
   if (!overview.draft) return { status: "error", message: "No draft to deploy." };
-  const { ruleCount } = deployRiskSettings();
+  // Deploying in A does not change B's effective limits: the write is confined
+  // to the caller's partition by the DAL (G-13).
+  const { ruleCount } = deployRiskSettings(access.context);
   revalidateRisk();
   return { status: "success", message: `Ruleset deployed — ${ruleCount} rules live.` };
 }
@@ -94,7 +139,16 @@ export async function discardDraftAction(
   _prev: ActionState | undefined,
   _formData: FormData
 ): Promise<ActionState> {
-  const removed = discardDraft();
+  let access;
+  try {
+    access = await requireIngestOrganizationContext("settings.manage");
+  } catch (e) {
+    return denied(e);
+  }
+
+  // A cannot discard B's pending draft: the DAL consults the caller's own
+  // partition first, and "no draft here" is the honest false.
+  const removed = discardDraft(access.context);
   if (!removed) return { status: "error", message: "No draft to discard." };
   revalidateRisk();
   return { status: "success", message: "Draft discarded." };
