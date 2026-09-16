@@ -108,7 +108,7 @@ describe("RefundDecisionPanel — decision (Role B)", () => {
   };
 
   it("different actor with refund.execute can approve — through the existing action", async () => {
-    mockApproveAction.mockResolvedValue({ status: "success", message: "Refund approved and issued." });
+    mockApproveAction.mockResolvedValue({ status: "success", message: "Refund approved and recorded in the ledger — no provider refund was issued." });
     render(<RefundDecisionPanel {...base} refundState={"AWAITING_APPROVAL" as RefundState} viewerActorId="persona_hendri" canApprove />);
     expect(screen.getByTestId("refund-decision-panel")).toBeInTheDocument();
     expect(screen.getByText("Duplicate charge")).toBeInTheDocument();

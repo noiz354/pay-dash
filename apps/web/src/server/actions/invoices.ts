@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { OrgContextError } from "@/server/services/org-context";
+import { requireStrictOrgContext } from "@/server/services/session-org-context";
 import { z } from "zod";
 import { PAYMENT_METHODS } from "@/lib/invoice-status";
 import { payInvoice } from "@/server/data/invoices";
@@ -17,6 +19,32 @@ export type ActionState<T = undefined> = {
   fieldErrors?: Record<string, string[]>;
   data?: T;
 };
+
+/**
+ * Audit finding S-02 — `payInvoiceAction` and `payInvoicesAction` fabricated revenue.
+ *
+ * Neither read the session, and `payInvoice(id, method)` takes no org context, so any caller who could reach the endpoint marked any invoice paid — and the bulk variant settled every outstanding invoice in one call. Revenue that was never collected then reports as collected, which corrupts the one number the business is run on.
+ *
+ * `money_in.create` is what `createInvoiceAction` in this same file already requires, so issuing and settling an invoice now demand the same privilege. This uses the *strict* seam rather than the non-strict one `createInvoiceAction` uses: marking an invoice paid is a revenue write, and every other money write in the codebase (payouts, refunds, transactions, withdrawals) is strict.
+ *
+ * STILL OPEN (roadmap Phase 3): `data/invoices.ts` is one process-global ledger with no `organizationId`, so this narrows *who* may settle invoices, not *whose* invoices. Tenant-scoping is Phase 3.
+ */
+async function requireInvoiceWrite(): Promise<ActionState<never> | null> {
+  try {
+    await requireStrictOrgContext("money_in.create");
+    return null;
+  } catch (e) {
+    if (e instanceof OrgContextError) {
+      return {
+        status: "error",
+        message: e.message.includes("Authentication")
+          ? "Sign in to manage invoices."
+          : "You don't have permission to settle invoices.",
+      };
+    }
+    return { status: "error", message: e instanceof Error ? e.message : "Sign in to manage invoices." };
+  }
+}
 
 function revalidateBilling(id?: string) {
   revalidatePath("/[locale]/billing", "page");
@@ -37,6 +65,9 @@ export async function payInvoiceAction(
   _prev: ActionState<{ id: string; reference: string }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string; reference: string }>> {
+  const denied = await requireInvoiceWrite();
+  if (denied) return denied;
+
   const parsed = PayInvoiceSchema.safeParse({
     id: formData.get("id"),
     method: formData.get("method"),
@@ -76,6 +107,9 @@ export async function payInvoicesAction(
   _prev: ActionState<{ paid: number; failed: number }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ paid: number; failed: number }>> {
+  const denied = await requireInvoiceWrite();
+  if (denied) return denied;
+
   const ids = String(formData.get("ids") ?? "")
     .split(",")
     .map((s) => s.trim())

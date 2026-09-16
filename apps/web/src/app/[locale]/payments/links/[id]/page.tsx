@@ -20,7 +20,7 @@ import { getLink } from "@/server/data/links";
 import { getTransaction } from "@/server/data/transactions";
 import { resolveTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import { formatMoney, formatDateLong, formatDateTime, formatRelative } from "@/lib/format";
-import { LINK_KIND_LABELS, LINK_STATUS_ICONS, shareUrlOf } from "@/lib/link-status";
+import { LINK_KIND_LABELS, LINK_STATUS_ICONS, SHARE_URL_NOTICE, shareUrlOf } from "@/lib/link-status";
 
 // Payment-link detail (ADR-0013) — the destination of every row in the link
 // table. The status pill is derived (cancelled → paid → expired → open); the
@@ -168,9 +168,10 @@ export default async function PaymentLinkDetailPage({ params }: { params: Params
               <span className="data-mono text-sm text-[var(--on-surface)] break-all">{shareUrlOf(link.id)}</span>
               <CopyButton value={shareUrlOf(link.id)} label="Copy URL" />
             </div>
-            <p className="body-sm text-[var(--on-surface-variant)] mt-2">
-              Send this to your customer — payment on it settles straight into your ledger.
-            </p>
+            {/* F-01: this used to read "Send this to your customer — payment on
+                it settles straight into your ledger", directing a merchant to
+                hand a customer a `.test` URL that resolves to nothing. */}
+            <p className="body-sm text-[var(--warning,#b3261e)] mt-2">{SHARE_URL_NOTICE}</p>
           </Card>
 
           {/* Status note — what this status means and what can still happen */}

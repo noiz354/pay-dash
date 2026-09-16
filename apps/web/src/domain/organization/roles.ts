@@ -52,6 +52,13 @@ export const PermissionSchema = z.enum([
   "customer.read",
   "transaction.read",
   "audit.read",
+  // Risk / fraud prevention.
+  // Added while closing S-02: `actions/risk.ts` had no authorization at all, and
+  // gating it behind `settings.manage` would have made fraud configuration
+  // OWNER-only — locking out RISK_ANALYST, the one role whose job it is. Least
+  // privilege means a permission that matches the duty, not the nearest one that
+  // happens to exist.
+  "risk.manage",
   // Administration.
   "team.manage",
   "settings.manage",
@@ -88,6 +95,7 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
     "customer.read",
     "transaction.read",
     "audit.read",
+    "risk.manage",
     "team.manage",
     "settings.manage",
   ],
@@ -128,7 +136,7 @@ export const ROLE_PERMISSIONS: Record<OrganizationRole, readonly Permission[]> =
   ],
   ANALYST: ["customer.read", "transaction.read", "report.export", "audit.read"],
   COMPLIANCE_ANALYST: ["kyc.prepare", "kyc.submit", "customer.read", "transaction.read", "audit.read"],
-  RISK_ANALYST: ["customer.read", "transaction.read", "audit.read", "report.export"],
+  RISK_ANALYST: ["customer.read", "transaction.read", "audit.read", "report.export", "risk.manage"],
   SUPPORT: ["customer.read", "transaction.read", "refund.prepare"],
 };
 

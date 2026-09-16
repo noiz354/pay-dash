@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Link } from "@/i18n/navigation";
 import { Card } from "@/components/ui/card";
 import { WebhookStatusPill } from "@/components/webhooks/webhook-status-pill";
+import { DemoDataNotice, SeedBadge } from "@/components/layout/demo-data-notice";
 import { getSystemWebhookSummary } from "@/server/data/webhooks";
 import { formatRelative } from "@/lib/format";
 
@@ -53,7 +54,15 @@ export default async function SystemPage() {
         ) : null}
       </div>
 
-      {/* Last 24 hours, by outcome — real counts from the callback log. */}
+      {/* R-07: these are counts from the callback log, and the log is seeded.
+          The notice states how much of what follows was never observed. */}
+      <DemoDataNotice
+        seeded={summary.seeded.inLast24h}
+        total={summary.last24h.total}
+        scope="callbacks in the last 24 hours"
+      />
+
+      {/* Last 24 hours, by outcome — counts from the callback log. */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {OUTCOMES.map((o) => (
           <Card key={o.key} className="bg-[var(--surface-container-lowest)] border-[var(--border-subtle)] rounded-xl p-5 shadow-sm">
@@ -104,6 +113,7 @@ export default async function SystemPage() {
                   >
                     <WebhookStatusPill status={e.status} className="w-24 justify-center shrink-0" />
                     <span className="data-mono text-xs text-[var(--on-surface)] min-w-0 truncate">{e.type}</span>
+                    {e.seeded ? <SeedBadge /> : null}
                     <span className="data-mono text-[11px] text-[var(--on-surface-variant)] hidden sm:inline min-w-0 truncate">
                       {e.eventId}
                     </span>

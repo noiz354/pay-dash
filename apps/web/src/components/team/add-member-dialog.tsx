@@ -59,9 +59,12 @@ export function AddMemberDialog() {
         {sentTo ? (
           <div className="space-y-4">
             <DialogHeader>
-              <DialogTitle className="headline-md text-[var(--on-surface)]">Invite sent</DialogTitle>
+              <DialogTitle className="headline-md text-[var(--on-surface)]">Invitation recorded</DialogTitle>
               <DialogDescription className="body-sm text-[var(--on-surface-variant)]">
-                The invite appears under Pending Invites and expires in 7 days.
+                {/* F-01: "Invite sent" implied an email had gone out. Nothing in
+                    this repository sends mail, so the invitee would have waited
+                    for a message that never existed. */}
+                No email was sent — share the sign-up link with them. The invite appears under Pending Invites and expires in 7 days.
               </DialogDescription>
             </DialogHeader>
             <p className="body-sm text-[var(--on-surface)]">{sentTo}</p>

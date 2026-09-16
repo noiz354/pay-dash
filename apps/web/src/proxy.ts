@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getCookieCache } from "better-auth/cookies";
 import createMiddleware from "next-intl/middleware";
 import { routing } from "./i18n/routing";
+import { demoOrgFallbackPermitted } from "@/lib/demo-org-policy";
 
 // next-intl i18n handler — Addy Osmani: locale negotiation at edge, shell stays cached (locale in URL, not in shell)
 // localePrefix: "as-needed" → bare "/transactions" → served as "id" without redirect; "/en/transactions" → explicit
@@ -12,8 +14,14 @@ const handleI18nRouting = createMiddleware(routing);
 // BE-001: fail-closed — default strict, not opt-in. `AUTH_ENFORCED=off|0|false` disables,
 // `preview` allows `x-preview-bypass:1` (preview env only), legacy `1|true` = strict.
 // Implements: JRN-001 SCR-001..004.
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/ai-journal", "/api/auth", "/api/health", "/_next", "/favicon", "/static"];
-const PUBLIC_API_PREFIXES = ["/api/auth", "/api/health", "/api/webhooks", "/api/vitals"];
+// `/ai-journal` is deliberately NOT here. It was previously listed in both
+// PUBLIC_PATHS and APP_ROUTE_PREFIXES, and because the bare-app-route branch
+// runs first the same resource had two access rules depending on URL shape:
+// `/ai-journal` required a session cookie while `/id/ai-journal` did not. It is
+// a merchant tool inside the dashboard shell, so it is protected consistently.
+// `AUTH_ENFORCED=off` (local dev, Playwright) still skips the check entirely.
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/api/auth", "/api/health", "/api/ready", "/_next", "/favicon.ico", "/static"];
+const PUBLIC_API_PREFIXES = ["/api/auth", "/api/health", "/api/ready", "/api/webhooks", "/api/vitals"];
 
 export function authMode(): "strict" | "preview" | "off" {
   const raw = process.env.AUTH_ENFORCED;
@@ -24,6 +32,64 @@ export function authMode(): "strict" | "preview" | "off" {
 
 function isPreviewBypass(request: NextRequest): boolean {
   return request.headers.get("x-preview-bypass") === "1" || request.nextUrl.searchParams.get("preview_bypass") === "1";
+}
+
+/**
+ * Verify the Better Auth session cookie cache — signature-checked, no database.
+ *
+ * Audit finding S-01. The gate used to be:
+ *
+ *     request.cookies.has("better-auth.session_token")
+ *
+ * `cookies.has()` tests for the presence of the *name*. The value was never
+ * parsed, never signature-checked, never round-tripped to Better Auth. A request
+ * carrying `better-auth.session_token=GARBAGE_NOT_A_REAL_TOKEN` passed, the
+ * server-side `getSession()` then returned null, and the resolver handed back
+ * OWNER of `org_demo` — which rendered the full seeded ledger on 14 routes and
+ * executed Server Action bodies that contain no authorization of their own.
+ *
+ * `cookieCache.enabled` is set in `src/lib/auth.ts`, so Better Auth also writes a
+ * `better-auth.session_data` cookie holding the session payload with an
+ * HMAC-SHA256 signature over `{...session, expiresAt}`. `getCookieCache` verifies
+ * that signature and the expiry using only Web Crypto, which is why this can run
+ * on the edge without a database round-trip on every request. A forged value
+ * fails the HMAC; an expired one fails the expiry check.
+ *
+ * The cache maxAge (7d) equals `session.expiresIn` (7d) and `updateAge` refreshes
+ * it daily, so a live session always carries a verifiable cache cookie.
+ */
+async function hasVerifiedSession(request: NextRequest): Promise<boolean> {
+  // Read directly from process.env rather than `@/lib/env`: if the env schema
+  // threw inside the middleware, every request in the application would fail.
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (!secret) return false;
+  try {
+    // Better Auth prefixes the cookie name with `__Secure-` when it was set over
+    // HTTPS. Pick the naming from whichever cookie is actually present rather
+    // than guessing from the request protocol, which lies behind a proxy that
+    // terminates TLS.
+    const isSecure = request.cookies.has("__Secure-better-auth.session_data");
+    const payload = await getCookieCache(request, { secret, isSecure });
+    return Boolean(payload?.session && payload?.user);
+  } catch {
+    // An unparsable cookie is an unauthenticated request, not a server error.
+    return false;
+  }
+}
+
+/**
+ * The single authentication decision for every protected surface.
+ *
+ * A request is let through when auth is not being enforced, when its session
+ * cookie cache verifies, or when this deployment is permitted to serve the demo
+ * organization to an unauthenticated caller (local dev, `AUTH_ENFORCED=off`,
+ * Playwright, or an explicit `PAYDASH_ENABLE_DEMO_ORG=true`). In production with
+ * the default strict mode, only the middle condition can ever be true.
+ */
+async function isAuthenticated(request: NextRequest): Promise<boolean> {
+  if (!shouldEnforceAuth(request)) return true;
+  if (await hasVerifiedSession(request)) return true;
+  return demoOrgFallbackPermitted({ previewBypass: isPreviewBypass(request) });
 }
 
 export function shouldEnforceAuth(request: NextRequest): boolean {
@@ -61,11 +127,19 @@ const APP_ROUTE_PREFIXES = [
   "/ai-journal",
 ];
 
+/**
+ * Exact-or-child match against the public allowlist.
+ *
+ * The previous implementation ended with `|| pathname.includes(p)`, a *substring*
+ * test on an authentication allowlist: any path containing `/sign-in`, `/static`,
+ * `/_next` or `/favicon` anywhere was treated as public. Allowlists must be
+ * prefix- or exact-match, never substring (audit finding S-01).
+ */
 function isPublic(pathname: string) {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.includes(p));
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-export default function proxy(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // "/" renders the root chooser scaffold (app/page.tsx) — pass through.
@@ -79,11 +153,8 @@ export default function proxy(request: NextRequest) {
     const isPublicApi = PUBLIC_API_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
     if (isPublicApi) return NextResponse.next();
     // Protected API (e.g., /api/exports/*, /api/mcp) — fail-closed when enforcing
-    if (shouldEnforceAuth(request)) {
-      const hasSession = request.cookies.has("better-auth.session_token") || request.cookies.has("__Secure-better-auth.session_token");
-      if (!hasSession) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
-      }
+    if (shouldEnforceAuth(request) && !(await isAuthenticated(request))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: { "Cache-Control": "no-store" } });
     }
     return NextResponse.next();
   }
@@ -159,8 +230,7 @@ export default function proxy(request: NextRequest) {
 
   const isBare = !pathname.match(/^\/(en|id)(\/|$)/);
   if (isBare && isAppRoute) {
-    const hasSession = request.cookies.has("better-auth.session_token") || request.cookies.has("__Secure-better-auth.session_token");
-    if (!hasSession && shouldEnforceAuth(request)) {
+    if (shouldEnforceAuth(request) && !(await isAuthenticated(request))) {
       const signInUrl = request.nextUrl.clone();
       signInUrl.pathname = `/${routing.defaultLocale}/sign-in`;
       signInUrl.searchParams.set("redirect", pathname);
@@ -190,10 +260,9 @@ export default function proxy(request: NextRequest) {
     return i18nResponse ?? NextResponse.next();
   }
 
-  // Check Better Auth session cookie — fail-closed (BE-001)
-  const hasSession = request.cookies.has("better-auth.session_token") || request.cookies.has("__Secure-better-auth.session_token");
+  // Verify the Better Auth session — fail-closed (BE-001, audit finding S-01)
   const isProtected = isAppRoute;
-  if (isProtected && !hasSession && shouldEnforceAuth(request)) {
+  if (isProtected && shouldEnforceAuth(request) && !(await isAuthenticated(request))) {
     const localeMatch = pathname.match(/^\/(en|id)\//);
     const locale = localeMatch ? `/${localeMatch[1]}` : `/${routing.defaultLocale}`;
     const url = request.nextUrl.clone();

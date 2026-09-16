@@ -153,9 +153,16 @@ export async function approveBatchAction(
     revalidatePayouts(result.batch.id);
     return {
       status: "success",
-      message: result.failed
-        ? `${result.batch.id} sent — ${result.paid} paid, ${result.failed} failed.`
-        : `${result.batch.id} sent — ${result.paid} recipients paid.`,
+      // F-01: "sent … recipients paid" is only true when a provider actually
+      // released the funds. On the ledger path rows change state and no money
+      // moves, so say that instead of implying a disbursement.
+      message: result.settledBy === "provider"
+        ? result.failed
+          ? `${result.batch.id} sent — ${result.paid} paid, ${result.failed} failed.`
+          : `${result.batch.id} sent — ${result.paid} recipients paid.`
+        : result.failed
+          ? `${result.batch.id} released in the ledger — ${result.paid} paid, ${result.failed} failed. No funds moved: no provider connection is configured.`
+          : `${result.batch.id} released in the ledger — ${result.paid} recipients marked paid. No funds moved: no provider connection is configured.`,
       data: { id: result.batch.id, paid: result.paid, failed: result.failed },
     };
   } catch (error) {

@@ -1,11 +1,39 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { OrgContextError } from "@/server/services/org-context";
+import { requireStrictOrgContext } from "@/server/services/session-org-context";
 import { submitKycDocument, removeKycDocument, type KycDocumentType } from "@/server/data/kyc";
 import { KYC_DOC_TYPES } from "@/lib/kyc-options";
 import type { ActionState } from "./payouts";
 
 export type { ActionState };
+
+/**
+ * Audit finding S-02 — `removeKycDocumentAction` destroyed a compliance record with no authorization.
+ *
+ * `submitKycDocumentAction` in this file was already gated behind `kyc.submit`; the removal path was not gated at all, and the store holds a single global KYC submission — so any caller who could reach the endpoint deleted the merchant's identity verification record. Destroying a compliance artefact is the one action in this domain that leaves no way to reconstruct what was verified.
+ *
+ * `kyc.submit` is the existing KYC write permission (OWNER and COMPLIANCE_ANALYST), so submitting and removing now demand the same privilege and no new permission is introduced. Worth a maintainer decision: a compliance record arguably should be immutable, corrected by superseding submission rather than deleted. If that is the intent, this action should be removed rather than gated.
+ *
+ * STILL OPEN (roadmap Phase 3): `data/kyc.ts` holds one global submission with no `organizationId`, so this narrows *who* may delete the record, not *whose* record. Tenant-scoping is Phase 3.
+ */
+async function requireKycRemove(): Promise<ActionState<never> | null> {
+  try {
+    await requireStrictOrgContext("kyc.submit");
+    return null;
+  } catch (e) {
+    if (e instanceof OrgContextError) {
+      return {
+        status: "error",
+        message: e.message.includes("Authentication")
+          ? "Sign in to manage KYC documents."
+          : "You don't have permission to remove KYC documents.",
+      };
+    }
+    return { status: "error", message: e instanceof Error ? e.message : "Sign in to manage KYC documents." };
+  }
+}
 
 function revalidateKyc() {
   revalidatePath("/[locale]/kyc", "page");
@@ -77,6 +105,9 @@ export async function removeKycDocumentAction(
   _prev: ActionState | undefined,
   formData: FormData
 ): Promise<ActionState> {
+  const denied = await requireKycRemove();
+  if (denied) return denied;
+
   const removed = removeKycDocument();
   if (!removed) return { status: "error", message: "There is no submitted document to remove." };
   revalidateKyc();

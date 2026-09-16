@@ -1,7 +1,8 @@
 import "server-only";
 
-import { authorizeOrgContext, demoOrgContext, PrismaOrgContextDb, buildOrgContext, type OrgContext } from "./org-context";
+import { authorizeOrgContext, PrismaOrgContextDb, buildOrgContext, demoOrgContext, deniedOrgContext, unverifiedOrgContext, type OrgContext } from "./org-context";
 import { DEFAULT_DEMO_ORG as DEMO_ORGANIZATION_ID } from "@/domain/payments/runtime-defaults";
+import { demoOrgFallbackPermitted } from "@/lib/demo-org-policy";
 import type { Permission } from "@/domain/organization/roles";
 import { loadLazyPrisma } from "@/server/repositories/prisma-runtime";
 
@@ -23,13 +24,41 @@ async function membershipDb(): Promise<PrismaOrgContextDb> {
   return cachedDb;
 }
 
+/** Whether the incoming request presented the preview bypass (see `src/proxy.ts`). */
+async function requestHasPreviewBypass(): Promise<boolean> {
+  try {
+    const { headers } = await import("next/headers");
+    const h = await headers();
+    return h.get("x-preview-bypass") === "1";
+  } catch {
+    return false;
+  }
+}
+
 /**
- * The unauthenticated fallback. Normally the single-tenant demo OWNER context,
- * but in `off`/`preview` mode an E2E persona cookie may select which role the
+ * The context for a request with no resolvable session.
+ *
+ * Audit finding S-01: this used to return `demoOrgContext()` — OWNER of
+ * `org_demo` — unconditionally, on both the "no session" and the "auth threw"
+ * branches. Because `src/proxy.ts` only checked that a session cookie *existed*,
+ * a request carrying `better-auth.session_token=GARBAGE` reached this function,
+ * fell into the catch, and was granted OWNER over the seeded ledger. Every app
+ * route rendered; 14 were confirmed returning HTTP 200 with real data.
+ *
+ * The decision now belongs to `demoOrgFallbackPermitted()`. Where a deployment
+ * may serve the demo org (local dev, `AUTH_ENFORCED=off`, Playwright, an explicit
+ * `PAYDASH_ENABLE_DEMO_ORG=true`) behaviour is unchanged. Everywhere else the
+ * caller gets a denied context: no roles, and an organization id that matches no
+ * tenant, so scoped reads return nothing rather than the demo dataset.
+ *
+ * In `off`/`preview` mode an E2E persona cookie may still select which role the
  * fallback resolves to (see `./test-persona`). Strict mode never consults it, so
  * a production request can never choose its own roles.
  */
 async function unauthenticatedContext(): Promise<OrgContext> {
+  const previewBypass = await requestHasPreviewBypass();
+  if (!demoOrgFallbackPermitted({ previewBypass })) return deniedOrgContext();
+
   const { resolvePersonaFromCookies } = await import("./test-persona");
   const persona = await resolvePersonaFromCookies();
   if (!persona) return demoOrgContext();
@@ -44,6 +73,7 @@ async function unauthenticatedContext(): Promise<OrgContext> {
 }
 
 export async function resolveSessionOrgContext(input?: { organizationId?: string }): Promise<OrgContext> {
+  const previewBypass = await requestHasPreviewBypass();
   try {
     const { auth } = await import("@/lib/auth");
     const { headers } = await import("next/headers");
@@ -54,10 +84,12 @@ export async function resolveSessionOrgContext(input?: { organizationId?: string
     }
     const db = await membershipDb();
     const memberships = await db.resolveMemberships(userId);
-    return buildOrgContext(memberships, userId, input?.organizationId);
+    return buildOrgContext(memberships, userId, input?.organizationId, { previewBypass });
   } catch {
-    // No session header, no DB, or auth not initialized → dev/demo fallback.
-    return unauthenticatedContext();
+    // No session header, no DB, or auth not initialized. This is the branch a
+    // forged or stale cookie lands in, so it goes through the same policy as an
+    // absent session rather than defaulting to OWNER.
+    return unverifiedOrgContext(null, { previewBypass });
   }
 }
 

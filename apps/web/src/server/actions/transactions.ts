@@ -4,20 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { OrgContextError } from "@/server/services/org-context";
 
-import {
-  NOT_FOUND_MESSAGE,
-  requireTransactionOrganizationContext,
-  resolveTransactionOrganizationContext,
-  transactionAccessDeniedState,
-} from "@/server/services/transaction-organization-context";
-import { hasPermission } from "@/domain/organization/roles";
-import { requiresDualControl, isApproverDistinct } from "@/domain/security/step-up";
+import { requireTransactionOrganizationContext } from "@/server/services/transaction-organization-context";
 import {
   CHANNELS,
   createTransaction,
-  refundTransaction,
   retryTransactionWithVersion,
-  getTransaction,
   requestRefund,
   approveRefund,
   rejectRefund,
@@ -101,147 +92,34 @@ export async function createTransactionAction(
   }
 }
 
-const RefundSchema = z.object({
-  id: z.string().trim().min(1),
-  amount: z
-    .string()
-    .trim()
-    .transform((v) => Number(v.replace(/[^0-9.]/g, "")))
-    .refine((n) => Number.isFinite(n) && n > 0, "Refund amount must be greater than zero"),
-  reason: z.string().trim().max(200).optional(),
-});
-
-export async function refundTransactionAction(
-  _prev: ActionState | undefined,
-  formData: FormData
-): Promise<ActionState> {
-  const parsed = RefundSchema.safeParse({
-    id: formData.get("id"),
-    amount: formData.get("amount"),
-    reason: formData.get("reason") ?? undefined,
-  });
-
-  if (!parsed.success) {
-    return {
-      status: "error",
-      message: "Please fix the highlighted fields.",
-      fieldErrors: z.flattenError(parsed.error).fieldErrors as Record<string, string[]>,
-    };
-  }
-
-  // Wave 7A — resolve the tenant *before* the row is read. Reading first and
-  // authorizing after is the shape of every IDOR this wave removes: the read has
-  // already decided the id is real.
-  let access;
-  try {
-    access = await resolveTransactionOrganizationContext();
-  } catch (e) {
-    return transactionAccessDeniedState(e);
-  }
-
-  let existing;
-  try {
-    existing = await getTransaction(access.context, parsed.data.id);
-  } catch (e) {
-    return transactionAccessDeniedState(e);
-  }
-  // A foreign id and an unknown id take the same branch, with the same message.
-  if (!existing) return { status: "error", message: NOT_FOUND_MESSAGE };
-  if (existing.status === "FAILED") {
-    return { status: "error", message: "Failed payments cannot be refunded — retry it instead." };
-  }
-  const remaining = existing.amount - existing.refundedAmount;
-  if (parsed.data.amount > remaining) {
-    return {
-      status: "error",
-      message: "Refund exceeds the remaining refundable amount.",
-      fieldErrors: { amount: ["Refund exceeds the remaining refundable amount"] },
-    };
-  }
-
-  // BE-002/BE-003: refund permission + dual-control enforcement (JRN-003)
-  // Backend is final enforcement point — initiator != approver for threshold
-  // amounts. The roles/actor come from the *same* resolved access as the row
-  // scope, so the permission check and the tenant predicate cannot disagree
-  // about who is asking.
-  try {
-    const ctx = { organizationId: access.context.organizationId, roles: access.roles, userId: access.actorId, isDemoFallback: access.demoFallback };
-    const canPrepare = ctx.roles.some((r) => hasPermission(r, "refund.prepare"));
-    const canExecute = ctx.roles.some((r) => hasPermission(r, "refund.execute"));
-    if (!canPrepare && !canExecute) {
-      const { OrgContextError } = await import("@/server/services/org-context");
-      throw new OrgContextError("FORBIDDEN", "Actor is not authorized for refund.prepare in " + ctx.organizationId);
-    }
-    if (ctx.isDemoFallback) {
-      const { OrgContextError } = await import("@/server/services/org-context");
-      const raw = process.env.AUTH_ENFORCED;
-      const mode = raw === "off" || raw === "0" || raw === "false" ? "off" : raw === "preview" ? "preview" : "strict";
-      if (mode !== "off") throw new OrgContextError("FORBIDDEN", "Authentication required for refund.prepare");
-    }
-    const amountMinor = String(parsed.data.amount);
-    const originalMinor = String(existing.amount);
-    const needsDual = requiresDualControl("refund.amount", { mode: "TEST", amountMinor, originalPaymentAmountMinor: originalMinor }) || requiresDualControl("refund.pct", { mode: "TEST", amountMinor, originalPaymentAmountMinor: originalMinor });
-    const approverId = String(formData.get("approverId") ?? "").trim() || null;
-    if (needsDual) {
-      if (!canExecute) {
-        return { status: "error", message: "This refund requires a separate approval — you don't have permission to execute refunds." };
-      }
-      if (!approverId) {
-        return { status: "error", message: "This refund requires a separate approval — provide an approver." };
-      }
-      const requesterId = ctx.userId ?? "unknown";
-      if (!isApproverDistinct(requesterId, approverId)) {
-        return { status: "error", message: "Requester cannot be the approver — a different user must approve this refund." };
-      }
-    } else {
-      // For non-dual refunds, prepare is sufficient; execute also allowed
-      if (!canPrepare && !canExecute) {
-        return { status: "error", message: "You don't have permission to prepare refunds." };
-      }
-    }
-  } catch (e) {
-    if (e instanceof OrgContextError) return { status: "error", message: e.message.includes("Authentication") ? "Authentication required — please sign in." : e.message };
-    if (e instanceof Error && (e.message.includes("separate approval") || e.message.includes("approver"))) return { status: "error", message: e.message };
-    // Re-throw unexpected? But we already handled
-  }
-
-  // Rekomendasi #5: route the refund through the provider payment-flow when a
-  // TEST connection resolves (idempotency + durable op + authz/step-up + audit).
-  // A configured-but-failing provider propagates (never mock); with no connection
-  // the in-memory dev/demo ledger is the fallback.
-  try {
-    const { tryProviderRefund } = await import("@/server/payment-flows/execute-provider-write");
-    const providerResult = await tryProviderRefund({
-      originalPaymentId: parsed.data.id,
-      amountMinor: String(parsed.data.amount),
-      currency: existing.currency,
-      originalPaymentAmountMinor: String(existing.amount),
-      approverId: String(formData.get("approverId") ?? "").trim() || null,
-    });
-    if (providerResult.connected) {
-      revalidatePath("/[locale]/transactions/[id]", "page");
-      revalidatePath("/[locale]/transactions", "page");
-      revalidatePath("/[locale]/dashboard", "page");
-      return {
-        status: "success",
-        message: `Refund issued via ${providerResult.result.provider} (${providerResult.result.providerResourceId})`,
-      };
-    }
-  } catch (error) {
-    // Provider write failed (dual-control required / provider error) — surface.
-    return { status: "error", message: error instanceof Error ? error.message : "Refund failed." };
-  }
-
-  try {
-    await refundTransaction(access.context, parsed.data.id, parsed.data.amount, parsed.data.reason ?? "");
-  } catch (e) {
-    return transactionAccessDeniedState(e);
-  }
-  revalidatePath("/[locale]/transactions/[id]", "page");
-  revalidatePath("/[locale]/transactions", "page");
-  revalidatePath("/[locale]/dashboard", "page");
-  return { status: "success", message: "Refund issued" };
-}
+// ---------------------------------------------------------------------------
+// The single-step refund path that used to live here was removed.
+// ---------------------------------------------------------------------------
+//
+// `refundTransactionAction` enforced refund dual control like this:
+//
+//     const approverId  = String(formData.get("approverId") ?? "").trim() || null;
+//     const requesterId = ctx.userId ?? "unknown";
+//     if (!isApproverDistinct(requesterId, approverId)) -> reject
+//
+// `isApproverDistinct` is `requesterId !== approverId`. The approver was whoever
+// the request body said it was: no existence check, no `refund.execute` check, no
+// membership check, no consent, and no approval record created by that person.
+// Any string other than your own user id satisfied the control on a money-out
+// refund at or above the IDR 10M / 50%-of-original threshold (audit finding S-03).
+//
+// It was also the only money-movement action in the repository using the *read*
+// seam (`resolveTransactionOrganizationContext`) rather than the strict write seam
+// every sibling uses, re-implementing permission and demo-fallback denial inline
+// instead of inheriting the seam's fail-closed guarantee.
+//
+// Its sole importer was `components/transactions/refund-dialog.tsx`, which had no
+// importers of its own — so the action was dead in the UI while remaining a
+// routable `"use server"` endpoint. Both are gone.
+//
+// The live journey below is the replacement and was already correct: the actor is
+// resolved from the session, never from the form, and separation of duties is
+// enforced against the stored requester at `data/transactions.ts` (`SAME_ACTOR`).
 
 export async function retryTransactionAction(
   _prev: ActionState | undefined,
@@ -291,9 +169,7 @@ export async function retryTransactionAction(
 // Wave 4 §4 — cross-role refund journey (JRN-003, spec §9 Refund dual-control)
 // ---------------------------------------------------------------------------
 //
-// `refundTransactionAction` above is the single-step path: one actor, one form,
-// an `approverId` text field. It stays for refunds below the dual-control
-// threshold. The three actions below are the journey that actually changes hands:
+// These three actions are the only refund path. The journey changes hands:
 //
 //   Role A (refund.prepare)  requestRefundAction  -> AWAITING_APPROVAL + handoff
 //                                                   + notification to Role B
@@ -404,7 +280,15 @@ export async function approveRefundAction(
   if (!result.ok) return { status: "error", message: result.message };
 
   revalidateRefundSurfaces();
-  return { status: "success", message: "Refund approved and issued." };
+  // F-01: `approveRefund` moves ledger state (refundedAmount, status REFUNDED,
+  // audit event) and closes the handoff. It makes no provider call, so nothing
+  // is refunded at Xendit or Stripe. Claiming "issued" told the approver the
+  // customer had been paid when they had not — roadmap item 4.4 adds the call;
+  // until then the copy states what actually happened.
+  return {
+    status: "success",
+    message: "Refund approved and recorded in the ledger — no provider refund was issued.",
+  };
 }
 
 /** Role B rejects the pending refund. No money moves. */

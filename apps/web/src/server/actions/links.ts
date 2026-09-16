@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { OrgContextError } from "@/server/services/org-context";
+import { requireStrictOrgContext } from "@/server/services/session-org-context";
 import { z } from "zod";
 import { parseAmount } from "@/lib/payout-status";
 import { formatMoney } from "@/lib/format";
@@ -12,6 +14,32 @@ export type { ActionState };
 
 // Server Actions for the payment-link journey (ADR-0013). Same serialisable
 // ActionState contract as the other mutation surfaces.
+
+/**
+ * Audit finding S-02 — `createPaymentLinkAction` and `expirePaymentLinkAction` had no authorization.
+ *
+ * `createPaymentLinkAction` mints a payable link in the process-global store with no tenant attribution; `expirePaymentLinkAction` closes any link by id, so any caller could take down a live payment link a merchant had already sent to customers — revenue denial with no trace of who did it. `payPaymentLinkAction` in this file was already gated through the transaction seam.
+ *
+ * Both are money-in surfaces: creating a link is how a payment gets collected, and expiring one stops it. `money_in.create` matches what `payPaymentLinkAction` already requires through `requireTransactionOrganizationContext`, so the three actions on one resource now agree.
+ *
+ * STILL OPEN (roadmap Phase 3): `data/links.ts` is process-global with no `organizationId`, so `expirePaymentLinkAction` still takes an unscoped id — it now requires a money-in privilege to call, but is not yet restricted to the caller's own links. That is Phase 3.
+ */
+async function requireLinkWrite(): Promise<ActionState<never> | null> {
+  try {
+    await requireStrictOrgContext("money_in.create");
+    return null;
+  } catch (e) {
+    if (e instanceof OrgContextError) {
+      return {
+        status: "error",
+        message: e.message.includes("Authentication")
+          ? "Sign in to manage payment links."
+          : "You don't have permission to manage payment links.",
+      };
+    }
+    return { status: "error", message: e instanceof Error ? e.message : "Sign in to manage payment links." };
+  }
+}
 
 function revalidateLinks(id?: string) {
   revalidatePath("/[locale]/payments/links", "page");
@@ -73,6 +101,9 @@ export async function createPaymentLinkAction(
   _prev: ActionState<{ id: string; checkoutUrl?: string }> | undefined,
   formData: FormData
 ): Promise<ActionState<{ id: string; checkoutUrl?: string }>> {
+  const denied = await requireLinkWrite();
+  if (denied) return denied;
+
   const kind = String(formData.get("kind") ?? "single");
   const payerEmail = String(formData.get("payerEmail") ?? "").trim();
   const expiresIn = String(formData.get("expiresIn") ?? "");
@@ -149,6 +180,9 @@ export async function expirePaymentLinkAction(
   _prev: ActionState<undefined> | undefined,
   formData: FormData
 ): Promise<ActionState<undefined>> {
+  const denied = await requireLinkWrite();
+  if (denied) return denied;
+
   const id = String(formData.get("id") ?? "").trim();
   try {
     expireLink(id);

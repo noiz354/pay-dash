@@ -1,0 +1,22 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 74b437a..24d3dd6 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -19,11 +19,16 @@ jobs:
+           node-version: 20.9.0
+           cache: pnpm
+       - run: pnpm install --frozen-lockfile
++      # The Prisma Client is generated, not committed, and `@prisma/client`'s own
++      # postinstall does not generate it. Two MCP suites import it, so running the
++      # test suite before this step fails them on every single run — which trains
++      # reviewers to ignore a red suite, and that is how a real failure gets
++      # merged (audit finding R-10).
++      - run: pnpm --filter web exec prisma generate
+       - run: pnpm typecheck
+       - run: pnpm lint
+       - run: pnpm test
+       - run: pnpm --filter web build
+-      - run: pnpm --filter web exec prisma generate
+       - name: Playwright
+         run: |
+           npx playwright install --with-deps

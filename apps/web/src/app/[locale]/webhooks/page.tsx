@@ -7,6 +7,7 @@ import { SectionBoundary } from "@/components/common/section-boundary";
 import { WebhookFilters } from "@/components/webhooks/webhook-filters";
 import { WebhooksTable } from "@/components/webhooks/webhooks-table";
 import { WebhookConfigCard } from "@/components/webhooks/webhook-config-card";
+import { DemoDataNotice } from "@/components/layout/demo-data-notice";
 import { SimulateWebhookDialog } from "@/components/webhooks/simulate-webhook-dialog";
 import { listWebhooks } from "@/server/data/webhooks";
 import { env } from "@/lib/env";
@@ -53,8 +54,13 @@ async function WebhookLog({ searchParams }: { searchParams: SearchParams }) {
 
   const hasFilters = q.trim().length > 0 || status !== "all" || type !== "all";
 
+  // R-07 / F-03: the log mixes seven invented deliveries with real ones, and
+  // the invented ones carry terminal statuses for events that never arrived.
+  const seededOnPage = data.rows.filter((r) => r.seeded === true).length;
+
   return (
     <>
+      <DemoDataNotice seeded={seededOnPage} total={data.total} scope="callbacks in this log" />
       <WebhookFilters resultCount={data.total} />
       <WebhooksTable
         rows={data.rows}

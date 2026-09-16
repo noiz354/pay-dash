@@ -42,6 +42,17 @@ export type WebhookEvent = {
   unhandled: boolean;
   /** Parsed payload for accepted callbacks; the raw body for rejections. */
   payload: unknown;
+  /**
+   * True for the seven rows `seed()` invents (`whk_seed_1` … `whk_seed_7`).
+   *
+   * Audit finding R-07 / F-03: `/webhooks` and `/system` are operational pages.
+   * The seeds render indistinguishably from genuine callback traffic and include
+   * terminal statuses — DUPLICATED, REJECTED — for events that never arrived, so
+   * an on-call engineer reading them during an incident is reading fiction and
+   * has no way to tell. Optional and absent on real rows so nothing that
+   * constructs a `WebhookEvent` has to change; the UI treats "not true" as real.
+   */
+  seeded?: boolean;
 };
 
 export type WebhookFilters = {
@@ -83,6 +94,7 @@ function seed(): WebhookEvent[] {
   const rows: WebhookEvent[] = [
     {
       id: "whk_seed_1",
+      seeded: true,
       eventId: "evt_a1b2c3d4",
       type: "payment.succeeded",
       receivedAt: firstAt,
@@ -104,6 +116,7 @@ function seed(): WebhookEvent[] {
     },
     {
       id: "whk_seed_2",
+      seeded: true,
       eventId: "evt_a1b2c3d4",
       type: "payment.succeeded",
       receivedAt: new Date(new Date(firstAt).getTime() + 60_000).toISOString(),
@@ -125,6 +138,7 @@ function seed(): WebhookEvent[] {
     },
     {
       id: "whk_seed_3",
+      seeded: true,
       eventId: "evt_e5f6g7h8",
       type: "refund.succeeded",
       receivedAt: daysAgo(1, 3),
@@ -146,6 +160,7 @@ function seed(): WebhookEvent[] {
     },
     {
       id: "whk_seed_4",
+      seeded: true,
       eventId: "rej_i9j0k1l2",
       type: "unknown",
       receivedAt: daysAgo(1, 7),
@@ -157,6 +172,7 @@ function seed(): WebhookEvent[] {
     },
     {
       id: "whk_seed_5",
+      seeded: true,
       eventId: "evt_m3n4o5p6",
       type: "invoice.issued",
       receivedAt: daysAgo(2, 4),
@@ -173,6 +189,7 @@ function seed(): WebhookEvent[] {
     },
     {
       id: "whk_seed_6",
+      seeded: true,
       eventId: "rej_q7r8s9t0",
       type: "unknown",
       receivedAt: daysAgo(3, 1),
@@ -184,6 +201,7 @@ function seed(): WebhookEvent[] {
     },
     {
       id: "whk_seed_7",
+      seeded: true,
       eventId: "evt_u1v2w3x4",
       type: "payment.succeeded",
       receivedAt: daysAgo(4, 2),
@@ -245,6 +263,12 @@ export type SystemWebhookSummary = {
   recent: WebhookEvent[];
   /** When the newest callback arrived — the "last callback" chip. */
   lastReceivedAt: string | null;
+  /**
+   * How many of the figures above are invented rather than observed (R-07).
+   * `/system` renders these counts next to the totals so the page cannot be read
+   * as a measurement of live traffic when most of it is seed data.
+   */
+  seeded: { total: number; inLast24h: number };
 };
 
 // The /system status page states only what the app measures (ADR-0017):
@@ -266,6 +290,10 @@ export function getSystemWebhookSummary(): SystemWebhookSummary {
     },
     recent: all.slice(0, 5),
     lastReceivedAt: all[0]?.receivedAt ?? null,
+    seeded: {
+      total: all.filter((e) => e.seeded === true).length,
+      inLast24h: inWindow.filter((e) => e.seeded === true).length,
+    },
   };
 }
 
